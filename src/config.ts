@@ -71,16 +71,17 @@ export const config = {
      */
     activada: (process.env.CEREBRO_AUTH ?? "") === "si",
     /**
-     * Valor exigido en el `aud` del token. Por defecto, la URL de este
-     * servidor, que es lo que manda la especificación MCP.
+     * Valor exigido en el `aud` del token. **Vacío por defecto y a propósito.**
      *
-     * Se puede vaciar (`CEREBRO_AUDIENCIA_ESPERADA=""`) si se comprueba que
-     * Supabase no implementa resource indicators. Vaciarlo DEBILITA la
-     * seguridad: pasaría a valer cualquier token del proyecto. Solo como
-     * medida temporal y consciente.
+     * La especificación MCP quiere que el `aud` sea la URL de este servidor,
+     * pero Supabase no implementa resource indicators (RFC 8707) y emite
+     * siempre `aud: "authenticated"` — comprobado con `npm run prueba:oauth`.
+     * Exigirlo rechazaría todos los tokens. En su lugar se comprueba
+     * `client_id`, que sí distingue el flujo OAuth de una sesión normal.
+     *
+     * Cuando Supabase lo implemente, poner aquí la URL del recurso.
      */
-    audienciaEsperada:
-      process.env.CEREBRO_AUDIENCIA_ESPERADA ?? process.env.CEREBRO_URL_PUBLICA ?? "",
+    audienciaEsperada: process.env.CEREBRO_AUDIENCIA_ESPERADA ?? "",
   },
 
   http: {

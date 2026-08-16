@@ -33,13 +33,13 @@ export class TokenInvalido extends Error {}
  */
 export async function verificarToken(token: string): Promise<UsuarioAutenticado> {
   try {
-    // Firma, emisor y caducidad los comprueba jose. El destinatario se mira
+    // Firma, emisor y caducidad los comprueba jose. La procedencia se mira
     // aparte, abajo, para poder decir QUÉ vino cuando no cuadra.
     const { payload } = await jwtVerify(token, jwks, {
       issuer: issuerDeAutorizacion(),
     });
 
-    comprobarDestinatario(payload.aud);
+    comprobarProcedencia(payload);
 
     const userId = payload.sub;
     if (!userId) throw new TokenInvalido("El token no identifica a ningún usuario");
@@ -66,21 +66,38 @@ export async function verificarToken(token: string): Promise<UsuarioAutenticado>
 }
 
 /**
- * Comprueba para quién se emitió el token.
+ * Comprueba que el token venga del flujo OAuth y no de una sesión cualquiera.
  *
- * Es lo que impide que un token emitido para otro servicio del mismo proyecto
- * de Supabase sirva aquí.
+ * Contexto, medido con `npm run prueba:oauth` el 17/08/2026:
  *
- * Complicación: el descubrimiento de Supabase no anuncia soporte de
- * "resource indicators" (RFC 8707), así que puede que NO ponga la URL de este
- * servidor en el `aud` y use su valor por defecto. Por eso el valor esperado
- * es configurable y el error dice qué llegó de verdad: si Supabase cambia de
- * criterio, el fallo se diagnostica leyendo el mensaje, no adivinando.
+ *   token OAuth      → aud: "authenticated", client_id: presente, scope: presente
+ *   sesión normal    → aud: "authenticated", client_id: ausente,  scope: ausente
+ *
+ * O sea que **Supabase no implementa resource indicators** (RFC 8707): ignora
+ * el parámetro `resource` y pone su `aud` de siempre. Comprobar el `aud`, que
+ * es lo que pide la especificación MCP, aquí no distingue absolutamente nada.
+ *
+ * Lo que sí distingue es `client_id`: solo aparece en tokens emitidos a través
+ * del servidor OAuth. Sin esta comprobación, el token de sesión de cualquier
+ * usuario de cualquier aplicación del mismo proyecto de Supabase serviría para
+ * leer las fichas.
  */
-function comprobarDestinatario(aud: unknown): void {
-  const esperado = config.auth.audienciaEsperada;
-  if (!esperado) return; // Comprobación desactivada a propósito.
+function comprobarProcedencia(payload: Record<string, unknown>): void {
+  if (typeof payload["client_id"] !== "string" || !payload["client_id"]) {
+    throw new TokenInvalido(
+      "El token no procede del flujo OAuth (le falta client_id)",
+    );
+  }
+  if (typeof payload["scope"] !== "string" || !payload["scope"]) {
+    throw new TokenInvalido("El token no lleva scopes");
+  }
 
+  // Si algún día Supabase implementa RFC 8707, basta con poner esta variable
+  // para exigir el `aud` que manda la especificación.
+  const esperado = config.auth.audienciaEsperada;
+  if (!esperado) return;
+
+  const aud = payload["aud"];
   const recibidos = Array.isArray(aud) ? aud : aud == null ? [] : [String(aud)];
   if (recibidos.includes(esperado)) return;
 

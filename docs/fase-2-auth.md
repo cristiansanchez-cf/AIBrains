@@ -115,6 +115,52 @@ La funcionalidad está disponible; hay que activarla en el panel.
 
 ---
 
+## Medido: Supabase no implementa resource indicators
+
+`npm run prueba:oauth` recorre el flujo entero sin navegador con un usuario
+temporal. Resultado del 17/08/2026:
+
+| Claim | Token del flujo OAuth | Token de sesión normal |
+|---|---|---|
+| `aud` | `"authenticated"` | `"authenticated"` |
+| `client_id` | presente | **ausente** |
+| `scope` | `"openid email"` | **ausente** |
+
+La especificación MCP quiere que el `aud` sea la URL del servidor de recursos,
+vía [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). **Supabase ignora el
+parámetro `resource`** y emite siempre su `aud` de siempre, así que comprobarlo
+no distingue nada: rechazaría todos los tokens legítimos.
+
+**Lo que se comprueba en su lugar:** `client_id`. Solo aparece en tokens
+emitidos por el servidor OAuth. Sin esa comprobación, el token de sesión de
+cualquier usuario de cualquier aplicación del mismo proyecto de Supabase
+serviría para leer las fichas.
+
+Si algún día Supabase implementa RFC 8707, basta con poner
+`CEREBRO_AUDIENCIA_ESPERADA` con la URL del recurso.
+
+---
+
+## Detalles del protocolo que cuestan un rato descubrir
+
+1. **Hay que leer la autorización antes de consentir.** Un `POST` a
+   `/oauth/authorizations/{id}/consent` sin un `GET` previo responde
+   `404 oauth_authorization_not_found`.
+
+2. **La `apikey` tiene que ser la pública, no la de servicio.** Con la de
+   servicio la petición se atiende como rol de servicio, se ignora el token del
+   usuario y el consentimiento da `404`.
+
+3. **`getAuthorizationDetails` devuelve dos formas distintas.** Si el usuario ya
+   consintió esos permisos, no devuelve los detalles sino `{redirect_url}`. Hay
+   que distinguirlas con `"authorization_id" in data` o la segunda conexión se
+   queda colgada.
+
+4. **El registro dinámico deja el cliente en `client_secret_basic`** salvo que se
+   pida otra cosa. Claude sí pide `client_secret_post`.
+
+---
+
 ## Riesgos identificados
 
 1. **El registro dinámico y el redirect de Claude Code.** Hay una incidencia

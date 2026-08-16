@@ -19,7 +19,8 @@
     "seed": "tsx scripts/seed.ts",
     "inspector": "npx -y @modelcontextprotocol/inspector tsx src/index.ts",
     "prueba": "tsx scripts/prueba-mcp.ts",
-    "build:navegador": "esbuild src/navegador/consentimiento.ts --bundle --format=esm --minify --target=es2022 --outfile=dist/publico/consentimiento.js"
+    "build:navegador": "esbuild src/navegador/consentimiento.ts --bundle --format=esm --minify --target=es2022 --outfile=dist/publico/consentimiento.js",
+    "prueba:oauth": "tsx scripts/prueba-oauth.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
