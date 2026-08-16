@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Entorno — NUNCA subir claves
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Supabase CLI local
+supabase/.temp/
+supabase/.branches/
+
+# Sistema operativo / editores
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
