@@ -14,8 +14,8 @@ La arquitectura y el orden de fases están en
 
 | Fase | Qué | Estado |
 |---|---|---|
-| 0 | Repo + Supabase + esquema SQL | hecho en local; falta aplicar en la nube |
-| 1 | Servidor MCP mínimo, sin auth, local | hecho |
+| 0 | Repo + Supabase + esquema SQL | hecho (local y nube) |
+| 1 | Servidor MCP mínimo, sin auth, local | hecho — verificado desde Claude Desktop |
 | 2 | Auth + deploy en Railway | pendiente |
 | 3 | Migración Notion → Postgres + embeddings | pendiente |
 
