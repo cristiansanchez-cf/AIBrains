@@ -75,8 +75,6 @@ const ESTILOS = `
   .pie { font-size: 12.5px; margin: 18px 0 0; text-align: center; }
 `;
 
-export const RUTA_GUION = "/oauth/consent.js";
-
 function pagina(cuerpo: string, extra = ""): string {
   return `<!doctype html>
 <html lang="es">
@@ -97,26 +95,16 @@ ${extra}
 </html>`;
 }
 
-function escapar(valor: string): string {
-  return valor.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
-  );
-}
-
-/** Para cuando ni siquiera llega un `authorization_id`. */
-export function paginaDeError(titulo: string, detalle: string): string {
-  return pagina(`
-    <h1>${escapar(titulo)}</h1>
-    <p>${escapar(detalle)}</p>
-    <p class="pie">Si has llegado aquí desde Claude, vuelve e inténtalo de nuevo.</p>
-  `);
-}
-
-export function paginaDeConsentimiento(authorizationId: string): string {
+/**
+ * La página del consentimiento.
+ *
+ * No recibe el `authorization_id`: lo resuelve el navegador, de la URL o del
+ * almacén local. Así la misma página sirve para la ruta de consentimiento y
+ * para la raíz del dominio, que es donde puede acabar el usuario si la
+ * plantilla de correo de Supabase lo manda al Site URL.
+ */
+export function paginaDeConsentimiento(rutaDelGuion: string): string {
   const configuracion = {
-    authorizationId,
     supabaseUrl: config.supabase.url,
     publishableKey: config.supabase.publishableKey,
     urlConsentimiento: `${config.http.urlBase}/oauth/consent`,
@@ -138,6 +126,6 @@ export function paginaDeConsentimiento(authorizationId: string): string {
     </noscript>
   `,
     `<script type="application/json" id="configuracion">${json}</script>
-<script type="module" src="${RUTA_GUION}"></script>`,
+<script type="module" src="${rutaDelGuion}"></script>`,
   );
 }

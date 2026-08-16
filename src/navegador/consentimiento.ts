@@ -10,10 +10,50 @@
 import { createClient } from "@supabase/supabase-js";
 
 interface Configuracion {
-  authorizationId: string;
   supabaseUrl: string;
   publishableKey: string;
   urlConsentimiento: string;
+}
+
+/**
+ * El `authorization_id` tiene que sobrevivir al viaje por el correo.
+ *
+ * No basta con llevarlo en la URL de vuelta: la plantilla de alta de Supabase
+ * puede mandar al usuario a la raíz del sitio y perderlo por el camino. Se
+ * guarda aquí para poder retomar el flujo aterrice donde aterrice.
+ */
+const ALMACEN = "cerebro.authorization_id";
+const CADUCIDAD_MS = 30 * 60 * 1000;
+
+function guardarAutorizacion(id: string): void {
+  try {
+    localStorage.setItem(ALMACEN, JSON.stringify({ id, ts: Date.now() }));
+  } catch {
+    // Modo privado o almacenamiento lleno: seguimos con el de la URL.
+  }
+}
+
+function recuperarAutorizacion(): string | null {
+  try {
+    const crudo = localStorage.getItem(ALMACEN);
+    if (!crudo) return null;
+    const { id, ts } = JSON.parse(crudo) as { id: string; ts: number };
+    if (Date.now() - ts > CADUCIDAD_MS) {
+      localStorage.removeItem(ALMACEN);
+      return null;
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+function olvidarAutorizacion(): void {
+  try {
+    localStorage.removeItem(ALMACEN);
+  } catch {
+    /* da igual */
+  }
 }
 
 const NOMBRES_DE_SCOPE: Record<string, string> = {
@@ -31,6 +71,16 @@ const cfg: Configuracion = JSON.parse(
 const sb = createClient(cfg.supabaseUrl, cfg.publishableKey);
 const app = document.getElementById("app")!;
 
+/** De la URL si viene; si no, del almacén, por si el correo nos trajo a otra ruta. */
+const authorizationId = (() => {
+  const deUrl = new URLSearchParams(location.search).get("authorization_id");
+  if (deUrl) {
+    guardarAutorizacion(deUrl);
+    return deUrl;
+  }
+  return recuperarAutorizacion();
+})();
+
 function esc(valor: unknown): string {
   return String(valor ?? "").replace(
     /[&<>"']/g,
@@ -39,10 +89,10 @@ function esc(valor: unknown): string {
   );
 }
 
-/** El authorization_id tiene que sobrevivir a la ida y vuelta del enlace mágico. */
+/** A dónde debe devolvernos el correo. Cinturón; el tirante es el almacén. */
 const volverAqui = (() => {
   const url = new URL(cfg.urlConsentimiento);
-  url.searchParams.set("authorization_id", cfg.authorizationId);
+  if (authorizationId) url.searchParams.set("authorization_id", authorizationId);
   return url.toString();
 })();
 
@@ -95,7 +145,7 @@ async function pedirConsentimiento(): Promise<void> {
 
   let detalles: DetallesDeAutorizacion;
   try {
-    const { data, error } = await oauth.getAuthorizationDetails(cfg.authorizationId);
+    const { data, error } = await oauth.getAuthorizationDetails(authorizationId!);
     if (error) throw error;
     detalles = data;
   } catch (e) {
@@ -125,13 +175,15 @@ async function pedirConsentimiento(): Promise<void> {
     for (const b of app.querySelectorAll("button")) b.disabled = true;
 
     const { data, error } = aprobar
-      ? await oauth.approveAuthorization(cfg.authorizationId)
-      : await oauth.denyAuthorization(cfg.authorizationId);
+      ? await oauth.approveAuthorization(authorizationId!)
+      : await oauth.denyAuthorization(authorizationId!);
 
     if (error) {
       mostrarError("No se pudo completar", error.message);
       return;
     }
+    olvidarAutorizacion();
+
     // Supabase indica a dónde seguir: de vuelta al cliente que pidió acceso.
     if (data?.redirect_url) {
       window.location.href = data.redirect_url;
@@ -160,16 +212,33 @@ interface OAuthApi {
   denyAuthorization(id: string): Promise<RespuestaOAuth<{ redirect_url?: string }>>;
 }
 
-// Al volver del enlace mágico la sesión llega en el fragmento de la URL. El SDK
-// la recoge solo, pero tarda un instante: por eso se escucha el cambio de
-// estado además de mirar si ya la hay.
-const {
-  data: { session },
-} = await sb.auth.getSession();
+function sinSolicitud(): void {
+  app.innerHTML = `
+    <h1>No hay ninguna solicitud pendiente</h1>
+    <p>Esta página sirve para autorizar el acceso de una aplicación a tu
+       Cerebro. Se llega a ella desde la propia aplicación.</p>
+    <p class="pie">Para conectar Claude, añade el conector
+       <strong>cerebro.cofundo.io/mcp</strong> desde sus ajustes.</p>`;
+}
 
-if (session) {
-  void pedirConsentimiento();
-} else {
+async function arrancar(): Promise<void> {
+  if (!authorizationId) {
+    sinSolicitud();
+    return;
+  }
+
+  // Al volver del correo la sesión llega en el fragmento de la URL. El SDK la
+  // recoge solo, pero tarda un instante: por eso se escucha el cambio de
+  // estado además de mirar si ya la hay.
+  const {
+    data: { session },
+  } = await sb.auth.getSession();
+
+  if (session) {
+    void pedirConsentimiento();
+    return;
+  }
+
   sb.auth.onAuthStateChange((_evento, sesion) => {
     if (sesion) void pedirConsentimiento();
   });
@@ -178,5 +247,7 @@ if (session) {
       data: { session: reintento },
     } = await sb.auth.getSession();
     if (!reintento) pedirEmail();
-  }, 500);
+  }, 600);
 }
+
+void arrancar();
