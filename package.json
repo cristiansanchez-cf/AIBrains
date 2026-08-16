@@ -14,11 +14,12 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc",
-    "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "build": "tsc && npm run build:navegador",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json && tsc --noEmit -p tsconfig.navegador.json",
     "seed": "tsx scripts/seed.ts",
     "inspector": "npx -y @modelcontextprotocol/inspector tsx src/index.ts",
-    "prueba": "tsx scripts/prueba-mcp.ts"
+    "prueba": "tsx scripts/prueba-mcp.ts",
+    "build:navegador": "esbuild src/navegador/consentimiento.ts --bundle --format=esm --minify --target=es2022 --outfile=dist/publico/consentimiento.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.2",
     "supabase": "^2.114.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

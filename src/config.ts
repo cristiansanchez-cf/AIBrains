@@ -46,6 +46,11 @@ export const config = {
     url: obligatoria("SUPABASE_URL"),
     /** "Secret key" del panel (sb_secret_...). Salta RLS: solo servidor. */
     secretKey: obligatoria("SUPABASE_SECRET_KEY"),
+    /**
+     * "Publishable key" (sb_publishable_...). Pensada para ir en el navegador.
+     * La usa la pantalla de consentimiento; no da acceso a nada por sí sola.
+     */
+    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? "",
   },
   /** Tope de fichas devueltas por `buscar_tecnica`. */
   maxResultados: Number(process.env.CEREBRO_MAX_RESULTADOS ?? 5),
@@ -65,6 +70,17 @@ export const config = {
      * código si algo sale mal en producción.
      */
     activada: (process.env.CEREBRO_AUTH ?? "") === "si",
+    /**
+     * Valor exigido en el `aud` del token. Por defecto, la URL de este
+     * servidor, que es lo que manda la especificación MCP.
+     *
+     * Se puede vaciar (`CEREBRO_AUDIENCIA_ESPERADA=""`) si se comprueba que
+     * Supabase no implementa resource indicators. Vaciarlo DEBILITA la
+     * seguridad: pasaría a valer cualquier token del proyecto. Solo como
+     * medida temporal y consciente.
+     */
+    audienciaEsperada:
+      process.env.CEREBRO_AUDIENCIA_ESPERADA ?? process.env.CEREBRO_URL_PUBLICA ?? "",
   },
 
   http: {
@@ -78,6 +94,18 @@ export const config = {
      * rechaza el token y el fallo no dice por qué.
      */
     urlPublica: process.env.CEREBRO_URL_PUBLICA ?? "",
+    /**
+     * Origen público del servicio, sin path. Se deduce de `urlPublica`; se
+     * puede forzar con CEREBRO_URL_BASE. De aquí cuelgan la pantalla de
+     * consentimiento y los metadatos.
+     */
+    get urlBase(): string {
+      if (process.env.CEREBRO_URL_BASE) {
+        return process.env.CEREBRO_URL_BASE.replace(/\/$/, "");
+      }
+      const publica = process.env.CEREBRO_URL_PUBLICA;
+      return publica ? new URL(publica).origin : "";
+    },
     /**
      * Hosts admitidos en la cabecera Host. Vacío = sin comprobación.
      * En Railway es redundante —su borde ya rechaza los hosts que no conoce—,

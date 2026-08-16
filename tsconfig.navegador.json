@@ -1,0 +1,15 @@
+// Comprobación de tipos del código que corre en el navegador.
+// Va aparte porque necesita los tipos del DOM y usa resolución de bundler:
+// lo empaqueta esbuild, no tsc.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "rootDir": "src/navegador",
+    "noEmit": true
+  },
+  "include": ["src/navegador/**/*.ts"],
+  "exclude": []
+}

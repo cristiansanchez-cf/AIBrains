@@ -14,7 +14,15 @@
  * OJO: aquí NO hay autenticación todavía (fase 2). Ver `SIN_AUTH` más abajo.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  RUTA_GUION,
+  paginaDeConsentimiento,
+  paginaDeError,
+} from "./auth/consentimiento.js";
 import { crearServidor } from "./servidor.js";
 import { config } from "./config.js";
 import {
@@ -95,6 +103,63 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
   await transporte.handleRequest(req, res);
 }
 
+function responderHtml(res: ServerResponse, codigo: number, html: string): void {
+  res.writeHead(codigo, {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(html),
+    // Nunca cachear: lleva un authorization_id de un solo uso.
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  });
+  res.end(html);
+}
+
+/**
+ * Sirve la pantalla de consentimiento.
+ *
+ * Supabase llega aquí con `?authorization_id=...`. Sin ese parámetro la página
+ * no tiene sentido: se responde con un error legible en vez de una pantalla en
+ * blanco, porque este es el punto donde más se pierde la gente.
+ */
+function servirConsentimiento(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? "/", config.http.urlBase || "http://localhost");
+  const authorizationId = url.searchParams.get("authorization_id");
+
+  if (!authorizationId) {
+    responderHtml(
+      res,
+      400,
+      paginaDeError(
+        "Falta la solicitud de autorización",
+        "Esta página solo funciona cuando se llega desde una solicitud de acceso.",
+      ),
+    );
+    return;
+  }
+
+  responderHtml(res, 200, paginaDeConsentimiento(authorizationId));
+}
+
+/** El SDK empaquetado, servido desde nuestro dominio y no desde un CDN ajeno. */
+function servirGuionDeConsentimiento(res: ServerResponse): void {
+  const ruta = resolve(dirname(fileURLToPath(import.meta.url)), "publico/consentimiento.js");
+  readFile(ruta)
+    .then((contenido) => {
+      res.writeHead(200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": contenido.length,
+        "cache-control": "public, max-age=3600",
+      });
+      res.end(contenido);
+    })
+    .catch(() => {
+      responderJson(res, 500, {
+        error: "Falta el guion de consentimiento. ¿Se ejecutó 'npm run build'?",
+      });
+    });
+}
+
 function responderJson(res: ServerResponse, codigo: number, cuerpo: unknown): void {
   const texto = JSON.stringify(cuerpo);
   res.writeHead(codigo, {
@@ -133,6 +198,17 @@ const http = createServer((req, res) => {
       return;
     }
     responderJson(res, 200, documentoDeRecursoProtegido());
+    return;
+  }
+
+  // Pantalla de consentimiento: aquí manda Supabase al usuario.
+  if (ruta === "/oauth/consent") {
+    servirConsentimiento(req, res);
+    return;
+  }
+
+  if (ruta === RUTA_GUION) {
+    servirGuionDeConsentimiento(res);
     return;
   }
 
