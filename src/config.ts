@@ -56,9 +56,28 @@ export const config = {
    */
   creadoresPorDefecto: listaOpcional("CEREBRO_CREADORES_POR_DEFECTO"),
 
+  auth: {
+    /**
+     * Interruptor de la fase 2. Con esto activo, el endpoint MCP exige un
+     * token válido y `CEREBRO_URL_PUBLICA` pasa a ser obligatoria.
+     *
+     * Existe para poder desplegar el OAuth y darle marcha atrás sin revertir
+     * código si algo sale mal en producción.
+     */
+    activada: (process.env.CEREBRO_AUTH ?? "") === "si",
+  },
+
   http: {
     // Railway inyecta PORT.
     puerto: Number(process.env.PORT ?? 8080),
+    /**
+     * URL pública del endpoint MCP, tal cual la teclea el usuario en Claude.
+     *
+     * Tiene que coincidir EXACTAMENTE con el campo `resource` de los metadatos
+     * de recurso protegido (RFC 9728), path incluido. Si no coincide, Claude
+     * rechaza el token y el fallo no dice por qué.
+     */
+    urlPublica: process.env.CEREBRO_URL_PUBLICA ?? "",
     /**
      * Hosts admitidos en la cabecera Host. Vacío = sin comprobación.
      * En Railway es redundante —su borde ya rechaza los hosts que no conoce—,

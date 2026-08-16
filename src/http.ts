@@ -17,10 +17,54 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { crearServidor } from "./servidor.js";
 import { config } from "./config.js";
+import {
+  cabeceraWwwAuthenticate,
+  documentoDeRecursoProtegido,
+} from "./auth/metadatos.js";
+import { TokenInvalido, tokenDeCabecera, verificarToken } from "./auth/token.js";
 
 const RUTA_MCP = "/mcp";
+const PREFIJO_METADATOS = "/.well-known/oauth-protected-resource";
+
+/**
+ * Responde el 401 que arranca el flujo de OAuth.
+ *
+ * Tiene que ser 401 con `WWW-Authenticate`: Claude ignora esa cabecera en un
+ * 200, y sin ella no sabe dónde está el servidor de autorización.
+ */
+function exigirAutenticacion(res: ServerResponse, motivo?: string): void {
+  const cuerpo = JSON.stringify({
+    jsonrpc: "2.0",
+    error: { code: -32001, message: motivo ?? "Autenticación requerida" },
+    id: null,
+  });
+  res.writeHead(401, {
+    "content-type": "application/json",
+    "content-length": Buffer.byteLength(cuerpo),
+    "www-authenticate": cabeceraWwwAuthenticate(motivo),
+  });
+  res.end(cuerpo);
+}
 
 async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (config.auth.activada) {
+    const token = tokenDeCabecera(req.headers.authorization);
+    if (!token) {
+      exigirAutenticacion(res);
+      return;
+    }
+    try {
+      const usuario = await verificarToken(token);
+      console.error(`[cerebro] petición autenticada — usuario ${usuario.userId}`);
+    } catch (error) {
+      exigirAutenticacion(
+        res,
+        error instanceof TokenInvalido ? error.message : "Token no verificable",
+      );
+      return;
+    }
+  }
+
   // Servidor y transporte por petición: sin estado compartido entre llamadas.
   const servidor = crearServidor();
   const comprobarProcedencia =
@@ -73,10 +117,22 @@ const http = createServer((req, res) => {
     responderJson(res, 200, {
       estado: "ok",
       servidor: "cerebro-ventas",
-      autenticacion: "ninguna (fase 2 pendiente)",
+      autenticacion: config.auth.activada ? "oauth (supabase)" : "ninguna",
+      ...(config.auth.activada && { recurso: config.http.urlPublica }),
       comprobacionDeHost: config.http.hostsPermitidos.length > 0,
       comprobacionDeOrigen: config.http.origenesPermitidos.length > 0,
     });
+    return;
+  }
+
+  // RFC 9728. Claude sondea la variante con el path del endpoint primero, así
+  // que se sirven las dos: /.well-known/oauth-protected-resource y /...-/mcp
+  if (ruta === PREFIJO_METADATOS || ruta?.startsWith(`${PREFIJO_METADATOS}/`)) {
+    if (!config.auth.activada) {
+      responderJson(res, 404, { error: "Este servidor no usa autenticación." });
+      return;
+    }
+    responderJson(res, 200, documentoDeRecursoProtegido());
     return;
   }
 
@@ -99,16 +155,26 @@ const http = createServer((req, res) => {
   });
 });
 
-if (!config.http.permitirSinAuth) {
+if (config.auth.activada) {
+  // Sin esto los metadatos de recurso protegido saldrían con `resource` vacío
+  // y Claude rechazaría el token sin explicar por qué.
+  if (!config.http.urlPublica) {
+    console.error(
+      "[cerebro] ARRANQUE BLOQUEADO: con CEREBRO_AUTH=si hace falta CEREBRO_URL_PUBLICA\n" +
+        "con la URL exacta del endpoint MCP, p. ej. https://cerebro.cofundo.io/mcp",
+    );
+    process.exit(1);
+  }
+} else if (!config.http.permitirSinAuth) {
   console.error(
     [
       "[cerebro] ARRANQUE BLOQUEADO.",
       "",
-      "Este servidor HTTP todavía no tiene autenticación: cualquiera con la URL",
-      "podría leer las fichas que sirva, scripts incluidos.",
+      "Este servidor HTTP no tiene autenticación: cualquiera con la URL podría",
+      "leer las fichas que sirva, scripts incluidos.",
       "",
-      'Si es lo que quieres —hoy solo hay fichas de prueba—, pon CEREBRO_PERMITIR_SIN_AUTH="si".',
-      "Cuando entre el OAuth de la fase 2, este cerrojo desaparece.",
+      'Si es lo que quieres —solo fichas de prueba—, pon CEREBRO_PERMITIR_SIN_AUTH="si".',
+      'Para activar el OAuth de la fase 2, pon CEREBRO_AUTH="si".',
     ].join("\n"),
   );
   process.exit(1);
