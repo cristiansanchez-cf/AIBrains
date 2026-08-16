@@ -6,11 +6,14 @@
  * local para desarrollo.
  */
 
-// `loadEnvFile` no pisa variables que ya vengan del proceso.
-try {
-  process.loadEnvFile();
-} catch {
-  // No hay .env: normal cuando arranca desde Claude o en producción.
+// `loadEnvFile` no pisa variables ya definidas, así que el orden manda:
+// .env.local (desarrollo contra el Supabase local) gana sobre .env (la nube).
+for (const archivo of [".env.local", ".env"]) {
+  try {
+    process.loadEnvFile(archivo);
+  } catch {
+    // No existe: normal. En producción las variables vienen del entorno.
+  }
 }
 
 function obligatoria(nombre: string): string {
@@ -33,7 +36,8 @@ function listaOpcional(nombre: string): string[] {
 export const config = {
   supabase: {
     url: obligatoria("SUPABASE_URL"),
-    serviceRoleKey: obligatoria("SUPABASE_SERVICE_ROLE_KEY"),
+    /** "Secret key" del panel (sb_secret_...). Salta RLS: solo servidor. */
+    secretKey: obligatoria("SUPABASE_SECRET_KEY"),
   },
   /** Tope de fichas devueltas por `buscar_tecnica`. */
   maxResultados: Number(process.env.CEREBRO_MAX_RESULTADOS ?? 5),

@@ -98,3 +98,21 @@ create table if not exists public.suscripciones (
 alter table public.creadores     enable row level security;
 alter table public.fichas        enable row level security;
 alter table public.suscripciones enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Permisos de los roles de la API
+-- ---------------------------------------------------------------------------
+-- Supabase ya no concede privilegios automáticos sobre tablas nuevas: sin
+-- estos grants, PostgREST responde "permission denied" aunque la clave sea
+-- correcta. Solo service_role, que es con quien lee el servidor MCP y que
+-- además salta RLS.
+--
+-- A anon y authenticated no se les da nada a propósito. En la fase 2, cuando
+-- el token del usuario resuelva sus suscripciones, `authenticated` recibirá
+-- SELECT sobre fichas y creadores, y ahí las políticas RLS harán el trabajo.
+
+grant select, insert, update, delete
+  on public.creadores, public.fichas, public.suscripciones
+  to service_role;
+
+grant usage, select on sequence public.fichas_id_seq to service_role;

@@ -17,7 +17,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
-    "inspector": "npx -y @modelcontextprotocol/inspector tsx src/index.ts"
+    "inspector": "npx -y @modelcontextprotocol/inspector tsx src/index.ts",
+    "prueba": "tsx scripts/prueba-mcp.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
