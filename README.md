@@ -155,11 +155,29 @@ auth**. El orden correcto es: OAuth primero, datos reales después.
 SUPABASE_URL
 SUPABASE_SECRET_KEY
 CEREBRO_PERMITIR_SIN_AUTH=si
-CEREBRO_HOSTS_PERMITIDOS=<dominio-del-servicio>.up.railway.app
+CEREBRO_ORIGENES_PERMITIDOS=https://claude.ai   (opcional, ver abajo)
+CEREBRO_HOSTS_PERMITIDOS=<dominio>.up.railway.app  (redundante en Railway)
 ```
 
 `PORT` lo inyecta Railway. Comprobar el despliegue:
 
 ```bash
+curl https://<dominio>/health
 npm run prueba -- https://<dominio>/mcp
 ```
+
+`/health` informa de qué protecciones están activas, para detectar una variable
+que se quedó sin poner en la plataforma:
+
+```json
+{
+  "estado": "ok",
+  "autenticacion": "ninguna (fase 2 pendiente)",
+  "comprobacionDeHost": false,
+  "comprobacionDeOrigen": true
+}
+```
+
+Sobre `CEREBRO_HOSTS_PERMITIDOS`: en Railway es redundante, porque su borde ya
+rechaza con 404 cualquier `Host` que no conozca. Sirve si algún día se sirve
+detrás de otro proxy.

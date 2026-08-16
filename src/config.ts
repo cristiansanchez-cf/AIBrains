@@ -61,9 +61,16 @@ export const config = {
     puerto: Number(process.env.PORT ?? 8080),
     /**
      * Hosts admitidos en la cabecera Host. Vacío = sin comprobación.
-     * En Railway, el dominio del servicio. Protege de DNS rebinding.
+     * En Railway es redundante —su borde ya rechaza los hosts que no conoce—,
+     * pero hace falta si algún día se sirve detrás de otro proxy.
      */
     hostsPermitidos: listaOpcional("CEREBRO_HOSTS_PERMITIDOS"),
+    /**
+     * Orígenes admitidos en la cabecera Origin. Vacío = sin comprobación.
+     * Sin auth da igual: el endpoint es público y una petición entre orígenes
+     * no consigue nada que no consiga un curl. Con OAuth sí importa.
+     */
+    origenesPermitidos: listaOpcional("CEREBRO_ORIGENES_PERMITIDOS"),
     /**
      * Cerrojo deliberado: el servidor HTTP no arranca sin esto puesto a "si".
      *

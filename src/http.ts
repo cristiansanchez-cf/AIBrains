@@ -23,12 +23,21 @@ const RUTA_MCP = "/mcp";
 async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Servidor y transporte por petición: sin estado compartido entre llamadas.
   const servidor = crearServidor();
+  const comprobarProcedencia =
+    config.http.hostsPermitidos.length > 0 ||
+    config.http.origenesPermitidos.length > 0;
+
   const transporte = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless
     enableJsonResponse: true,
-    ...(config.http.hostsPermitidos.length > 0 && {
+    ...(comprobarProcedencia && {
       enableDnsRebindingProtection: true,
-      allowedHosts: config.http.hostsPermitidos,
+      ...(config.http.hostsPermitidos.length > 0 && {
+        allowedHosts: config.http.hostsPermitidos,
+      }),
+      ...(config.http.origenesPermitidos.length > 0 && {
+        allowedOrigins: config.http.origenesPermitidos,
+      }),
     }),
   });
 
@@ -55,8 +64,19 @@ const http = createServer((req, res) => {
   const ruta = (req.url ?? "/").split("?")[0];
 
   // Railway comprueba que el proceso está vivo por aquí.
+  //
+  // Devuelve además qué protecciones están activas. Sin esto no hay forma de
+  // saber desde fuera si una variable de entorno se quedó sin poner en la
+  // plataforma. Son banderas de configuración, nunca valores: ni claves, ni
+  // la URL de Supabase, ni los dominios permitidos.
   if (ruta === "/health") {
-    responderJson(res, 200, { estado: "ok", servidor: "cerebro-ventas" });
+    responderJson(res, 200, {
+      estado: "ok",
+      servidor: "cerebro-ventas",
+      autenticacion: "ninguna (fase 2 pendiente)",
+      comprobacionDeHost: config.http.hostsPermitidos.length > 0,
+      comprobacionDeOrigen: config.http.origenesPermitidos.length > 0,
+    });
     return;
   }
 
