@@ -76,10 +76,18 @@ npm run prueba            # prueba de humo end-to-end
 
 ## Conectarlo a Claude
 
+Compila primero. El cliente arranca el proceso desde un directorio de trabajo
+impredecible, así que se apunta al JavaScript ya compilado con `node` y rutas
+absolutas — nada de `npx tsx`, que dependería del cwd para resolverse.
+
+```bash
+npm run build
+```
+
 ### Claude Code
 
 ```bash
-claude mcp add cerebro -- npx tsx /ruta/al/repo/src/index.ts
+claude mcp add cerebro -- node /ruta/absoluta/al/repo/dist/index.js
 ```
 
 ### Claude Desktop
@@ -90,8 +98,8 @@ En *Ajustes → Desarrollador → Editar configuración*, añade a `mcpServers`:
 {
   "mcpServers": {
     "cerebro": {
-      "command": "npx",
-      "args": ["tsx", "/ruta/al/repo/src/index.ts"]
+      "command": "node",
+      "args": ["/ruta/absoluta/al/repo/dist/index.js"]
     }
   }
 }
@@ -99,7 +107,12 @@ En *Ajustes → Desarrollador → Editar configuración*, añade a `mcpServers`:
 
 Reinicia Claude Desktop del todo (salir, no cerrar la ventana).
 
+El `.env` se localiza a partir de la ubicación del propio módulo, no del cwd,
+así que no hace falta declarar variables de entorno en la configuración.
+**Después de tocar el código hay que volver a compilar** (`npm run build`).
+
 ### Comprobación
+
 
 Pregunta: *"el cliente me dice que soy caro"*. Debe llamar a `buscar_tecnica`
 y responder citando al creador y con el enlace al vídeo.

@@ -15,7 +15,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "seed": "tsx scripts/seed.ts",
     "inspector": "npx -y @modelcontextprotocol/inspector tsx src/index.ts",
     "prueba": "tsx scripts/prueba-mcp.ts"

@@ -6,11 +6,19 @@
  * local para desarrollo.
  */
 
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+// Raíz del repo, deducida de la ubicación de este archivo y NO del directorio
+// de trabajo: Claude Desktop arranca el proceso desde un cwd impredecible, y
+// con rutas relativas el .env no aparecía.
+const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
 // `loadEnvFile` no pisa variables ya definidas, así que el orden manda:
 // .env.local (desarrollo contra el Supabase local) gana sobre .env (la nube).
 for (const archivo of [".env.local", ".env"]) {
   try {
-    process.loadEnvFile(archivo);
+    process.loadEnvFile(resolve(RAIZ, archivo));
   } catch {
     // No existe: normal. En producción las variables vienen del entorno.
   }
