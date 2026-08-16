@@ -55,4 +55,24 @@ export const config = {
    * creadores activos con acuerdo firmado.
    */
   creadoresPorDefecto: listaOpcional("CEREBRO_CREADORES_POR_DEFECTO"),
+
+  http: {
+    // Railway inyecta PORT.
+    puerto: Number(process.env.PORT ?? 8080),
+    /**
+     * Hosts admitidos en la cabecera Host. Vacío = sin comprobación.
+     * En Railway, el dominio del servicio. Protege de DNS rebinding.
+     */
+    hostsPermitidos: listaOpcional("CEREBRO_HOSTS_PERMITIDOS"),
+    /**
+     * Cerrojo deliberado: el servidor HTTP no arranca sin esto puesto a "si".
+     *
+     * Mientras no exista OAuth, exponerlo en internet significa servir las
+     * fichas a cualquiera con la URL. Con tres fichas ficticias da igual; con
+     * las 138 reales de la fase 3, no. Que haga falta un gesto explícito evita
+     * que un despliegue rutinario acabe regalando el contenido sin que nadie
+     * se dé cuenta.
+     */
+    permitirSinAuth: (process.env.CEREBRO_PERMITIR_SIN_AUTH ?? "") === "si",
+  },
 } as const;

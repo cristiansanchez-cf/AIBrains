@@ -16,7 +16,7 @@ La arquitectura y el orden de fases están en
 |---|---|---|
 | 0 | Repo + Supabase + esquema SQL | hecho (local y nube) |
 | 1 | Servidor MCP mínimo, sin auth, local | hecho — verificado desde Claude Desktop |
-| 2 | Auth + deploy en Railway | pendiente |
+| 2 | Auth + deploy en Railway | transporte HTTP hecho; **auth pendiente** |
 | 3 | Migración Notion → Postgres + embeddings | pendiente |
 
 En fase 1 la búsqueda es por texto (`ilike` + ranking en memoria), no vectorial.
@@ -28,7 +28,8 @@ El vector search entra en fase 3, sin cambiar la firma de `buscarFichas`.
 
 ```
 src/
-  index.ts           Punto de entrada (transporte stdio)
+  index.ts           Punto de entrada por stdio (Claude Desktop en local)
+  http.ts            Punto de entrada por HTTP (Railway), modo stateless
   servidor.ts        Monta el McpServer y registra las herramientas
   config.ts          Variables de entorno, validadas al arrancar
   instrucciones.ts   Texto de `instructions` (arquitectura §5)
@@ -116,3 +117,49 @@ así que no hace falta declarar variables de entorno en la configuración.
 
 Pregunta: *"el cliente me dice que soy caro"*. Debe llamar a `buscar_tecnica`
 y responder citando al creador y con el enlace al vídeo.
+
+---
+
+## Servidor HTTP (Railway)
+
+Mismas herramientas que el stdio, distinto transporte. Modo **stateless**: un
+`McpServer` por petición, sin sesiones en memoria, de modo que reiniciar o
+escalar no rompe nada.
+
+| Ruta | Qué hace |
+|---|---|
+| `POST /mcp` | Endpoint MCP |
+| `GET /health` | Comprobación de vida para Railway |
+
+En local:
+
+```bash
+npm run build
+CEREBRO_PERMITIR_SIN_AUTH=si PORT=8899 node dist/http.js
+npm run prueba -- http://127.0.0.1:8899/mcp
+```
+
+### ⚠️ Todavía NO hay autenticación
+
+Este servidor sirve las fichas a cualquiera que conozca la URL. Por eso no
+arranca si no le pones `CEREBRO_PERMITIR_SIN_AUTH=si`: el gesto tiene que ser
+deliberado.
+
+Hoy da igual —solo hay tres fichas ficticias—, pero **las 138 fichas reales de
+la fase 3 no deben cargarse en una base que sirva un endpoint público sin
+auth**. El orden correcto es: OAuth primero, datos reales después.
+
+### Variables en Railway
+
+```
+SUPABASE_URL
+SUPABASE_SECRET_KEY
+CEREBRO_PERMITIR_SIN_AUTH=si
+CEREBRO_HOSTS_PERMITIDOS=<dominio-del-servicio>.up.railway.app
+```
+
+`PORT` lo inyecta Railway. Comprobar el despliegue:
+
+```bash
+npm run prueba -- https://<dominio>/mcp
+```
