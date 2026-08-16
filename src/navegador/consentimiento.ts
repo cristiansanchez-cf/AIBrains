@@ -140,24 +140,36 @@ function pedirEmail(aviso?: string): void {
   });
 }
 
-async function pedirConsentimiento(): Promise<void> {
-  const oauth = (sb.auth as unknown as { oauth: OAuthApi }).oauth;
+/** Devuelve al usuario a la aplicación que pidió acceso. */
+function volverAlCliente(redirectUrl: string): void {
+  olvidarAutorizacion();
+  window.location.href = redirectUrl;
+}
 
-  let detalles: DetallesDeAutorizacion;
-  try {
-    const { data, error } = await oauth.getAuthorizationDetails(authorizationId!);
-    if (error) throw error;
-    detalles = data;
-  } catch (e) {
+async function pedirConsentimiento(): Promise<void> {
+  const { data, error } = await sb.auth.oauth.getAuthorizationDetails(
+    authorizationId!,
+  );
+
+  if (error || !data) {
     mostrarError(
       "Esta solicitud ya no vale",
-      (e as Error)?.message ?? "No se pudo leer la solicitud de autorización.",
+      error?.message ?? "No se pudo leer la solicitud de autorización.",
     );
     return;
   }
 
-  const cliente = detalles?.client?.client_name || "Una aplicación";
-  const scopes = (detalles?.scope ?? "").split(" ").filter(Boolean);
+  // Si el usuario ya consintió estos permisos antes, Supabase no devuelve los
+  // detalles: devuelve directamente a dónde ir. Sin este caso, una segunda
+  // conexión se quedaba colgada en la pantalla y el cliente nunca recibía el
+  // código de autorización.
+  if (!("authorization_id" in data)) {
+    volverAlCliente(data.redirect_url);
+    return;
+  }
+
+  const cliente = data.client?.name || "Una aplicación";
+  const scopes = (data.scope ?? "").split(" ").filter(Boolean);
 
   app.innerHTML = `
     <h1>${esc(cliente)} quiere acceder a tu Cerebro</h1>
@@ -174,42 +186,26 @@ async function pedirConsentimiento(): Promise<void> {
   const decidir = async (aprobar: boolean): Promise<void> => {
     for (const b of app.querySelectorAll("button")) b.disabled = true;
 
+    // skipBrowserRedirect: el SDK redirigiría solo. Preferimos hacerlo aquí
+    // para poder limpiar el almacén antes y para que el fallo sea visible.
+    const opciones = { skipBrowserRedirect: true };
     const { data, error } = aprobar
-      ? await oauth.approveAuthorization(authorizationId!)
-      : await oauth.denyAuthorization(authorizationId!);
+      ? await sb.auth.oauth.approveAuthorization(authorizationId!, opciones)
+      : await sb.auth.oauth.denyAuthorization(authorizationId!, opciones);
 
-    if (error) {
-      mostrarError("No se pudo completar", error.message);
+    if (error || !data?.redirect_url) {
+      mostrarError(
+        "No se pudo completar",
+        error?.message ?? "Supabase no indicó a dónde volver.",
+      );
       return;
     }
-    olvidarAutorizacion();
 
-    // Supabase indica a dónde seguir: de vuelta al cliente que pidió acceso.
-    if (data?.redirect_url) {
-      window.location.href = data.redirect_url;
-      return;
-    }
-    app.innerHTML = `
-      <h1>Listo</h1>
-      <p>Ya puedes cerrar esta ventana y volver a Claude.</p>`;
+    volverAlCliente(data.redirect_url);
   };
 
   document.getElementById("autorizar")!.addEventListener("click", () => void decidir(true));
   document.getElementById("cancelar")!.addEventListener("click", () => void decidir(false));
-}
-
-interface DetallesDeAutorizacion {
-  client?: { client_name?: string };
-  scope?: string;
-}
-interface RespuestaOAuth<T> {
-  data: T;
-  error: { message: string } | null;
-}
-interface OAuthApi {
-  getAuthorizationDetails(id: string): Promise<RespuestaOAuth<DetallesDeAutorizacion>>;
-  approveAuthorization(id: string): Promise<RespuestaOAuth<{ redirect_url?: string }>>;
-  denyAuthorization(id: string): Promise<RespuestaOAuth<{ redirect_url?: string }>>;
 }
 
 function sinSolicitud(): void {
