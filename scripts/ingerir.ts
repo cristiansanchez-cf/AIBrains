@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { supabase } from "../src/db/supabase.js";
 import { destilar, hayDestilador } from "../src/ingesta/destilar.js";
 import { generarEmbeddings, textoParaEmbedding, hayEmbeddings } from "../src/db/embeddings.js";
+import { buscarFuente, registrarFuente, marcarFuente } from "../src/ingesta/fuentes.js";
 
 function argumento(nombre: string): string | undefined {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -93,6 +94,15 @@ async function main(): Promise<void> {
   console.log(`Transcripción: ${transcripcion.length} caracteres`);
   console.log(`Huella:        ${huella.slice(0, 16)}…`);
 
+  const yaProcesada = url ? await buscarFuente(creador.id, url) : null;
+  if (yaProcesada && yaProcesada.estado === "sin_material") {
+    console.log(
+      `\nESTE VÍDEO YA SE PROCESÓ y no tenía nada accionable ` +
+        `(fuente ${yaProcesada.id}).\nNo se vuelve a destilar. Fuerza con --rehacer si crees que fue un error.`,
+    );
+    if (!process.argv.includes("--rehacer")) return;
+  }
+
   const { count: yaHabia } = await supabase
     .from("fichas")
     .select("id", { count: "exact", head: true })
@@ -114,6 +124,13 @@ async function main(): Promise<void> {
     console.log(`--rehacer: las anteriores se descartarán al terminar.`);
   }
 
+  // El vídeo se registra ANTES de destilar: si el proceso se cae a mitad,
+  // queda constancia de que se intentó y con qué material.
+  const fuente = url
+    ? await registrarFuente(creador.id, url, titulo ? { titulo } : undefined)
+    : null;
+  if (fuente) console.log(`Fuente:        [${fuente.id}] ${fuente.url_normalizada}`);
+
   console.log(`\nDestilando…`);
 
   const fichas = await destilar(transcripcion, {
@@ -123,7 +140,15 @@ async function main(): Promise<void> {
   });
 
   if (fichas.length === 0) {
-    console.log("\nEl modelo no encontró nada accionable. No se escribe nada.");
+    console.log("\nEl modelo no encontró nada accionable.");
+    if (fuente && !soloLectura) {
+      // Sin esto el vídeo no dejaría rastro: no hay fichas, luego no hay hash,
+      // luego mañana se retranscribe y se vuelve a destilar para nada.
+      await marcarFuente(fuente.id, "sin_material", { hash: huella, fichas: 0 });
+      console.log(`Fuente [${fuente.id}] marcada como SIN MATERIAL: no se volverá a procesar.`);
+    } else {
+      console.log("No se escribe nada.");
+    }
     return;
   }
 
@@ -188,6 +213,10 @@ async function main(): Promise<void> {
 
   const { error } = await supabase.from("fichas").insert(filas);
   if (error) throw new Error(`No se pudieron guardar: ${error.message}`);
+
+  if (fuente) {
+    await marcarFuente(fuente.id, "procesada", { hash: huella, fichas: filas.length });
+  }
 
   console.log(`${filas.length} ficha(s) guardadas como BORRADOR.`);
   console.log(`\nNo se sirven hasta revisarlas:\n  npm run revisar`);

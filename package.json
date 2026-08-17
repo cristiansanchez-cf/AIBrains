@@ -28,7 +28,8 @@
     "evaluar": "tsx scripts/evaluar-busqueda.ts",
     "enlaces": "tsx scripts/completar-enlaces.ts",
     "ingerir": "tsx scripts/ingerir.ts",
-    "revisar": "tsx scripts/revisar.ts"
+    "revisar": "tsx scripts/revisar.ts",
+    "fuentes": "tsx scripts/fuentes.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
