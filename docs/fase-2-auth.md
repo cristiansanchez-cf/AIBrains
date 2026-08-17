@@ -183,16 +183,28 @@ Si algún día Supabase implementa RFC 8707, basta con poner
 
 ---
 
-## Orden de trabajo propuesto
+## Estado
 
-1. Activar el servidor OAuth y el registro dinámico en el panel de Supabase.
-2. Pantalla de consentimiento (login + aprobar/denegar).
-3. Servidor de recursos: metadatos RFC 9728, `401` con `WWW-Authenticate`,
-   validación del JWT contra el JWKS.
-4. Sustituir `CEREBRO_CREADORES_POR_DEFECTO` por las suscripciones reales del
-   `user_id` del token. Retirar el cerrojo `CEREBRO_PERMITIR_SIN_AUTH`.
-5. Políticas RLS para el rol `authenticated`.
-6. Probar en Claude Desktop **y** en Claude Code.
+| | |
+|---|---|
+| Servidor OAuth y registro dinámico activados en Supabase | hecho |
+| Pantalla de consentimiento (login + aprobar/denegar) | hecho |
+| Metadatos RFC 9728, `401` con `WWW-Authenticate` | hecho |
+| Validación del JWT contra el JWKS | hecho |
+| Verificado desde Claude con el conector remoto | hecho (17/08/2026) |
+| **Resolver suscripciones a partir del `user_id` del token** | **pendiente** |
+| Políticas RLS para el rol `authenticated` | pendiente |
+| Probar en Claude Code (redirect de loopback) | pendiente |
+
+### Lo que falta, y por qué importa
+
+El servidor autentica pero **no autoriza por usuario**. `creadoresDisponibles()`
+sigue devolviendo todos los creadores activos con acuerdo firmado, ignorando la
+tabla `suscripciones` y el `user_id` del token.
+
+Hoy da igual —solo hay un creador de prueba—, pero **en cuanto haya dos cerebros
+y alguien pague solo por uno, esto regala el otro.** Es lo siguiente que hay que
+hacer, y antes de cobrar a nadie.
 
 ---
 

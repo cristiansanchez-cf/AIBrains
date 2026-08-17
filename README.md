@@ -16,7 +16,7 @@ La arquitectura y el orden de fases están en
 |---|---|---|
 | 0 | Repo + Supabase + esquema SQL | hecho (local y nube) |
 | 1 | Servidor MCP mínimo, sin auth, local | hecho — verificado desde Claude Desktop |
-| 2 | Auth + deploy en Railway | transporte HTTP hecho; **auth pendiente** |
+| 2 | Auth + deploy en Railway | OAuth funcionando en producción; **falta resolver suscripciones** |
 | 3 | Migración Notion → Postgres + embeddings | pendiente |
 
 En fase 1 la búsqueda es por texto (`ilike` + ranking en memoria), no vectorial.
