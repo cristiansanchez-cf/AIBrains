@@ -1,13 +1,14 @@
 /**
  * Ingesta: una transcripción entra, salen fichas en borrador.
  *
+ *   npm run ingerir -- --creador manuel-trejo --url https://youtu.be/XXX
  *   npm run ingerir -- --creador manuel-trejo --url https://... transcripcion.txt
- *   cat transcripcion.txt | npm run ingerir -- --creador manuel-trejo --url https://...
- *   npm run ingerir -- --creador manuel-trejo --url https://... --seco archivo.txt
+ *   cat transcripcion.txt | npm run ingerir -- --creador manuel-trejo --url https://... --stdin
  *
- * La transcripción se le pasa ya hecha: se sigue haciendo con Wispr, que ya
- * funciona, y bajarse el audio de vídeos ajenos es terreno resbaladizo por los
- * mismos motivos legales que atraviesan todo el proyecto.
+ * Sin archivo, la transcripción se pide a InternalApps (el servicio propio de
+ * vídeo a texto). Con archivo, se usa el archivo — sirve para transcripciones
+ * de otra procedencia, para reprocesar algo ya guardado, y para probar sin
+ * gastar minutos de cola.
  *
  * Las fichas entran como BORRADOR y no se sirven hasta revisarlas:
  *   npm run revisar
@@ -18,6 +19,7 @@ import { supabase } from "../src/db/supabase.js";
 import { destilar, hayDestilador } from "../src/ingesta/destilar.js";
 import { generarEmbeddings, textoParaEmbedding, hayEmbeddings } from "../src/db/embeddings.js";
 import { buscarFuente, registrarFuente, marcarFuente } from "../src/ingesta/fuentes.js";
+import { transcribir, admitida } from "../src/ingesta/transcribir.js";
 
 function argumento(nombre: string): string | undefined {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -33,20 +35,54 @@ function segundoDeLaUrl(url: string | undefined): number | null {
   return m?.[1] ? Number(m[1]) : null;
 }
 
-async function leerEntrada(): Promise<string> {
+/**
+ * De dónde sale la transcripción, por orden: archivo, entrada estándar y, si
+ * no hay ninguna de las dos, el servicio de transcripción con la --url.
+ */
+async function obtenerTranscripcion(url: string | undefined): Promise<string> {
   const archivo = process.argv.slice(2).find((a) => !a.startsWith("--") && /\.\w+$/.test(a));
   if (archivo) return readFile(archivo, "utf8");
 
-  if (process.stdin.isTTY) {
+  // La entrada estándar se lee SOLO si se pide con --stdin.
+  //
+  // Antes se intentaba adivinar con `process.stdin.isTTY`, y eso cuelga el
+  // proceso: fuera de una terminal interactiva —un script, cron, n8n— isTTY
+  // vale undefined, así que parecía que había entrada y se quedaba esperando
+  // para siempre. Justo en el escenario para el que existe este comando.
+  if (process.argv.includes("--stdin")) {
+    const trozos: Buffer[] = [];
+    for await (const t of process.stdin) trozos.push(Buffer.from(t));
+    const texto = Buffer.concat(trozos).toString("utf8");
+    if (texto.trim()) return texto;
+    throw new Error("--stdin sin contenido en la entrada estándar.");
+  }
+
+  if (!url) {
     throw new Error(
-      "No hay transcripción. Pásala como archivo o por la entrada estándar:\n" +
-        "  npm run ingerir -- --creador <slug> --url <enlace> transcripcion.txt",
+      "No hay transcripción ni --url. Una de estas tres:\n" +
+        "  npm run ingerir -- --creador <slug> --url https://youtu.be/XXX\n" +
+        "  npm run ingerir -- --creador <slug> --url <enlace> transcripcion.txt\n" +
+        "  cat t.txt | npm run ingerir -- --creador <slug> --url <enlace> --stdin",
+    );
+  }
+  if (!admitida(url)) {
+    throw new Error(
+      `El servicio de transcripción no admite esa URL.\n` +
+        `Plataformas: YouTube, TikTok, Instagram y Spotify.\n` +
+        `Para otra procedencia, pasa la transcripción como archivo.`,
     );
   }
 
-  const trozos: Buffer[] = [];
-  for await (const t of process.stdin) trozos.push(Buffer.from(t));
-  return Buffer.concat(trozos).toString("utf8");
+  console.log(`\nTranscribiendo con InternalApps…`);
+  console.log(`  (un podcast de 2 h tarda 3-5 min; no cierres la terminal)`);
+
+  const t = await transcribir(url);
+  console.log(
+    `  ${t.texto.length} caracteres` +
+      `${t.duracionS ? ` · ${Math.round(t.duracionS / 60)} min de vídeo` : ""}` +
+      `${t.motor ? ` · vía ${t.motor}` : ""}`,
+  );
+  return t.texto;
 }
 
 async function main(): Promise<void> {
@@ -81,7 +117,26 @@ async function main(): Promise<void> {
   if (errorCreador) throw new Error(errorCreador.message);
   if (!creador) throw new Error(`No hay ningún creador con el slug "${slug}".`);
 
-  const transcripcion = (await leerEntrada()).trim();
+  // Comprobación ANTES de transcribir: los minutos de cola del servicio son
+  // el recurso caro, así que no se gastan en un vídeo ya procesado.
+  const yaProcesada = url ? await buscarFuente(creador.id, url) : null;
+  if (yaProcesada && yaProcesada.estado !== "pendiente") {
+    const razon =
+      yaProcesada.estado === "sin_material"
+        ? "no tenía nada accionable"
+        : yaProcesada.estado === "omitida"
+          ? `se omitió a mano: ${yaProcesada.motivo ?? "sin motivo"}`
+          : `dio ${yaProcesada.fichas_generadas ?? "?"} fichas`;
+
+    console.log(`\nESTE VÍDEO YA SE PROCESÓ (fuente ${yaProcesada.id}): ${razon}.`);
+    if (!process.argv.includes("--rehacer")) {
+      console.log(`No se transcribe ni se destila. Fuerza con --rehacer.`);
+      return;
+    }
+    console.log(`--rehacer: se vuelve a procesar.`);
+  }
+
+  const transcripcion = (await obtenerTranscripcion(url)).trim();
   if (transcripcion.length < 200) {
     throw new Error(`La transcripción tiene ${transcripcion.length} caracteres. ¿Se leyó bien?`);
   }
@@ -93,15 +148,6 @@ async function main(): Promise<void> {
   console.log(`Creador:       ${creador.nombre}`);
   console.log(`Transcripción: ${transcripcion.length} caracteres`);
   console.log(`Huella:        ${huella.slice(0, 16)}…`);
-
-  const yaProcesada = url ? await buscarFuente(creador.id, url) : null;
-  if (yaProcesada && yaProcesada.estado === "sin_material") {
-    console.log(
-      `\nESTE VÍDEO YA SE PROCESÓ y no tenía nada accionable ` +
-        `(fuente ${yaProcesada.id}).\nNo se vuelve a destilar. Fuerza con --rehacer si crees que fue un error.`,
-    );
-    if (!process.argv.includes("--rehacer")) return;
-  }
 
   const { count: yaHabia } = await supabase
     .from("fichas")

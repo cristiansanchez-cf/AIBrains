@@ -69,6 +69,30 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY ?? "",
   },
 
+  internalApps: {
+    /**
+     * Endpoint de transcripción de InternalApps, el servicio propio que
+     * convierte vídeos públicos en texto.
+     */
+    url:
+      process.env.INTERNALAPPS_URL ??
+      "https://pdf-compressor-703586002564.europe-west1.run.app/api/video-to-text",
+    /**
+     * El endpoint solo valida la cabecera `Origin` contra una lista. No es un
+     * control de acceso real —cualquier cliente que no sea un navegador la
+     * fija a voluntad— pero es lo que hay hasta que acepte una clave.
+     */
+    origen: process.env.INTERNALAPPS_ORIGEN ?? "https://internalapps-a06bf.web.app",
+    /** Se enviará como X-API-Key en cuanto el endpoint la admita. */
+    apiKey: process.env.INTERNALAPPS_API_KEY ?? "",
+    /**
+     * Un podcast de dos horas tarda 3-5 minutos y admite hasta cuatro. Con el
+     * tiempo de espera por defecto se cortaría a mitad y parecería un fallo
+     * del servicio.
+     */
+    timeoutMs: Number(process.env.INTERNALAPPS_TIMEOUT_MS ?? 20 * 60 * 1000),
+  },
+
   notion: {
     /** Token de integración interna. Solo lo usa el script de migración. */
     token: process.env.NOTION_TOKEN ?? "",
