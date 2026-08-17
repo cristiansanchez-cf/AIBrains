@@ -9,6 +9,7 @@
  *
  * Sale con código 1 si algo está roto; los avisos no hacen fallar.
  */
+import { execSync } from "node:child_process";
 import { supabase } from "../src/db/supabase.js";
 import { config } from "../src/config.js";
 import { generarEmbeddings, hayEmbeddings } from "../src/db/embeddings.js";
@@ -202,6 +203,42 @@ async function comprobarProduccion(): Promise<Resultado> {
   };
 }
 
+/**
+ * ¿Va producción por detrás del código?
+ *
+ * Un despliegue a medias no se manifiesta como un error: se manifiesta como
+ * "el cerebro dice que no tengo ningún cerebro", y parece un problema de
+ * permisos. Comparar commits lo convierte en una línea legible.
+ */
+async function comprobarVersion(): Promise<Resultado> {
+  const local = execSync("git rev-parse --short=7 HEAD").toString().trim();
+  const pendientes = execSync("git status --porcelain").toString().trim();
+
+  const base = config.http.urlBase || "https://cerebro.cofundo.io";
+  const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(15_000) });
+  const desplegada = ((await res.json()) as { version?: string }).version;
+
+  if (!desplegada || desplegada === "local") {
+    return {
+      nivel: "aviso",
+      titulo: "Producción al día con el código",
+      detalle: "el despliegue no informa de su versión (aún no redesplegado)",
+    };
+  }
+  if (desplegada !== local) {
+    return {
+      nivel: "aviso",
+      titulo: "Producción al día con el código",
+      detalle: `desplegado ${desplegada}, local ${local} — el despliegue va por detrás`,
+    };
+  }
+  return {
+    nivel: "ok",
+    titulo: "Producción al día con el código",
+    detalle: pendientes ? `${local}, con cambios sin subir en local` : local,
+  };
+}
+
 // --- 6. Usuarios ------------------------------------------------------------
 
 async function comprobarSuscripciones(): Promise<Resultado> {
@@ -229,6 +266,7 @@ async function main(): Promise<void> {
   await comprobar("Búsqueda semántica", comprobarSemantica);
   await comprobar("Suscripciones", comprobarSuscripciones);
   await comprobar("Producción", comprobarProduccion);
+  await comprobar("Versión desplegada", comprobarVersion);
 
   for (const r of resultados) {
     console.log(`${ICONO[r.nivel]} ${r.titulo}${r.detalle ? `\n        ${r.detalle}` : ""}`);

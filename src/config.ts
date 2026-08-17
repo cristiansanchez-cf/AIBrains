@@ -78,6 +78,13 @@ export const config = {
    */
   creadoresPorDefecto: listaOpcional("CEREBRO_CREADORES_POR_DEFECTO"),
 
+  /**
+   * Commit desplegado, que Railway inyecta. Sirve para saber si producción va
+   * por detrás del código: sin esto, un despliegue a medias se manifiesta como
+   * "el cerebro dice que no tengo cerebros" y parece un problema de permisos.
+   */
+  version: (process.env.RAILWAY_GIT_COMMIT_SHA ?? "local").slice(0, 7),
+
   auth: {
     /**
      * Interruptor de la fase 2. Con esto activo, el endpoint MCP exige un

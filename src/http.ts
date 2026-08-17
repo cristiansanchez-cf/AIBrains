@@ -172,6 +172,7 @@ const http = createServer((req, res) => {
     responderJson(res, 200, {
       estado: "ok",
       servidor: "cerebro-ventas",
+      version: config.version,
       autenticacion: config.auth.activada ? "oauth (supabase)" : "ninguna",
       ...(config.auth.activada && { recurso: config.http.urlPublica }),
       comprobacionDeHost: config.http.hostsPermitidos.length > 0,
