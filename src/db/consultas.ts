@@ -140,7 +140,7 @@ export async function buscarFichas(
 }
 
 /**
- * Recuperación semántica. El camino normal desde la fase 3.
+ * Recuperación híbrida: significado y palabras, fusionados con RRF en la base.
  *
  * El filtrado por creador viaja dentro de la consulta SQL, no después: si se
  * recortara a posteriori, el `limite` podría gastarse en fichas que el usuario
@@ -155,6 +155,9 @@ async function buscarPorSimilitud(
   const { data, error } = await supabase.rpc("buscar_fichas_similares", {
     consulta: JSON.stringify(consulta),
     creadores: creadorIds,
+    // El mismo texto va también sin vectorizar: la mitad léxica de la búsqueda
+    // es la que encuentra las fichas de título metafórico.
+    texto: filtros.situacion,
     filtro_etapa: filtros.etapa ?? null,
     filtro_objecion: filtros.objecion ?? null,
     limite: filtros.limite ?? config.maxResultados,
