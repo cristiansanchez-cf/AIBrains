@@ -98,9 +98,14 @@ export function registrarBuscarTecnica(
         };
       }
 
+      // Se repite aquí lo esencial de las instrucciones porque llega junto al
+      // material: en el momento de redactar, esto pesa más que lo que se dijo
+      // en el handshake.
       const cabecera =
         `${fichas.length} ficha(s) del cerebro para: "${situacion}".` +
-        "\n\nCita el creador y cierra tu respuesta con los enlaces de la sección Fuente.";
+        "\n\nUsa los guiones tal cual y atribúyelos a su creador. Si añades algo " +
+        "que no está en estas fichas, di que es aportación tuya. Cierra con los " +
+        "enlaces de la sección Fuente.";
 
       return {
         content: [
