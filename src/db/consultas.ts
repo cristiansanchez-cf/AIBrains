@@ -24,9 +24,9 @@ const CAMPOS_BUSCABLES = [
 /**
  * Creadores que se le pueden servir a quien pregunta.
  *
- * Dos gates que no se saltan nunca, sea quien sea: `activo` y
- * `acuerdo_firmado` (arquitectura §8 — no se sirve un cerebro sin acuerdo con
- * el creador). Encima de eso, quién pregunta decide qué ve.
+ * Dos condiciones que no se saltan nunca: `activo`, y respaldo para servirse
+ * —`acuerdo_firmado` (arquitectura §8) o `beta_interna` para el círculo
+ * cerrado de pruebas. Encima de eso, quién pregunta decide qué ve.
  */
 export async function creadoresDisponibles(
   contexto: ContextoDeAcceso,
@@ -48,13 +48,15 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
   const { data, error } = await supabase
     .from("suscripciones")
     .select(
-      "creador_id, creadores!inner ( id, slug, nombre, dominio, activo, acuerdo_firmado )",
+      "creador_id, creadores!inner ( id, slug, nombre, dominio, activo, acuerdo_firmado, beta_interna )",
     )
     .eq("user_id", userId)
     .eq("activa", true)
     .or(`expira_en.is.null,expira_en.gt.${ahora}`)
     .eq("creadores.activo", true)
-    .eq("creadores.acuerdo_firmado", true);
+    .or("acuerdo_firmado.eq.true,beta_interna.eq.true", {
+      referencedTable: "creadores",
+    });
 
   if (error) {
     throw new Error(`No se pudieron leer las suscripciones: ${error.message}`);
@@ -78,7 +80,7 @@ async function creadoresSinAuth(): Promise<Creador[]> {
     .from("creadores")
     .select("*")
     .eq("activo", true)
-    .eq("acuerdo_firmado", true);
+    .or("acuerdo_firmado.eq.true,beta_interna.eq.true");
 
   if (config.creadoresPorDefecto.length > 0) {
     consulta = consulta.in("slug", config.creadoresPorDefecto);

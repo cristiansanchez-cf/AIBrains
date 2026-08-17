@@ -7,6 +7,8 @@ export interface Creador {
   dominio: string;
   activo: boolean;
   acuerdo_firmado: boolean;
+  /** Pruebas internas sin acuerdo. Nunca para usuarios de pago. */
+  beta_interna: boolean;
 }
 
 export interface Ficha {

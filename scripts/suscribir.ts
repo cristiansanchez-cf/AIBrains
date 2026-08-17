@@ -4,6 +4,8 @@
  *   npm run suscripciones                              # listar todas
  *   npm run suscripciones -- alta <email> <slug> [días]
  *   npm run suscripciones -- baja <email> <slug>
+ *   npm run suscripciones -- estado             # qué se sirve y con qué respaldo
+ *   npm run suscripciones -- beta <slug> [on|off]
  *
  * En el MVP las suscripciones son manuales (arquitectura §1): no hay pasarela
  * de pago. Esto es esa "pasarela".
@@ -134,6 +136,47 @@ async function baja(email: string, slug: string): Promise<void> {
   console.log(`Baja: ${usuario.email} ya no tiene acceso a ${creador.nombre}`);
 }
 
+/**
+ * Enciende o apaga la beta interna de un creador.
+ *
+ * NO toca `acuerdo_firmado`: eso es el gate comercial y se levanta solo con un
+ * acuerdo real delante. Esto solo abre el cerebro a quien se dé de alta a mano.
+ */
+async function beta(slug: string, valor: string): Promise<void> {
+  const creador = await buscarCreador(slug);
+  const encender = valor !== "off" && valor !== "no";
+
+  const { error } = await supabase
+    .from("creadores")
+    .update({ beta_interna: encender })
+    .eq("id", creador.id);
+
+  if (error) throw new Error(`No se pudo cambiar la beta: ${error.message}`);
+
+  console.log(
+    encender
+      ? `${creador.nombre}: BETA INTERNA activada.\n` +
+        `  Se sirve a quien tenga suscripción, SIN acuerdo firmado.\n` +
+        `  No comercializable: para cobrar hace falta el acuerdo.`
+      : `${creador.nombre}: beta desactivada. Deja de servirse.`,
+  );
+}
+
+/** Qué se está sirviendo y con qué respaldo. */
+async function estado(): Promise<void> {
+  const { data, error } = await supabase
+    .from("creadores_servidos")
+    .select("*")
+    .order("nombre");
+
+  if (error) throw new Error(`No se pudo leer el estado: ${error.message}`);
+
+  console.log("Creadores:\n");
+  for (const c of data ?? []) {
+    console.log(`  ${String(c.slug).padEnd(20)} ${String(c.dominio).padEnd(10)} ${c.estado}`);
+  }
+}
+
 async function main(): Promise<void> {
   const [orden, ...resto] = process.argv.slice(2);
 
@@ -147,8 +190,15 @@ async function main(): Promise<void> {
     case "baja":
       if (resto.length < 2) throw new Error("Uso: baja <email> <slug>");
       return baja(resto[0]!, resto[1]!);
+    case "beta":
+      if (resto.length < 1) throw new Error("Uso: beta <slug> [on|off]");
+      return beta(resto[0]!, resto[1] ?? "on");
+    case "estado":
+      return estado();
     default:
-      throw new Error(`Orden desconocida: ${orden}. Usa listar, alta o baja.`);
+      throw new Error(
+        `Orden desconocida: ${orden}. Usa listar, alta, baja, beta o estado.`,
+      );
   }
 }
 
