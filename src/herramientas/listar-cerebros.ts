@@ -1,12 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { supabase } from "../db/supabase.js";
 import { creadoresDisponibles } from "../db/consultas.js";
+import type { ContextoDeAcceso } from "../tipos.js";
 
 const DESCRIPCION = `Lista los cerebros (creadores) a los que este usuario tiene acceso, con su slug, su dominio y cuántas fichas contiene cada uno.
 
 Úsala cuando el usuario pregunte de quién es el conocimiento disponible, o antes de pasar el parámetro "creador" a buscar_tecnica.`;
 
-export function registrarListarCerebros(servidor: McpServer): void {
+export function registrarListarCerebros(
+  servidor: McpServer,
+  contexto: ContextoDeAcceso,
+): void {
   servidor.registerTool(
     "listar_cerebros",
     {
@@ -18,14 +22,17 @@ export function registrarListarCerebros(servidor: McpServer): void {
       },
     },
     async () => {
-      const creadores = await creadoresDisponibles();
+      const creadores = await creadoresDisponibles(contexto);
 
       if (creadores.length === 0) {
         return {
           content: [
             {
               type: "text",
-              text: "Este usuario no tiene ningún cerebro disponible. Puede que no haya suscripción activa, o que ningún creador tenga el acuerdo firmado.",
+              text:
+                contexto.tipo === "usuario"
+                  ? "Este usuario no tiene ninguna suscripción activa, así que no hay cerebros disponibles. Necesita contratar al menos uno."
+                  : "No hay ningún cerebro disponible. Puede que ningún creador tenga el acuerdo firmado.",
             },
           ],
         };

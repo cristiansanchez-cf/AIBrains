@@ -40,3 +40,26 @@ export interface Ficha {
 export interface FichaConCreador extends Ficha {
   creadores: Pick<Creador, "slug" | "nombre"> | null;
 }
+
+/**
+ * Quién pregunta.
+ *
+ * Toda consulta parte de aquí: no hay forma de leer fichas sin decir de parte
+ * de quién. Es lo que impide que se cuele una consulta sin filtrar.
+ */
+export type ContextoDeAcceso =
+  | {
+      tipo: "usuario";
+      /** `sub` del token OAuth = `auth.users.id`. */
+      userId: string;
+      email?: string | undefined;
+    }
+  | {
+      /**
+       * Transporte stdio en local, sin autenticación. No hay `user_id`, así
+       * que las suscripciones no se pueden consultar y manda la lista de
+       * CEREBRO_CREADORES_POR_DEFECTO. Nunca en producción: el servidor HTTP
+       * con CEREBRO_AUTH=si no construye este contexto jamás.
+       */
+      tipo: "sin-auth";
+    };

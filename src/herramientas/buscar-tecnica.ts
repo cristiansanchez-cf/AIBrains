@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { buscarFichas } from "../db/consultas.js";
+import { buscarFichas, creadoresDisponibles } from "../db/consultas.js";
 import { formatearFicha } from "./formato.js";
+import type { ContextoDeAcceso } from "../tipos.js";
 
 /**
  * Capa (b) de las respuestas citadas: la descripción repite el disparador de
@@ -14,7 +15,10 @@ const DESCRIPCION = `Busca en el cerebro de ventas la técnica destilada que apl
 
 Devuelve fichas con el guion literal del creador y el enlace al vídeo original. Al usar el resultado: di en qué creador y ficha te basas, y cierra con las referencias y sus enlaces.`;
 
-export function registrarBuscarTecnica(servidor: McpServer): void {
+export function registrarBuscarTecnica(
+  servidor: McpServer,
+  contexto: ContextoDeAcceso,
+): void {
   servidor.registerTool(
     "buscar_tecnica",
     {
@@ -52,9 +56,32 @@ export function registrarBuscarTecnica(servidor: McpServer): void {
       },
     },
     async ({ situacion, etapa, objecion, creador }) => {
-      const fichas = await buscarFichas({ situacion, etapa, objecion, creador });
+      const fichas = await buscarFichas(contexto, {
+        situacion,
+        etapa,
+        objecion,
+        creador,
+      });
 
       if (fichas.length === 0) {
+        // Sin suscripciones no es "no encontrado": es que no hay acceso a
+        // nada. Distinguirlo evita que el modelo se ponga a reformular la
+        // búsqueda una y otra vez contra un cerebro vacío.
+        const cerebros = await creadoresDisponibles(contexto);
+        if (cerebros.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: [
+                  "Este usuario no tiene ningún cerebro contratado, así que no hay nada que consultar.",
+                  "Dile que necesita una suscripción activa para usar el Cerebro, y responde desde conocimiento general dejando claro que no viene de ningún creador.",
+                ].join("\n\n"),
+              },
+            ],
+          };
+        }
+
         return {
           content: [
             {

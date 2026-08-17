@@ -2,8 +2,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { INSTRUCCIONES_DEL_SERVIDOR } from "./instrucciones.js";
 import { registrarBuscarTecnica } from "./herramientas/buscar-tecnica.js";
 import { registrarListarCerebros } from "./herramientas/listar-cerebros.js";
+import type { ContextoDeAcceso } from "./tipos.js";
 
-export function crearServidor(): McpServer {
+/**
+ * Monta un servidor MCP para quien pregunta.
+ *
+ * El contexto se fija aquí, al crear el servidor, y no se puede cambiar
+ * después: las herramientas lo capturan al registrarse. Por eso el transporte
+ * HTTP crea un servidor por petición — así el contexto de un usuario no puede
+ * filtrarse a la petición de otro.
+ */
+export function crearServidor(contexto: ContextoDeAcceso): McpServer {
   const servidor = new McpServer(
     {
       name: "cerebro-ventas",
@@ -17,8 +26,8 @@ export function crearServidor(): McpServer {
     },
   );
 
-  registrarBuscarTecnica(servidor);
-  registrarListarCerebros(servidor);
+  registrarBuscarTecnica(servidor, contexto);
+  registrarListarCerebros(servidor, contexto);
 
   return servidor;
 }

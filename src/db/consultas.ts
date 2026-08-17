@@ -1,6 +1,6 @@
 import { supabase } from "./supabase.js";
 import { config } from "../config.js";
-import type { Creador, FichaConCreador } from "../tipos.js";
+import type { ContextoDeAcceso, Creador, FichaConCreador } from "../tipos.js";
 
 /** Columnas que se devuelven al cliente. `transcripcion` y `embedding` no salen. */
 const COLUMNAS_FICHA = `
@@ -21,14 +21,58 @@ const CAMPOS_BUSCABLES = [
 ] as const;
 
 /**
- * Creadores que se pueden servir.
+ * Creadores que se le pueden servir a quien pregunta.
  *
- * Dos gates que no se saltan nunca: `activo` y `acuerdo_firmado` (arquitectura
- * §8 — no se sirve un cerebro sin acuerdo con el creador). Encima de eso, en
- * fase 1, la lista de CEREBRO_CREADORES_POR_DEFECTO hace de sustituto de las
- * suscripciones, que no existen mientras no haya auth.
+ * Dos gates que no se saltan nunca, sea quien sea: `activo` y
+ * `acuerdo_firmado` (arquitectura §8 — no se sirve un cerebro sin acuerdo con
+ * el creador). Encima de eso, quién pregunta decide qué ve.
  */
-export async function creadoresDisponibles(): Promise<Creador[]> {
+export async function creadoresDisponibles(
+  contexto: ContextoDeAcceso,
+): Promise<Creador[]> {
+  return contexto.tipo === "usuario"
+    ? creadoresSuscritos(contexto.userId)
+    : creadoresSinAuth();
+}
+
+/**
+ * Los cerebros que este usuario tiene contratados.
+ *
+ * Una suscripción vale si está activa y no ha expirado. `expira_en` nulo
+ * significa sin fecha de fin, no expirada — de ahí el `or`.
+ */
+async function creadoresSuscritos(userId: string): Promise<Creador[]> {
+  const ahora = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("suscripciones")
+    .select(
+      "creador_id, creadores!inner ( id, slug, nombre, dominio, activo, acuerdo_firmado )",
+    )
+    .eq("user_id", userId)
+    .eq("activa", true)
+    .or(`expira_en.is.null,expira_en.gt.${ahora}`)
+    .eq("creadores.activo", true)
+    .eq("creadores.acuerdo_firmado", true);
+
+  if (error) {
+    throw new Error(`No se pudieron leer las suscripciones: ${error.message}`);
+  }
+
+  const creadores = (data ?? [])
+    .map((fila) => (fila as unknown as { creadores: Creador }).creadores)
+    .filter(Boolean);
+
+  return creadores.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+/**
+ * Camino sin autenticación: solo el stdio local.
+ *
+ * Sin `user_id` no hay suscripciones que consultar, así que manda la lista de
+ * CEREBRO_CREADORES_POR_DEFECTO. Vacía = todos los que pasen los dos gates.
+ */
+async function creadoresSinAuth(): Promise<Creador[]> {
   let consulta = supabase
     .from("creadores")
     .select("*")
@@ -66,9 +110,10 @@ export interface FiltrosBusqueda {
  * y se pierde la cita, que es justo lo que se está pagando.
  */
 export async function buscarFichas(
+  contexto: ContextoDeAcceso,
   filtros: FiltrosBusqueda,
 ): Promise<FichaConCreador[]> {
-  const permitidos = await creadoresDisponibles();
+  const permitidos = await creadoresDisponibles(contexto);
 
   // Si piden un creador concreto, tiene que estar entre los permitidos.
   const candidatos = filtros.creador

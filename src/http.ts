@@ -11,7 +11,9 @@
  * proceso se puede reiniciar o escalar sin romper conversaciones a medias
  * —justo lo que hace Railway al desplegar.
  *
- * OJO: aquí NO hay autenticación todavía (fase 2). Ver `SIN_AUTH` más abajo.
+ * Con CEREBRO_AUTH=si exige un token OAuth válido y resuelve las suscripciones
+ * del usuario. Sin él, sirve sin autenticar y hace falta el cerrojo explícito
+ * CEREBRO_PERMITIR_SIN_AUTH.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -24,6 +26,7 @@ import {
   documentoDeRecursoProtegido,
 } from "./auth/metadatos.js";
 import { TokenInvalido, tokenDeCabecera, verificarToken } from "./auth/token.js";
+import type { ContextoDeAcceso } from "./tipos.js";
 
 const RUTA_MCP = "/mcp";
 const PREFIJO_METADATOS = "/.well-known/oauth-protected-resource";
@@ -49,6 +52,8 @@ function exigirAutenticacion(res: ServerResponse, motivo?: string): void {
 }
 
 async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let contexto: ContextoDeAcceso = { tipo: "sin-auth" };
+
   if (config.auth.activada) {
     const token = tokenDeCabecera(req.headers.authorization);
     if (!token) {
@@ -57,6 +62,11 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
     }
     try {
       const usuario = await verificarToken(token);
+      contexto = {
+        tipo: "usuario",
+        userId: usuario.userId,
+        email: usuario.email,
+      };
       console.error(`[cerebro] petición autenticada — usuario ${usuario.userId}`);
     } catch (error) {
       exigirAutenticacion(
@@ -68,7 +78,8 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
   }
 
   // Servidor y transporte por petición: sin estado compartido entre llamadas.
-  const servidor = crearServidor();
+  // Es lo que garantiza que el contexto de un usuario no llegue a otro.
+  const servidor = crearServidor(contexto);
   const comprobarProcedencia =
     config.http.hostsPermitidos.length > 0 ||
     config.http.origenesPermitidos.length > 0;

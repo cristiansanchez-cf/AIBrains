@@ -213,21 +213,74 @@ async function main(): Promise<void> {
     } catch (e) {
       console.log(`  sesión normal    → rechazado: ${(e as Error).message}`);
     }
+
+    // Autenticarse no es tener acceso. Este usuario es legítimo y su token es
+    // válido, pero no ha contratado ningún cerebro: no debe ver ni uno.
+    console.log("\n=== aislamiento por suscripción ===");
+    const { creadoresDisponibles } = await import("../src/db/consultas.js");
+    const visibles = await creadoresDisponibles({ tipo: "usuario", userId: userId! });
+
+    if (visibles.length === 0) {
+      console.log("  usuario sin suscripción → no ve ningún cerebro. Correcto.");
+    } else {
+      console.log(
+        `  usuario sin suscripción → VE ${visibles.length} cerebro(s)  <-- FUGA`,
+      );
+      for (const c of visibles) console.log(`      ${c.slug}`);
+      process.exitCode = 1;
+    }
+
+    // Y con suscripción, lo contrario: tiene que ver justo ese.
+    const creadorDemo = await json(
+      await fetch(
+        `${config.supabase.url}/rest/v1/creadores?slug=eq.demo-pruebas&select=id`,
+        { headers: { apikey: CLAVE, Authorization: `Bearer ${CLAVE}` } },
+      ),
+      "buscar creador de demo",
+    );
+
+    if (creadorDemo[0]) {
+      await fetch(`${config.supabase.url}/rest/v1/suscripciones`, {
+        method: "POST",
+        headers: { ...cabecerasAdmin, Prefer: "return=minimal" },
+        body: JSON.stringify({ user_id: userId, creador_id: creadorDemo[0].id }),
+      });
+      const conAcceso = await creadoresDisponibles({
+        tipo: "usuario",
+        userId: userId!,
+      });
+      console.log(
+        conAcceso.some((c) => c.slug === "demo-pruebas")
+          ? "  usuario con suscripción → ve su cerebro. Correcto."
+          : "  usuario con suscripción → NO ve su cerebro  <-- ROTO",
+      );
+      if (!conAcceso.some((c) => c.slug === "demo-pruebas")) process.exitCode = 1;
+    }
   } finally {
-    // Limpieza: que no quede rastro de la prueba en el proyecto.
+    // Limpieza. Los fallos se dicen en voz alta: la primera versión se los
+    // tragaba con un catch vacío y la prueba dejaba usuarios sin borrar sin
+    // que nadie se enterara.
     if (userId) {
-      await fetch(`${AUTH}/admin/users/${userId}`, {
+      const res = await fetch(`${AUTH}/admin/users/${userId}`, {
         method: "DELETE",
         headers: cabecerasAdmin,
-      }).catch(() => {});
-      console.log(`\nUsuario temporal borrado`);
+      });
+      console.log(
+        res.ok
+          ? "\nUsuario temporal borrado"
+          : `\nNO se pudo borrar el usuario temporal (HTTP ${res.status}): ${(await res.text()).slice(0, 200)}`,
+      );
     }
     if (clientId) {
-      await fetch(`${AUTH}/admin/oauth/clients/${clientId}`, {
+      const res = await fetch(`${AUTH}/admin/oauth/clients/${clientId}`, {
         method: "DELETE",
         headers: cabecerasAdmin,
-      }).catch(() => {});
-      console.log(`Cliente de prueba borrado`);
+      });
+      console.log(
+        res.ok
+          ? "Cliente de prueba borrado"
+          : `NO se pudo borrar el cliente de prueba (HTTP ${res.status})`,
+      );
     }
   }
 }

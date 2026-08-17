@@ -13,7 +13,8 @@ import { crearServidor } from "./servidor.js";
 import { config } from "./config.js";
 
 async function main(): Promise<void> {
-  const servidor = crearServidor();
+  // stdio local: no hay token, así que no hay suscripciones que resolver.
+  const servidor = crearServidor({ tipo: "sin-auth" });
   await servidor.connect(new StdioServerTransport());
 
   // Deja claro contra qué base se ha conectado: local y nube se confunden fácil.
