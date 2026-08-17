@@ -38,6 +38,7 @@ export interface FichaDeNotion {
   porQueFunciona: string | null;
   comoAplicarlo: string[];
   transcripcion: string | null;
+  tituloFuente: string | null;
 }
 
 function cabeceras(): Record<string, string> {
@@ -114,6 +115,14 @@ interface Cuerpo {
   porQueFunciona: string | null;
   comoAplicarlo: string[];
   transcripcion: string | null;
+  /**
+   * Título del vídeo, sacado del encabezado del desplegable
+   * ("Transcripción — <título>, <plataforma>").
+   *
+   * Es el único dato que identifica de qué vídeo salió una ficha cuando la URL
+   * está vacía, y por tanto la única forma de agrupar fichas hermanas.
+   */
+  tituloFuente: string | null;
 }
 
 /**
@@ -127,6 +136,7 @@ async function leerCuerpo(pageId: string): Promise<Cuerpo> {
   const secciones = new Map<string, string[]>();
   let seccionActual = "";
   let toggleTranscripcion: string | null = null;
+  let tituloFuente: string | null = null;
 
   let cursor: string | undefined;
   do {
@@ -140,8 +150,12 @@ async function leerCuerpo(pageId: string): Promise<Cuerpo> {
       }
 
       if (bloque.type === "toggle") {
-        if (sinAcentos(textoDeBloque(bloque)).startsWith("transcripcion")) {
+        const encabezado = textoDeBloque(bloque);
+        if (sinAcentos(encabezado).startsWith("transcripcion")) {
           toggleTranscripcion = bloque.id;
+          // "Transcripción — Título del vídeo, Plataforma" → "Título del vídeo"
+          const tras = encabezado.split(/[—–-]\s*/).slice(1).join("- ").trim();
+          tituloFuente = tras.replace(/,\s*[^,]+$/, "").trim() || null;
         }
         continue;
       }
@@ -177,6 +191,7 @@ async function leerCuerpo(pageId: string): Promise<Cuerpo> {
     porQueFunciona: secciones.get("por que funciona")?.join("\n") ?? null,
     comoAplicarlo: secciones.get("como aplicarlo") ?? [],
     transcripcion,
+    tituloFuente,
   };
 }
 

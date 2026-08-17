@@ -25,7 +25,8 @@
     "migrar": "tsx scripts/migrar-notion.ts",
     "reindexar": "tsx scripts/reindexar.ts",
     "diagnostico": "tsx scripts/diagnostico.ts",
-    "evaluar": "tsx scripts/evaluar-busqueda.ts"
+    "evaluar": "tsx scripts/evaluar-busqueda.ts",
+    "enlaces": "tsx scripts/completar-enlaces.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
