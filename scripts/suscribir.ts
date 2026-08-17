@@ -10,15 +10,18 @@
  * En el MVP las suscripciones son manuales (arquitectura §1): no hay pasarela
  * de pago. Esto es esa "pasarela".
  *
- * El usuario tiene que existir ya en auth.users, o sea que primero se conecta
- * una vez desde Claude —lo que lo crea— y después se le da acceso.
+ * Si el email no tiene cuenta todavía, el alta la crea. Así el founder puede
+ * conectarse por primera vez y que ya le funcione, en vez de chocar con un
+ * "no tienes ninguna suscripción".
  */
 import { supabase } from "../src/db/supabase.js";
 import { config } from "../src/config.js";
 
 const AUTH = `${config.supabase.url.replace(/\/$/, "")}/auth/v1`;
 
-async function buscarUsuario(email: string): Promise<{ id: string; email: string }> {
+async function buscarUsuario(
+  email: string,
+): Promise<{ id: string; email: string } | null> {
   const res = await fetch(
     `${AUTH}/admin/users?filter=${encodeURIComponent(email)}`,
     {
@@ -33,13 +36,39 @@ async function buscarUsuario(email: string): Promise<{ id: string; email: string
   const { users } = (await res.json()) as { users: { id: string; email: string }[] };
   const usuario = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
 
-  if (!usuario) {
+  return usuario ?? null;
+}
+
+/**
+ * Crea la cuenta por adelantado para poder darle acceso antes de que entre.
+ *
+ * Sin esto el orden es incómodo: el founder tiene que conectarse primero, ver
+ * "no tienes ninguna suscripción", avisar, y volver a intentarlo. Creándola
+ * antes, la primera vez que entra ya le funciona.
+ *
+ * Se marca el email como confirmado a propósito. No es saltarse la
+ * verificación: para entrar sigue haciendo falta recibir y pinchar el enlace
+ * mágico, o sea demostrar que se tiene acceso al buzón. Lo que evita es el
+ * camino de "alta nueva", que manda otra plantilla de correo y es donde el
+ * flujo se rompía.
+ */
+async function crearUsuario(email: string): Promise<{ id: string; email: string }> {
+  const res = await fetch(`${AUTH}/admin/users`, {
+    method: "POST",
+    headers: {
+      apikey: config.supabase.secretKey,
+      Authorization: `Bearer ${config.supabase.secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, email_confirm: true }),
+  });
+
+  if (!res.ok) {
     throw new Error(
-      `No hay ningún usuario con el email ${email}.\n` +
-        `Tiene que conectarse una vez desde Claude para que se cree la cuenta.`,
+      `No se pudo crear la cuenta de ${email}: ${(await res.text()).slice(0, 200)}`,
     );
   }
-  return usuario;
+  return (await res.json()) as { id: string; email: string };
 }
 
 async function buscarCreador(slug: string): Promise<{ id: string; nombre: string }> {
@@ -98,8 +127,13 @@ async function listar(): Promise<void> {
 }
 
 async function alta(email: string, slug: string, dias?: string): Promise<void> {
-  const usuario = await buscarUsuario(email);
   const creador = await buscarCreador(slug);
+
+  let usuario = await buscarUsuario(email);
+  if (!usuario) {
+    usuario = await crearUsuario(email);
+    console.log(`Cuenta creada para ${email}`);
+  }
 
   const expira = dias
     ? new Date(Date.now() + Number(dias) * 86_400_000).toISOString()
@@ -123,6 +157,7 @@ async function alta(email: string, slug: string, dias?: string): Promise<void> {
 
 async function baja(email: string, slug: string): Promise<void> {
   const usuario = await buscarUsuario(email);
+  if (!usuario) throw new Error(`No hay ningún usuario con el email ${email}.`);
   const creador = await buscarCreador(slug);
 
   // Se marca inactiva en vez de borrarla: así queda constancia de que existió.
