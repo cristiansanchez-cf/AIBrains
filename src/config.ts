@@ -52,6 +52,23 @@ export const config = {
      */
     publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? "",
   },
+  openai: {
+    /**
+     * Para los embeddings de la búsqueda semántica. Sin ella el servidor
+     * arranca igual y la búsqueda cae a coincidencia de texto: se degrada, no
+     * se cae.
+     */
+    apiKey: process.env.OPENAI_API_KEY ?? "",
+  },
+
+  notion: {
+    /** Token de integración interna. Solo lo usa el script de migración. */
+    token: process.env.NOTION_TOKEN ?? "",
+    /** Data source de "Fichas de conocimiento". */
+    dataSourceId:
+      process.env.NOTION_DATA_SOURCE_ID ?? "c7c636b0-d71e-83d9-b37b-8752dca24c00",
+  },
+
   /** Tope de fichas devueltas por `buscar_tecnica`. */
   maxResultados: Number(process.env.CEREBRO_MAX_RESULTADOS ?? 5),
   /**

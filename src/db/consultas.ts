@@ -1,5 +1,6 @@
 import { supabase } from "./supabase.js";
 import { config } from "../config.js";
+import { generarEmbeddings, hayEmbeddings } from "./embeddings.js";
 import type { ContextoDeAcceso, Creador, FichaConCreador } from "../tipos.js";
 
 /** Columnas que se devuelven al cliente. `transcripcion` y `embedding` no salen. */
@@ -97,17 +98,13 @@ export interface FiltrosBusqueda {
 }
 
 /**
- * Búsqueda de fichas.
+ * Búsqueda de fichas. Dos caminos, uno solo visible desde fuera.
  *
- * FASE 1: coincidencia de texto (`ilike`) sobre los campos con significado.
- * Es deliberadamente tonta y lo sabe. La similitud vectorial sobre
- * `insight + por_que_funciona` entra en la fase 3, cuando existan los
- * embeddings; la firma de esta función no cambiará al hacerlo.
- *
- * La coincidencia es OR —basta una palabra para entrar— y el orden lo pone
- * `puntuar()` en memoria. Con AND una situación mal fraseada no devolvía nada,
- * que es el peor fallo posible: el cliente MCP se cae a conocimiento general
- * y se pierde la cita, que es justo lo que se está pagando.
+ * Por defecto va por similitud vectorial. Si no hay clave de embeddings, o si
+ * la API falla, cae a coincidencia de texto. Esa degradación es deliberada:
+ * devolver algo peor es mejor que no devolver nada, porque cuando el cerebro
+ * calla el cliente MCP responde desde conocimiento general y se pierde la
+ * cita, que es justo lo que se está pagando.
  */
 export async function buscarFichas(
   contexto: ContextoDeAcceso,
@@ -122,13 +119,76 @@ export async function buscarFichas(
 
   if (candidatos.length === 0) return [];
 
+  const ids = candidatos.map((c) => c.id);
+
+  if (hayEmbeddings()) {
+    try {
+      return await buscarPorSimilitud(ids, filtros);
+    } catch (error) {
+      // Degradar, no caerse: una respuesta peor vale más que ninguna. Pero se
+      // deja constancia, o el fallo se vuelve invisible y nadie lo arregla.
+      console.error(
+        "[cerebro] la búsqueda semántica falló, se usa texto:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  return buscarPorTexto(ids, filtros);
+}
+
+/**
+ * Recuperación semántica. El camino normal desde la fase 3.
+ *
+ * El filtrado por creador viaja dentro de la consulta SQL, no después: si se
+ * recortara a posteriori, el `limite` podría gastarse en fichas que el usuario
+ * no puede ver y devolver cero teniendo resultados válidos más abajo.
+ */
+async function buscarPorSimilitud(
+  creadorIds: string[],
+  filtros: FiltrosBusqueda,
+): Promise<FichaConCreador[]> {
+  const [consulta] = await generarEmbeddings([filtros.situacion]);
+
+  const { data, error } = await supabase.rpc("buscar_fichas_similares", {
+    consulta: JSON.stringify(consulta),
+    creadores: creadorIds,
+    filtro_etapa: filtros.etapa ?? null,
+    filtro_objecion: filtros.objecion ?? null,
+    limite: filtros.limite ?? config.maxResultados,
+  });
+
+  if (error) throw new Error(`Búsqueda semántica: ${error.message}`);
+
+  // La función devuelve el creador aplanado; se vuelve a anidar para que el
+  // formateo no tenga que saber de dónde vino la ficha.
+  return (data ?? []).map((fila: Record<string, unknown>) => ({
+    ...fila,
+    creadores: {
+      slug: fila["creador_slug"] as string,
+      nombre: fila["creador_nombre"] as string,
+    },
+  })) as unknown as FichaConCreador[];
+}
+
+/**
+ * Coincidencia de texto. Era el camino de la fase 1 y ahora es la red.
+ *
+ * Sigue existiendo porque una respuesta peor vale más que ninguna: si la API
+ * de embeddings está caída, el cerebro responde algo en vez de mandar al
+ * cliente MCP a improvisar sin citas.
+ */
+async function buscarPorTexto(
+  creadorIds: string[],
+  filtros: FiltrosBusqueda,
+): Promise<FichaConCreador[]> {
   const limite = filtros.limite ?? config.maxResultados;
   const terminos = terminosDeBusqueda(filtros.situacion);
 
   let consulta = supabase
     .from("fichas")
     .select(COLUMNAS_FICHA)
-    .in("creador_id", candidatos.map((c) => c.id));
+    .in("creador_id", creadorIds);
 
   if (filtros.etapa) consulta = consulta.ilike("etapa", `%${filtros.etapa}%`);
   if (filtros.objecion) consulta = consulta.contains("objecion", [filtros.objecion]);
