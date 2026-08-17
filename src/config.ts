@@ -61,6 +61,14 @@ export const config = {
     apiKey: process.env.OPENAI_API_KEY ?? "",
   },
 
+  anthropic: {
+    /**
+     * Destila transcripciones en fichas. Solo la usa el flujo de ingesta; el
+     * servidor MCP funciona sin ella.
+     */
+    apiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  },
+
   notion: {
     /** Token de integración interna. Solo lo usa el script de migración. */
     token: process.env.NOTION_TOKEN ?? "",

@@ -26,9 +26,12 @@
     "reindexar": "tsx scripts/reindexar.ts",
     "diagnostico": "tsx scripts/diagnostico.ts",
     "evaluar": "tsx scripts/evaluar-busqueda.ts",
-    "enlaces": "tsx scripts/completar-enlaces.ts"
+    "enlaces": "tsx scripts/completar-enlaces.ts",
+    "ingerir": "tsx scripts/ingerir.ts",
+    "revisar": "tsx scripts/revisar.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@supabase/supabase-js": "^2.112.3",
     "jose": "^6.2.9",
