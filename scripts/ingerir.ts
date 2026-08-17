@@ -13,6 +13,7 @@
  *   npm run revisar
  */
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { supabase } from "../src/db/supabase.js";
 import { destilar, hayDestilador } from "../src/ingesta/destilar.js";
 import { generarEmbeddings, textoParaEmbedding, hayEmbeddings } from "../src/db/embeddings.js";
@@ -84,8 +85,35 @@ async function main(): Promise<void> {
     throw new Error(`La transcripción tiene ${transcripcion.length} caracteres. ¿Se leyó bien?`);
   }
 
+  // Identifica el material, no el vídeo: funciona aunque no haya URL y no
+  // depende de que el título esté escrito igual la segunda vez.
+  const huella = createHash("sha256").update(transcripcion).digest("hex");
+
   console.log(`Creador:       ${creador.nombre}`);
   console.log(`Transcripción: ${transcripcion.length} caracteres`);
+  console.log(`Huella:        ${huella.slice(0, 16)}…`);
+
+  const { count: yaHabia } = await supabase
+    .from("fichas")
+    .select("id", { count: "exact", head: true })
+    .eq("origen_ingesta", huella)
+    .neq("estado", "descartada");
+
+  if ((yaHabia ?? 0) > 0) {
+    console.log(
+      `\nESTA TRANSCRIPCIÓN YA SE INGIRIÓ: hay ${yaHabia} ficha(s) vivas de ella.`,
+    );
+    if (!process.argv.includes("--rehacer")) {
+      console.log(
+        `\nDestilar otra vez daría un reparto distinto y quedarían duplicadas.\n` +
+          `Para rehacerla igualmente (las anteriores pasan a descartadas):\n` +
+          `  npm run ingerir -- … --rehacer`,
+      );
+      return;
+    }
+    console.log(`--rehacer: las anteriores se descartarán al terminar.`);
+  }
+
   console.log(`\nDestilando…`);
 
   const fichas = await destilar(transcripcion, {
@@ -136,7 +164,27 @@ async function main(): Promise<void> {
     // pgvector espera el literal '[1,2,3]', no un array de JS.
     embedding: JSON.stringify(vectores[i]),
     estado: "borrador",
+    origen_ingesta: huella,
   }));
+
+  // Se descarta el lote anterior justo antes de insertar el nuevo, para no
+  // dejar el material sin fichas si la destilación acabara fallando.
+  if ((yaHabia ?? 0) > 0) {
+    const { data: previo, error: errorPrevio } = await supabase
+      .rpc("descartar_ingesta_anterior", { hash: huella })
+      .single();
+
+    if (errorPrevio) throw new Error(`Al descartar el lote anterior: ${errorPrevio.message}`);
+
+    const p = previo as { descartadas: number; habia_publicadas: number };
+    console.log(`\n${p.descartadas} ficha(s) anteriores descartadas.`);
+    if (p.habia_publicadas > 0) {
+      console.log(
+        `  OJO: ${p.habia_publicadas} de ellas estaban PUBLICADAS y revisadas.\n` +
+          `  Ese trabajo de revisión hay que rehacerlo sobre las nuevas.`,
+      );
+    }
+  }
 
   const { error } = await supabase.from("fichas").insert(filas);
   if (error) throw new Error(`No se pudieron guardar: ${error.message}`);

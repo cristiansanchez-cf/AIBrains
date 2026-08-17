@@ -118,7 +118,13 @@ Reglas que no se negocian:
 
 3. "cuando_usarlo" es el disparador, y es el campo por el que se va a encontrar la ficha. Redáctalo como lo contaría quien tiene el problema —"el cliente lleva dos semanas sin contestar"—, no como una categoría.
 
-4. Si la transcripción no tiene nada accionable, devuelve una lista vacía. Es una respuesta válida y frecuente.`;
+4. Si la transcripción no tiene nada accionable, devuelve una lista vacía. Es una respuesta válida y frecuente.
+
+5. UNA FICHA POR TÉCNICA, no por vídeo ni por tema. Si el creador enumera un marco —"las cinco razones por las que la gente paga más"—, saca una ficha por cada razón, no una que las agrupe.
+
+   El motivo es cómo se recupera después: cada ficha se encuentra por su "cuando_usarlo", y un bloque con cinco técnicas tiene un solo disparador para cinco situaciones distintas. Con fichas separadas, una consulta amplia devuelve varias y reconstruye el marco entero; con una ficha agrupada, una consulta concreta no puede descomponerla y el usuario recibe cuatro técnicas que no venía a buscar.
+
+   Si al escribir el "cuando_usarlo" de una ficha te salen dos situaciones distintas unidas por una "o", son dos fichas.`;
 
 /**
  * Destila una transcripción.
