@@ -192,7 +192,11 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const texto = fichas.map((f, i) => formatearFicha(f, i + 1)).join("\n\n---\n\n");
+    // "completo" a propósito: esto mide cómo escribe el modelo con el material
+    // delante, así que retener el guion cambiaría lo que se está midiendo.
+    const texto = fichas
+      .map((f, i) => formatearFicha(f, i + 1, "completo"))
+      .join("\n\n---\n\n");
     // En paralelo: son la misma pregunta con y sin filtro, no dependen entre sí.
     const [sin, con] = await Promise.all([
       redactar(texto, s.cuenta, false),

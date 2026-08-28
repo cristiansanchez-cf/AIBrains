@@ -118,9 +118,24 @@ export function registrarBuscarTecnica(
       // que pretende corregir.
       // La nota de ejecución solo aparece cuando el usuario cuenta un fracaso o
       // pide el guion exacto. No es una tasa: es el momento. Ver instrucciones.ts.
+      // El modo lo decide la base, creador a creador. Se resuelve una vez y se
+      // aplica a cada ficha según de quién sea: en una respuesta pueden salir
+      // fichas de un creador con acuerdo y de otro sin él.
+      const disponibles = await creadoresDisponibles(contexto);
+      const modoPorSlug = new Map(disponibles.map((c) => [c.slug, c.modo]));
+
       const bloques = [
         cabecera,
-        ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
+        ...fichas.map((ficha, i) =>
+          formatearFicha(
+            ficha,
+            i + 1,
+            // Si el creador no aparece, el modo restrictivo. No debería pasar
+            // —la ficha ha salido de una búsqueda ya filtrada— pero ante la
+            // duda se retiene el guion, no se regala.
+            modoPorSlug.get(ficha.creadores?.slug ?? "") ?? "referencia",
+          ),
+        ),
         FILTRO_DE_VOZ,
       ];
 
@@ -129,7 +144,7 @@ export function registrarBuscarTecnica(
         // respuesta: recomendar el curso de alguien cuya ficha no se ha citado
         // no viene a cuento y parecería un anuncio colocado.
         const citados = new Set(fichas.map((f) => f.creadores?.slug));
-        const formacion = (await creadoresDisponibles(contexto))
+        const formacion = disponibles
           .filter((c) => citados.has(c.slug) && c.formacion_url)
           .map((c) => ({ creador: c.nombre, url: c.formacion_url!, nota: c.formacion_nota }));
 

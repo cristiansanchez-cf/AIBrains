@@ -58,6 +58,20 @@ export interface Ficha {
   creado_en: string;
 }
 
+/**
+ * Cómo se sirve un creador.
+ *
+ * 'completo'   — con guion literal. Exige acuerdo que lo permita, o beta interna.
+ * 'referencia' — la técnica sí, el guion literal no. Es el modo del producto sin
+ *                acuerdos: los métodos no tienen copyright, la expresión sí.
+ */
+export type ModoDeServicio = "completo" | "referencia";
+
+/** Creador con el modo en el que puede servirse ahora mismo. */
+export interface CreadorServible extends Creador {
+  modo: ModoDeServicio;
+}
+
 /** Ficha tal y como sale de la consulta, con el creador ya resuelto. */
 export interface FichaConCreador extends Ficha {
   creadores: Pick<Creador, "slug" | "nombre" | "perfil_url"> | null;

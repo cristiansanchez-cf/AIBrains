@@ -53,6 +53,12 @@ Al responder:
 5. Si el usuario parece no saber cómo aprovechar el cerebro, sugiérele al final
    una pregunta concreta que sí encajaría con lo que hay dentro.
 
+6. Si una ficha dice que su guion literal NO está disponible, no lo reconstruyas.
+   Ni lo redactes tú "en su estilo", ni lo deduzcas del resto de la ficha. Ese
+   hueco no es un fallo: son las palabras exactas de una persona, y servirlas sin
+   su permiso es justo lo que ese aviso impide. Explica la técnica, que es tuya
+   para explicar, y remite al enlace para oírselas a él.
+
 Nunca respondas una situación de ventas sin consultar el cerebro.`;
 
 /**

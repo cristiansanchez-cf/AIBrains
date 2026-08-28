@@ -1,7 +1,13 @@
 import { supabase } from "./supabase.js";
 import { config } from "../config.js";
 import { generarEmbeddings, hayEmbeddings } from "./embeddings.js";
-import type { ContextoDeAcceso, Creador, FichaConCreador } from "../tipos.js";
+import type {
+  ContextoDeAcceso,
+  Creador,
+  CreadorServible,
+  FichaConCreador,
+  ModoDeServicio,
+} from "../tipos.js";
 
 /** Columnas que se devuelven al cliente. `transcripcion` y `embedding` no salen. */
 const COLUMNAS_FICHA = `
@@ -48,17 +54,19 @@ const CAMPOS_BUSCABLES = [
  * El RPC de búsqueda la vuelve a aplicar por dentro. Es a propósito: si este
  * código se equivocara, no saldría contenido sin licencia igualmente.
  */
-async function idsServibles(): Promise<Set<string>> {
+async function modoPorCreador(): Promise<Map<string, ModoDeServicio>> {
   const { data, error } = await supabase.rpc("creadores_servibles");
   if (error) {
     throw new Error(`No se pudo comprobar qué creadores son servibles: ${error.message}`);
   }
-  return new Set((data ?? []).map((c: { id: string }) => c.id));
+  return new Map(
+    (data ?? []).map((c: { id: string; modo: ModoDeServicio }) => [c.id, c.modo]),
+  );
 }
 
 export async function creadoresDisponibles(
   contexto: ContextoDeAcceso,
-): Promise<Creador[]> {
+): Promise<CreadorServible[]> {
   return contexto.tipo === "usuario"
     ? creadoresSuscritos(contexto.userId)
     : creadoresSinAuth();
@@ -70,10 +78,10 @@ export async function creadoresDisponibles(
  * Una suscripción vale si está activa y no ha expirado. `expira_en` nulo
  * significa sin fecha de fin, no expirada — de ahí el `or`.
  */
-async function creadoresSuscritos(userId: string): Promise<Creador[]> {
+async function creadoresSuscritos(userId: string): Promise<CreadorServible[]> {
   const ahora = new Date().toISOString();
-  const autorizados = await idsServibles();
-  if (autorizados.size === 0) return [];
+  const modos = await modoPorCreador();
+  if (modos.size === 0) return [];
 
   const { data, error } = await supabase
     .from("suscripciones")
@@ -84,7 +92,7 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
     .eq("activa", true)
     .or(`expira_en.is.null,expira_en.gt.${ahora}`)
     // La verja de autorización ya no se repite aquí: la pone `idsServibles`.
-    .in("creador_id", [...autorizados]);
+    .in("creador_id", [...modos.keys()]);
 
   if (error) {
     throw new Error(`No se pudieron leer las suscripciones: ${error.message}`);
@@ -92,7 +100,8 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
 
   const creadores = (data ?? [])
     .map((fila) => (fila as unknown as { creadores: Creador }).creadores)
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((c) => ({ ...c, modo: modos.get(c.id) ?? "referencia" }) as CreadorServible);
 
   return creadores.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
@@ -103,16 +112,16 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
  * Sin `user_id` no hay suscripciones que consultar, así que manda la lista de
  * CEREBRO_CREADORES_POR_DEFECTO. Vacía = todos los que pasen los dos gates.
  */
-async function creadoresSinAuth(): Promise<Creador[]> {
-  const autorizados = await idsServibles();
-  if (autorizados.size === 0) return [];
+async function creadoresSinAuth(): Promise<CreadorServible[]> {
+  const modos = await modoPorCreador();
+  if (modos.size === 0) return [];
 
   let consulta = supabase
     .from("creadores")
     .select("*")
     // Misma verja que arriba, de la misma fuente. Antes eran dos copias de la
     // condición escritas a mano en sitios distintos.
-    .in("id", [...autorizados]);
+    .in("id", [...modos.keys()]);
 
   if (config.creadoresPorDefecto.length > 0) {
     consulta = consulta.in("slug", config.creadoresPorDefecto);
@@ -120,7 +129,9 @@ async function creadoresSinAuth(): Promise<Creador[]> {
 
   const { data, error } = await consulta.order("nombre");
   if (error) throw new Error(`No se pudieron leer los creadores: ${error.message}`);
-  return data ?? [];
+  // El "referencia" del respaldo es deliberado: ante una ausencia inesperada, el
+  // modo restrictivo. Un fallo aquí debe retener el guion, no regalarlo.
+  return (data ?? []).map((c) => ({ ...c, modo: modos.get(c.id) ?? "referencia" }) as CreadorServible);
 }
 
 export interface FiltrosBusqueda {

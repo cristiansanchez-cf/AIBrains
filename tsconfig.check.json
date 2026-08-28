@@ -1,4 +1,4 @@
-// Comprobación de tipos de TODO, scripts incluidos.
+// Comprobación de tipos de TODO: src, scripts y tests.
 // El build (tsconfig.json) solo compila src/, para que dist/index.js quede en
 // la raíz de dist y la ruta del `bin` no dependa de la estructura de carpetas.
 {
@@ -7,6 +7,6 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist", "src/navegador"]
 }

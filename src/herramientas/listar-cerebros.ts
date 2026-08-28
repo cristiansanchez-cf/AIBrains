@@ -42,14 +42,32 @@ export function registrarListarCerebros(
 
       const lineas = creadores.map((creador) => {
         const fichas = conteos.get(creador.id) ?? 0;
-        return `- **${creador.nombre}** (slug: \`${creador.slug}\`) — dominio: ${creador.dominio} — ${fichas} ficha(s)`;
+        // El modo se dice aquí para que el modelo no prometa un guion literal
+        // que después no va a recibir, y sepa explicar por qué falta.
+        const nota =
+          creador.modo === "referencia"
+            ? " — _modo referencia: técnicas y razonamiento sí, guion literal no_"
+            : "";
+        return (
+          `- **${creador.nombre}** (slug: \`${creador.slug}\`) — ` +
+          `dominio: ${creador.dominio} — ${fichas} ficha(s)${nota}`
+        );
       });
+
+      const hayReferencia = creadores.some((c) => c.modo === "referencia");
+      const explicacion = hayReferencia
+        ? `\n\nEn los cerebros marcados como referencia se sirve el método completo ` +
+          `—cuándo usarlo, por qué funciona, cómo aplicarlo— y el enlace al vídeo ` +
+          `original, pero no las palabras textuales del creador. Si el usuario ` +
+          `pregunta, dilo así: la técnica es suya para usar, la cita textual se ` +
+          `escucha en la fuente.`
+        : "";
 
       return {
         content: [
           {
             type: "text",
-            text: `Cerebros disponibles:\n\n${lineas.join("\n")}`,
+            text: `Cerebros disponibles:\n\n${lineas.join("\n")}${explicacion}`,
           },
         ],
       };
