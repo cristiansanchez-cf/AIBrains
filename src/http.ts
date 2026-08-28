@@ -27,6 +27,8 @@ import {
 } from "./auth/metadatos.js";
 import { TokenInvalido, tokenDeCabecera, verificarToken } from "./auth/token.js";
 import { catalogo } from "./api/catalogo.js";
+import { crearSesionDePago, PeticionInvalida } from "./pagos/checkout.js";
+import { procesarWebhook, FirmaInvalida, hayWebhook } from "./pagos/webhook.js";
 import type { ContextoDeAcceso } from "./tipos.js";
 
 const RUTA_MCP = "/mcp";
@@ -136,6 +138,77 @@ async function servirCatalogo(res: ServerResponse): Promise<void> {
   res.end(cuerpo);
 }
 
+/** Lee el cuerpo entero. Con tope: sin él, un POST enorme tumba el proceso. */
+async function leerCuerpo(req: IncomingMessage, maxBytes = 1_000_000): Promise<Buffer> {
+  const trozos: Buffer[] = [];
+  let total = 0;
+  for await (const trozo of req) {
+    total += (trozo as Buffer).length;
+    if (total > maxBytes) throw new Error("Cuerpo demasiado grande.");
+    trozos.push(trozo as Buffer);
+  }
+  return Buffer.concat(trozos);
+}
+
+async function manejarCheckout(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let peticion: unknown;
+  try {
+    peticion = JSON.parse((await leerCuerpo(req)).toString("utf8"));
+  } catch {
+    responderJson(res, 400, { error: "Cuerpo JSON inválido." });
+    return;
+  }
+
+  try {
+    const url = await crearSesionDePago(peticion as Parameters<typeof crearSesionDePago>[0]);
+    res.writeHead(200, {
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "cache-control": "no-store",
+    });
+    res.end(JSON.stringify({ url }));
+  } catch (error) {
+    // Las peticiones inválidas se explican; los fallos internos no, porque su
+    // mensaje puede llevar detalles de configuración.
+    if (error instanceof PeticionInvalida) {
+      res.writeHead(400, {
+        "content-type": "application/json; charset=utf-8",
+        "access-control-allow-origin": "*",
+      });
+      res.end(JSON.stringify({ error: error.message }));
+      return;
+    }
+    throw error;
+  }
+}
+
+async function manejarWebhook(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!hayWebhook()) {
+    responderJson(res, 503, { error: "Webhook no configurado." });
+    return;
+  }
+
+  const firma = req.headers["stripe-signature"];
+  if (typeof firma !== "string") {
+    responderJson(res, 400, { error: "Falta la cabecera stripe-signature." });
+    return;
+  }
+
+  try {
+    await procesarWebhook(await leerCuerpo(req), firma);
+    responderJson(res, 200, { recibido: true });
+  } catch (error) {
+    if (error instanceof FirmaInvalida) {
+      // 400 y NO reintentar: una firma inválida no mejora al repetirla, y lo
+      // más probable es que no venga de Stripe.
+      console.error("[cerebro] webhook con firma inválida:", error.message);
+      responderJson(res, 400, { error: "Firma inválida." });
+      return;
+    }
+    throw error;
+  }
+}
+
 function falloDeScript(res: ServerResponse): void {
   responderJson(res, 500, {
     error: "Falta el script de consentimiento. ¿Se ejecutó 'npm run build'?",
@@ -241,6 +314,46 @@ const http = createServer((req, res) => {
     servirCatalogo(res).catch((error: unknown) => {
       console.error("[cerebro] /api/catalogo:", error);
       responderJson(res, 500, { error: "No se pudo leer el catálogo." });
+    });
+    return;
+  }
+
+  // --- Cobro ---------------------------------------------------------------
+  if (ruta === "/api/checkout") {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+        "access-control-max-age": "86400",
+      });
+      res.end();
+      return;
+    }
+    if (req.method !== "POST") {
+      responderJson(res, 405, { error: "Solo POST." });
+      return;
+    }
+    manejarCheckout(req, res).catch((error: unknown) => {
+      console.error("[cerebro] /api/checkout:", error);
+      responderJson(res, 500, { error: "No se pudo crear la sesión de pago." });
+    });
+    return;
+  }
+
+  // El webhook necesita el cuerpo CRUDO para verificar la firma: si se parsea
+  // antes, la firma no cuadra nunca. Por eso va aparte y lo lee él mismo.
+  if (ruta === "/api/stripe/webhook") {
+    if (req.method !== "POST") {
+      responderJson(res, 405, { error: "Solo POST." });
+      return;
+    }
+    manejarWebhook(req, res).catch((error: unknown) => {
+      console.error("[cerebro] webhook:", error);
+      // 500 a propósito: Stripe reintentará, y la idempotencia hace que
+      // reintentar sea seguro. Responder 200 a un fallo perdería el evento y
+      // dejaría a alguien que ha pagado sin acceso.
+      responderJson(res, 500, { error: "Error al procesar el evento." });
     });
     return;
   }

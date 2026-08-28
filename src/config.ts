@@ -105,6 +105,31 @@ export const config = {
     secretKey: process.env.STRIPE_SECRET_KEY ?? "",
     /** Para verificar la firma de los webhooks. Empieza por whsec_. */
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+    /**
+     * Los cuatro precios, creados a mano en el panel de Stripe.
+     *
+     * A mano y no desde código a propósito: un precio es una decisión de
+     * negocio, se ve y se cambia sin desplegar, y así la clave no necesita
+     * permiso de escritura sobre Products.
+     *
+     * Van por entorno porque los identificadores de modo prueba y modo real son
+     * distintos. No son secretos —aparecen en la URL de pago— pero cambiarlos
+     * cambia lo que se cobra, así que se tratan como configuración.
+     *
+     * OJO CON EL IVA, que va al revés en cada plan y es deliberado:
+     *   individual -> IVA INCLUIDO. Es consumidor y el precio que ve es el que
+     *                 paga; un precio que crece en el pago es un punto de fuga.
+     *   equipo     -> + IVA. Es empresa, se lo deduce, y cobrarlo incluido
+     *                 sería regalar el 21% a quien lo iba a recuperar igual.
+     */
+    precios: {
+      individualMensual: process.env.STRIPE_PRECIO_INDIVIDUAL_MENSUAL ?? "",
+      individualAnual: process.env.STRIPE_PRECIO_INDIVIDUAL_ANUAL ?? "",
+      equipoMensual: process.env.STRIPE_PRECIO_EQUIPO_MENSUAL ?? "",
+      equipoAnual: process.env.STRIPE_PRECIO_EQUIPO_ANUAL ?? "",
+    },
+    /** Mínimo de asientos del plan de equipo. Se impone aquí, no en Stripe. */
+    asientosMinimos: Number(process.env.STRIPE_ASIENTOS_MINIMOS ?? 3),
   },
 
   notion: {
