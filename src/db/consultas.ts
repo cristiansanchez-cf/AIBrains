@@ -7,12 +7,19 @@ import type { ContextoDeAcceso, Creador, FichaConCreador } from "../tipos.js";
 const COLUMNAS_FICHA = `
   id, creador_id, dominio,
   insight, tecnica, script, por_que_funciona, como_aplicarlo, cuando_usarlo,
+  no_aplicar_cuando, verificar_antes,
   etapa, familia, area, objecion, tags, confianza,
   canal, fuente_url, fuente_timestamp, creado_en,
   creadores!inner ( slug, nombre )
 `;
 
-/** Campos donde se busca el texto de la situación, de más a menos señal. */
+/**
+ * Campos donde se busca el texto de la situación, de más a menos señal.
+ *
+ * `no_aplicar_cuando` NO está aquí, igual que no está en el embedding: describe
+ * las situaciones para las que la ficha no sirve, así que buscar por ese texto
+ * la haría salir justo en las consultas de las que hay que excluirla.
+ */
 const CAMPOS_BUSCABLES = [
   "insight",
   "cuando_usarlo",

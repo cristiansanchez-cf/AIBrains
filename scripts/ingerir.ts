@@ -221,6 +221,10 @@ async function main(): Promise<void> {
     script: f.script,
     por_que_funciona: f.por_que_funciona,
     cuando_usarlo: f.cuando_usarlo,
+    // Listas vacías a null: es lo normal —pocos creadores marcan el límite
+    // explícitamente— y así el render no tiene que distinguir [] de ausencia.
+    no_aplicar_cuando: f.no_aplicar_cuando.length > 0 ? f.no_aplicar_cuando : null,
+    verificar_antes: f.verificar_antes.length > 0 ? f.verificar_antes : null,
     como_aplicarlo: f.como_aplicarlo.length > 0 ? f.como_aplicarlo : null,
     transcripcion: transcripcion.slice(0, 4000),
     etapa: f.etapa,

@@ -30,7 +30,8 @@
     "ingerir": "tsx scripts/ingerir.ts",
     "revisar": "tsx scripts/revisar.ts",
     "fuentes": "tsx scripts/fuentes.ts",
-    "voz": "tsx scripts/evaluar-voz.ts"
+    "voz": "tsx scripts/evaluar-voz.ts",
+    "condiciones": "tsx scripts/condiciones-de-uso.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

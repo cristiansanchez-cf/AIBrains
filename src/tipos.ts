@@ -22,6 +22,10 @@ export interface Ficha {
   por_que_funciona: string | null;
   como_aplicarlo: string[] | null;
   cuando_usarlo: string | null;
+  /** Situaciones en las que NO va, aunque el disparador se parezca. */
+  no_aplicar_cuando: string[] | null;
+  /** Comprobaciones previas: norma del sector, quién decide, etapa real. */
+  verificar_antes: string[] | null;
   transcripcion: string | null;
 
   etapa: string | null;

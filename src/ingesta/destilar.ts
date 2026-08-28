@@ -35,6 +35,8 @@ export interface FichaDestilada {
   script: string;
   por_que_funciona: string;
   cuando_usarlo: string;
+  no_aplicar_cuando: string[];
+  verificar_antes: string[];
   como_aplicarlo: string[];
   etapa: string;
   familia: string;
@@ -86,6 +88,8 @@ const ESQUEMA = {
           script: { type: "string", description: "La frase o guion EXACTO que se dice o se recomienda decir, lo más literal posible." },
           por_que_funciona: { type: "string", description: "La lógica o psicología detrás, 1-3 frases." },
           cuando_usarlo: { type: "string", description: "El disparador: en qué situación concreta aplica. Redáctalo como lo contaría alguien con el problema." },
+          no_aplicar_cuando: { type: "array", items: { type: "string" }, description: "Situaciones parecidas al disparador donde esta técnica NO va. Solo si el creador lo dice o se deduce sin margen. Vacío es lo normal." },
+          verificar_antes: { type: "array", items: { type: "string" }, description: "Comprobaciones previas que el creador exige: norma del sector, quién decide, etapa real. Vacío es lo normal." },
           como_aplicarlo: { type: "array", items: { type: "string" }, description: "Pasos concretos." },
           etapa: { type: "string", enum: [...ETAPAS] },
           familia: { type: "string", enum: [...FAMILIAS] },
@@ -96,6 +100,7 @@ const ESQUEMA = {
         },
         required: [
           "insight", "tecnica", "script", "por_que_funciona", "cuando_usarlo",
+          "no_aplicar_cuando", "verificar_antes",
           "como_aplicarlo", "etapa", "familia", "area", "objecion", "tags", "confianza",
         ],
         additionalProperties: false,
@@ -124,7 +129,13 @@ Reglas que no se negocian:
 
    El motivo es cómo se recupera después: cada ficha se encuentra por su "cuando_usarlo", y un bloque con cinco técnicas tiene un solo disparador para cinco situaciones distintas. Con fichas separadas, una consulta amplia devuelve varias y reconstruye el marco entero; con una ficha agrupada, una consulta concreta no puede descomponerla y el usuario recibe cuatro técnicas que no venía a buscar.
 
-   Si al escribir el "cuando_usarlo" de una ficha te salen dos situaciones distintas unidas por una "o", son dos fichas.`;
+   Si al escribir el "cuando_usarlo" de una ficha te salen dos situaciones distintas unidas por una "o", son dos fichas.
+
+6. "no_aplicar_cuando" y "verificar_antes" van VACÍOS salvo que el creador lo diga. La regla 1 manda también aquí: una exclusión inventada es peor que ninguna, porque hace que se descarte la técnica correcta en el momento correcto.
+
+   Rellénalos cuando el creador marque el límite él mismo —"ojo, esto no lo hagas si todavía no te han dicho el presupuesto", "antes de esto asegúrate de que hablas con quien decide"—, que es más frecuente de lo que parece y hoy se está perdiendo: acaba diluido dentro de "como_aplicarlo" en vez de poder frenar la ficha.
+
+   La diferencia entre los dos: "no_aplicar_cuando" descarta la ficha, "verificar_antes" solo obliga a comprobar algo primero.`;
 
 /**
  * Destila una transcripción.

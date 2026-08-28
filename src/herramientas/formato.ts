@@ -22,6 +22,22 @@ export function formatearFicha(ficha: FichaConCreador, indice: number): string {
   if (contexto.length > 0) partes.push(`*${contexto.join(" · ")}*`);
 
   if (ficha.cuando_usarlo) partes.push(`**Cuándo usarlo:** ${ficha.cuando_usarlo}`);
+
+  // Van pegadas al disparador y ANTES del script, no al final. Son condiciones
+  // para decidir si esta ficha es la buena, y esa decisión se toma antes de
+  // leer el guion: puesto detrás, el modelo ya se ha comprometido con el
+  // material y lee la exclusión como una nota al pie.
+  if (ficha.no_aplicar_cuando?.length) {
+    partes.push(
+      `**NO aplicar cuando:**\n${ficha.no_aplicar_cuando.map((c) => `- ${c}`).join("\n")}`,
+    );
+  }
+  if (ficha.verificar_antes?.length) {
+    partes.push(
+      `**Verificar antes:**\n${ficha.verificar_antes.map((c) => `- ${c}`).join("\n")}`,
+    );
+  }
+
   if (ficha.script) partes.push(`**Script literal:**\n> ${ficha.script.replace(/\n/g, "\n> ")}`);
   if (ficha.por_que_funciona) partes.push(`**Por qué funciona:** ${ficha.por_que_funciona}`);
 
