@@ -55,34 +55,35 @@ async function main(): Promise<void> {
 
   const stripe = new Stripe(clave);
 
-  // --- La cuenta y si Connect está activo -----------------------------------
+  // --- ¿Connect está activo? ------------------------------------------------
+  // Se comprueba con accounts.list(), que lista las cuentas CONECTADAS. Si la
+  // llamada funciona, Connect está disponible; que devuelva cero es lo normal
+  // antes del primer acuerdo, no un problema.
+  //
+  // La primera versión trataba la lista vacía como excepción y reportaba FALLA
+  // con la clave perfectamente configurada. Un rojo falso se ignora igual que un
+  // verde falso, y aquí habría hecho perder el tiempo buscando un permiso que no
+  // faltaba.
   try {
-    // El SDK exige el id aunque la API acepte "la mía": se pide el primero de
-    // la lista, que con una clave de plataforma es la propia cuenta.
-    const cuenta = (await stripe.accounts.list({ limit: 1 })).data[0];
-    if (!cuenta) {
-      linea(AVISO, "La cuenta no tiene aún ninguna cuenta conectada", "Normal antes del primer acuerdo.");
-      throw new Error("sin cuentas conectadas todavía");
-    }
-    linea(OK, `Cuenta: ${cuenta.settings?.dashboard?.display_name ?? cuenta.id}`);
-
-    // Sin Connect activado, crear cuentas de creador falla con un error que no
-    // menciona Connect por ningún sitio. Mejor decirlo aquí.
-    const tieneConnect = Boolean(cuenta.capabilities || cuenta.controller);
+    const conectadas = await stripe.accounts.list({ limit: 3 });
     linea(
-      tieneConnect ? OK : AVISO,
-      tieneConnect ? "Connect parece disponible" : "No se pudo confirmar que Connect esté activo",
-      tieneConnect
-        ? undefined
-        : "Actívalo en el panel: Connect > Empezar, y elige plataforma o marketplace.",
+      OK,
+      `Connect activo — ${conectadas.data.length} creador(es) dados de alta`,
+      conectadas.data.length === 0 ? "Cero es lo normal antes del primer acuerdo." : undefined,
     );
   } catch (e) {
-    linea(FALLA, "No se pudo leer la cuenta", (e as Error).message);
+    const msg = (e as Error).message;
+    linea(
+      FALLA,
+      "Connect no responde",
+      msg.includes("Connect")
+        ? "Actívalo en el panel: Connect > Empezar, y elige plataforma o marketplace."
+        : msg.slice(0, 140),
+    );
   }
 
   // --- Permisos, uno a uno --------------------------------------------------
   const comprobaciones: [string, string, () => Promise<unknown>][] = [
-    ["Connect > Accounts (lectura)", "crear la cuenta del creador", () => stripe.accounts.list({ limit: 1 })],
     ["Customers", "quien se suscribe", () => stripe.customers.list({ limit: 1 })],
     ["Products", "los planes", () => stripe.products.list({ limit: 1 })],
     ["Prices", "los precios", () => stripe.prices.list({ limit: 1 })],
