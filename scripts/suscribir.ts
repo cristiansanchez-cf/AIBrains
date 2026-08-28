@@ -16,6 +16,7 @@
  */
 import { supabase } from "../src/db/supabase.js";
 import { config } from "../src/config.js";
+import { normalizarEmail, pareceEmail } from "../src/email.js";
 
 const AUTH = `${config.supabase.url.replace(/\/$/, "")}/auth/v1`;
 
@@ -23,7 +24,7 @@ async function buscarUsuario(
   email: string,
 ): Promise<{ id: string; email: string } | null> {
   const res = await fetch(
-    `${AUTH}/admin/users?filter=${encodeURIComponent(email)}`,
+    `${AUTH}/admin/users?filter=${encodeURIComponent(normalizarEmail(email))}`,
     {
       headers: {
         apikey: config.supabase.secretKey,
@@ -34,7 +35,8 @@ async function buscarUsuario(
   if (!res.ok) throw new Error(`No se pudo buscar el usuario: HTTP ${res.status}`);
 
   const { users } = (await res.json()) as { users: { id: string; email: string }[] };
-  const usuario = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+  const buscado = normalizarEmail(email);
+  const usuario = users.find((u) => u.email && normalizarEmail(u.email) === buscado);
 
   return usuario ?? null;
 }
@@ -60,7 +62,9 @@ async function crearUsuario(email: string): Promise<{ id: string; email: string 
       Authorization: `Bearer ${config.supabase.secretKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, email_confirm: true }),
+    // Normalizado AL ENTRAR, no al comparar. Comparar normalizando deja la
+    // puerta abierta a que alguien consulte sin normalizar y no encuentre nada.
+    body: JSON.stringify({ email: normalizarEmail(email), email_confirm: true }),
   });
 
   if (!res.ok) {
@@ -126,7 +130,18 @@ async function listar(): Promise<void> {
   }
 }
 
-async function alta(email: string, slug: string, dias?: string): Promise<void> {
+async function alta(entrada: string, slug: string, dias?: string): Promise<void> {
+  // Se normaliza UNA VEZ, aquí arriba, y a partir de este punto el resto de la
+  // función trabaja con la forma canónica. Si se dejara para más abajo, cada
+  // sitio tendría que acordarse.
+  const email = normalizarEmail(entrada);
+  if (!pareceEmail(email)) {
+    throw new Error(`"${entrada}" no parece un correo.`);
+  }
+  if (email !== entrada.trim()) {
+    console.log(`(el correo se guarda como ${email})`);
+  }
+
   const creador = await buscarCreador(slug);
 
   let usuario = await buscarUsuario(email);
@@ -155,7 +170,8 @@ async function alta(email: string, slug: string, dias?: string): Promise<void> {
   console.log(expira ? `Caduca el ${expira.slice(0, 10)}` : "Sin caducidad");
 }
 
-async function baja(email: string, slug: string): Promise<void> {
+async function baja(entrada: string, slug: string): Promise<void> {
+  const email = normalizarEmail(entrada);
   const usuario = await buscarUsuario(email);
   if (!usuario) throw new Error(`No hay ningún usuario con el email ${email}.`);
   const creador = await buscarCreador(slug);
