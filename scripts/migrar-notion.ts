@@ -1,13 +1,24 @@
 /**
- * Migración Notion → Postgres, con embeddings. Fase 3.
+ * HISTÓRICO. Migración única de Notion a Postgres, ya ejecutada.
+ *
+ * Trajo las 402 fichas que hoy vive el cerebro. Notion dejó de ser la fuente
+ * —la ingesta escribe directamente en la base desde `npm run ingerir`— así que
+ * esto no debería volver a ejecutarse.
+ *
+ * Se conserva y no se borra por dos motivos: explica de dónde salió el
+ * contenido y por qué existe la columna `notion_page_id`, y sigue siendo la
+ * única forma de recuperar algo si alguien encuentra en Notion un dato que aquí
+ * falta —los 89 enlaces que faltan, por ejemplo—.
+ *
+ * OJO SI ALGUNA VEZ SE EJECUTA: hace upsert sobre (notion_page_id, creador_id),
+ * o sea que pisa lo que haya. Las correcciones hechas después en la base
+ * —atribuciones reparadas, condiciones de uso, origen incierto— no están en
+ * Notion y se perderían. Antes de lanzarlo, hablarlo.
+ *
  *
  *   npm run migrar                 # todo
  *   npm run migrar -- --seco       # lee y resume, sin escribir nada
  *   npm run migrar -- --creador "Manuel Trejo"
- *
- * Idempotente: se apoya en (notion_page_id, creador_id), así que reejecutarla
- * actualiza en vez de duplicar. Esa es también la base del futuro flujo de
- * mantenimiento continuo.
  *
  * Las fichas con dos autores NO se duplican a ciegas. Se hacía, y producía
  * atribuciones falsas: dos filas con la misma `fuente_url`, así que una de las
