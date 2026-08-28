@@ -103,7 +103,7 @@ ${extra}
  * para la raíz del dominio, que es donde puede acabar el usuario si la
  * plantilla de correo de Supabase lo manda al Site URL.
  */
-export function paginaDeConsentimiento(rutaDelGuion: string): string {
+export function paginaDeConsentimiento(rutaDelScript: string): string {
   const configuracion = {
     supabaseUrl: config.supabase.url,
     publishableKey: config.supabase.publishableKey,
@@ -126,6 +126,6 @@ export function paginaDeConsentimiento(rutaDelGuion: string): string {
     </noscript>
   `,
     `<script type="application/json" id="configuracion">${json}</script>
-<script type="module" src="${rutaDelGuion}"></script>`,
+<script type="module" src="${rutaDelScript}"></script>`,
   );
 }

@@ -18,7 +18,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { paginaDeConsentimiento } from "./auth/consentimiento.js";
-import { esRutaDeGuion, guionDeConsentimiento } from "./auth/guion.js";
+import { esRutaDeScript, scriptDeConsentimiento } from "./auth/script-consentimiento.js";
 import { crearServidor } from "./servidor.js";
 import { config } from "./config.js";
 import {
@@ -108,9 +108,9 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
   await transporte.handleRequest(req, res);
 }
 
-function falloDeGuion(res: ServerResponse): void {
+function falloDeScript(res: ServerResponse): void {
   responderJson(res, 500, {
-    error: "Falta el guion de consentimiento. ¿Se ejecutó 'npm run build'?",
+    error: "Falta el script de consentimiento. ¿Se ejecutó 'npm run build'?",
   });
 }
 
@@ -134,13 +134,13 @@ function responderHtml(res: ServerResponse, codigo: number, html: string): void 
  * blanco, porque este es el punto donde más se pierde la gente.
  */
 async function servirConsentimiento(res: ServerResponse): Promise<void> {
-  const { ruta } = await guionDeConsentimiento();
+  const { ruta } = await scriptDeConsentimiento();
   responderHtml(res, 200, paginaDeConsentimiento(ruta));
 }
 
 /** El SDK empaquetado, servido desde nuestro dominio y no desde un CDN ajeno. */
-async function servirGuion(res: ServerResponse): Promise<void> {
-  const { contenido } = await guionDeConsentimiento();
+async function servirScript(res: ServerResponse): Promise<void> {
+  const { contenido } = await scriptDeConsentimiento();
   res.writeHead(200, {
     "content-type": "text/javascript; charset=utf-8",
     "content-length": contenido.length,
@@ -196,12 +196,12 @@ const http = createServer((req, res) => {
   // correo de Supabase puede devolver al usuario al Site URL en vez de aquí;
   // el navegador recupera entonces el authorization_id del almacén local.
   if (ruta === "/oauth/consent" || ruta === "/") {
-    servirConsentimiento(res).catch(() => falloDeGuion(res));
+    servirConsentimiento(res).catch(() => falloDeScript(res));
     return;
   }
 
-  if (ruta && esRutaDeGuion(ruta)) {
-    servirGuion(res).catch(() => falloDeGuion(res));
+  if (ruta && esRutaDeScript(ruta)) {
+    servirScript(res).catch(() => falloDeScript(res));
     return;
   }
 
