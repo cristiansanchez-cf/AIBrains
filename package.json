@@ -29,7 +29,8 @@
     "enlaces": "tsx scripts/completar-enlaces.ts",
     "ingerir": "tsx scripts/ingerir.ts",
     "revisar": "tsx scripts/revisar.ts",
-    "fuentes": "tsx scripts/fuentes.ts"
+    "fuentes": "tsx scripts/fuentes.ts",
+    "voz": "tsx scripts/evaluar-voz.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
