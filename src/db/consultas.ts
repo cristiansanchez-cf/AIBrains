@@ -36,6 +36,26 @@ const CAMPOS_BUSCABLES = [
  * —`acuerdo_firmado` (arquitectura §8) o `beta_interna` para el círculo
  * cerrado de pruebas. Encima de eso, quién pregunta decide qué ve.
  */
+/**
+ * Quién puede servirse, según la ÚNICA definición: `creadores_servibles()` en
+ * Postgres (migración 20260828194500).
+ *
+ * Antes esta regla —activo, y con acuerdo en vigor o beta sin caducar— vivía
+ * escrita a mano en dos consultas distintas de este archivo. Dos copias de la
+ * misma condición acaban separándose, y sobre todo no obligaban a nada a una
+ * consulta nueva escrita en otro sitio. Ahora la decisión es de la base.
+ *
+ * El RPC de búsqueda la vuelve a aplicar por dentro. Es a propósito: si este
+ * código se equivocara, no saldría contenido sin licencia igualmente.
+ */
+async function idsServibles(): Promise<Set<string>> {
+  const { data, error } = await supabase.rpc("creadores_servibles");
+  if (error) {
+    throw new Error(`No se pudo comprobar qué creadores son servibles: ${error.message}`);
+  }
+  return new Set((data ?? []).map((c: { id: string }) => c.id));
+}
+
 export async function creadoresDisponibles(
   contexto: ContextoDeAcceso,
 ): Promise<Creador[]> {
@@ -52,6 +72,8 @@ export async function creadoresDisponibles(
  */
 async function creadoresSuscritos(userId: string): Promise<Creador[]> {
   const ahora = new Date().toISOString();
+  const autorizados = await idsServibles();
+  if (autorizados.size === 0) return [];
 
   const { data, error } = await supabase
     .from("suscripciones")
@@ -61,10 +83,8 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
     .eq("user_id", userId)
     .eq("activa", true)
     .or(`expira_en.is.null,expira_en.gt.${ahora}`)
-    .eq("creadores.activo", true)
-    .or("acuerdo_firmado.eq.true,beta_interna.eq.true", {
-      referencedTable: "creadores",
-    });
+    // La verja de autorización ya no se repite aquí: la pone `idsServibles`.
+    .in("creador_id", [...autorizados]);
 
   if (error) {
     throw new Error(`No se pudieron leer las suscripciones: ${error.message}`);
@@ -84,11 +104,15 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
  * CEREBRO_CREADORES_POR_DEFECTO. Vacía = todos los que pasen los dos gates.
  */
 async function creadoresSinAuth(): Promise<Creador[]> {
+  const autorizados = await idsServibles();
+  if (autorizados.size === 0) return [];
+
   let consulta = supabase
     .from("creadores")
     .select("*")
-    .eq("activo", true)
-    .or("acuerdo_firmado.eq.true,beta_interna.eq.true");
+    // Misma verja que arriba, de la misma fuente. Antes eran dos copias de la
+    // condición escritas a mano en sitios distintos.
+    .in("id", [...autorizados]);
 
   if (config.creadoresPorDefecto.length > 0) {
     consulta = consulta.in("slug", config.creadoresPorDefecto);

@@ -109,29 +109,68 @@ async function comprobarBase(): Promise<Resultado> {
 // --- 3. Estado legal --------------------------------------------------------
 
 async function comprobarCreadores(): Promise<Resultado> {
+  // Se pregunta a la ÚNICA definición en vez de repetir la condición aquí. Un
+  // diagnóstico que comprueba con su propia copia de la regla puede dar OK
+  // mientras el servidor hace otra cosa, que es la peor clase de verde.
+  const { data: servibles, error: errorServibles } = await supabase.rpc("creadores_servibles");
+  if (errorServibles) throw new Error(errorServibles.message);
+
   const { data, error } = await supabase
     .from("creadores")
-    .select("slug, acuerdo_firmado, beta_interna, activo");
+    .select("id, slug, acuerdo_firmado, acuerdo_hasta, beta_interna, beta_interna_hasta");
   if (error) throw new Error(error.message);
 
-  const servidos = (data ?? []).filter(
-    (c) => c.activo && (c.acuerdo_firmado || c.beta_interna),
-  );
-  const enBeta = servidos.filter((c) => !c.acuerdo_firmado);
+  const idsServibles = new Set((servibles ?? []).map((c: { id: string }) => c.id));
+  const servidos = (data ?? []).filter((c) => idsServibles.has(c.id));
 
   if (servidos.length === 0) {
     return { nivel: "fallo", titulo: "Hay algún cerebro servible", detalle: "ninguno; nadie verá nada" };
   }
+
+  const DIA = 86_400_000;
+  const dias = (f: string | null): number =>
+    f === null ? Infinity : Math.floor((new Date(f).getTime() - Date.now()) / DIA);
+
+  // Una beta que caduca en dos días es un apagón de producto con fecha. Avisar
+  // después de que pase no sirve de nada: para entonces el cerebro ya no
+  // responde y parece una avería.
+  const caducan = servidos
+    .filter((c) => !c.acuerdo_firmado && dias(c.beta_interna_hasta) <= 30)
+    .map((c) => `${c.slug} en ${dias(c.beta_interna_hasta)} día(s)`);
+
+  if (caducan.length > 0) {
+    return {
+      nivel: "fallo",
+      titulo: "Respaldo legal de lo que se sirve",
+      detalle:
+        `LA BETA CADUCA PRONTO y al caducar el cerebro deja de responder: ` +
+        `${caducan.join(", ")}. Firma el acuerdo o amplía la fecha.`,
+    };
+  }
+
+  const enBeta = servidos.filter((c) => !c.acuerdo_firmado);
   if (enBeta.length > 0) {
     return {
       nivel: "aviso",
       titulo: "Respaldo legal de lo que se sirve",
       detalle:
-        `${enBeta.map((c) => c.slug).join(", ")} en BETA INTERNA, sin acuerdo firmado. ` +
-        `No comercializable.`,
+        `${enBeta.map((c) => `${c.slug} (hasta ${c.beta_interna_hasta?.slice(0, 10)})`).join(", ")} ` +
+        `en BETA INTERNA, sin acuerdo firmado. No comercializable.`,
     };
   }
-  return { nivel: "ok", titulo: "Respaldo legal de lo que se sirve", detalle: "todo con acuerdo firmado" };
+
+  const conFin = servidos
+    .filter((c) => c.acuerdo_firmado && dias(c.acuerdo_hasta) <= 45)
+    .map((c) => `${c.slug} vence en ${dias(c.acuerdo_hasta)} día(s)`);
+  if (conFin.length > 0) {
+    return {
+      nivel: "aviso",
+      titulo: "Respaldo legal de lo que se sirve",
+      detalle: `Acuerdo próximo a vencer: ${conFin.join(", ")}. Renovar antes.`,
+    };
+  }
+
+  return { nivel: "ok", titulo: "Respaldo legal de lo que se sirve", detalle: "todo con acuerdo en vigor" };
 }
 
 // --- 4. Embeddings ----------------------------------------------------------
