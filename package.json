@@ -34,7 +34,8 @@
     "condiciones": "tsx scripts/condiciones-de-uso.ts",
     "atribucion": "tsx scripts/atribucion.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prueba:equipos": "tsx scripts/prueba-equipos.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

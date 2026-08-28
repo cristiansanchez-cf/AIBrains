@@ -1,6 +1,7 @@
 import { supabase } from "./supabase.js";
 import { config } from "../config.js";
 import { generarEmbeddings, hayEmbeddings } from "./embeddings.js";
+import { normalizarEmail } from "../email.js";
 import type {
   ContextoDeAcceso,
   Creador,
@@ -91,7 +92,7 @@ export async function creadoresDisponibles(
   contexto: ContextoDeAcceso,
 ): Promise<CreadorServible[]> {
   return contexto.tipo === "usuario"
-    ? creadoresSuscritos(contexto.userId)
+    ? creadoresDelUsuario(contexto.userId, contexto.email)
     : creadoresSinAuth();
 }
 
@@ -101,40 +102,51 @@ export async function creadoresDisponibles(
  * Una suscripción vale si está activa y no ha expirado. `expira_en` nulo
  * significa sin fecha de fin, no expirada — de ahí el `or`.
  */
-async function creadoresSuscritos(userId: string): Promise<CreadorServible[]> {
-  const ahora = new Date().toISOString();
+async function creadoresDelUsuario(
+  userId: string,
+  email: string | undefined,
+): Promise<CreadorServible[]> {
   const modos = await permisosPorCreador();
   if (modos.size === 0) return [];
 
-  const { data, error } = await supabase
-    .from("suscripciones")
-    .select(
-      "creador_id, creadores!inner ( id, slug, nombre, dominio, activo, acuerdo_firmado, beta_interna, perfil_url, handles, formacion_url, formacion_nota )",
-    )
-    .eq("user_id", userId)
-    .eq("activa", true)
-    .or(`expira_en.is.null,expira_en.gt.${ahora}`)
-    // La verja de autorización no se repite aquí: la pone `modoPorCreador`.
-    .in("creador_id", [...modos.keys()]);
-
+  // Una sola pregunta a la base: `cerebros_autorizados` une la suscripción
+  // individual y el asiento de organización. Antes esto era una consulta a
+  // `suscripciones` escrita aquí; con dos orígenes de acceso, tener la unión en
+  // TypeScript habría sido repetir el error que ya nos costó dos revisiones.
+  //
+  // Se manda también el correo porque un asiento se autoriza ANTES de que
+  // exista la cuenta: la primera vez que esa persona entra, su `user_id`
+  // todavía no está en la fila.
+  const { data, error } = await supabase.rpc("cerebros_autorizados", {
+    p_user_id: userId,
+    p_email: normalizarEmail(email ?? ""),
+  });
   if (error) {
-    throw new Error(`No se pudieron leer las suscripciones: ${error.message}`);
+    throw new Error(`No se pudo comprobar el acceso del usuario: ${error.message}`);
   }
 
-  const creadores = (data ?? [])
-    .map((fila) => (fila as unknown as { creadores: Creador }).creadores)
-    .filter(Boolean)
-    .map((c) => conPermisos(c, modos));
+  const autorizados = [
+    ...new Set(
+      ((data ?? []) as { creador_id: string }[]).map((f) => f.creador_id),
+    ),
+  ].filter((id) => modos.has(id));
 
-  return creadores.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  if (autorizados.length === 0) return [];
+
+  const { data: creadores, error: errorCreadores } = await supabase
+    .from("creadores")
+    .select("*")
+    .in("id", autorizados);
+
+  if (errorCreadores) {
+    throw new Error(`No se pudieron leer los creadores: ${errorCreadores.message}`);
+  }
+
+  return (creadores ?? [])
+    .map((c) => conPermisos(c as Creador, modos))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
 
-/**
- * Camino sin autenticación: solo el stdio local.
- *
- * Sin `user_id` no hay suscripciones que consultar, así que manda la lista de
- * CEREBRO_CREADORES_POR_DEFECTO. Vacía = todos los que pasen los dos gates.
- */
 async function creadoresSinAuth(): Promise<CreadorServible[]> {
   const modos = await permisosPorCreador();
   if (modos.size === 0) return [];
