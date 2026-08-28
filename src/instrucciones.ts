@@ -54,3 +54,58 @@ Al responder:
    una pregunta concreta que sí encajaría con lo que hay dentro.
 
 Nunca respondas una situación de ventas sin consultar el cerebro.`;
+
+/**
+ * Capa de voz: el filtro que se aplica a todo mensaje redactado.
+ *
+ * De un informe de uso real (venta B2B, prospección post-feria en Brasil). El
+ * hallazgo: el cerebro transmitía el método pero no la voz. El agente aplicaba
+ * la técnica correcta y producía un texto que el vendedor no enviaba. Literal:
+ * "eso suena fatal como vendedor, es muy IA".
+ *
+ * POR QUÉ EJEMPLOS NEGATIVOS Y NO MÁS REGLAS. Ante una instrucción positiva un
+ * modelo produce la versión más probable que la cumple, y lo más probable es lo
+ * más genérico: es el mecanismo que fabrica el "suena a IA". Un ejemplo de lo
+ * que NO hay que escribir corta ese camino por defecto mucho mejor que otra
+ * regla bien redactada.
+ *
+ * POR QUÉ AQUÍ Y NO EN `INSTRUCCIONES_DEL_SERVIDOR`. Estos fallos ocurren al
+ * redactar, no al abrir la sesión, y el handshake queda decenas de mensajes
+ * atrás cuando llega ese momento. Colgado del resultado de buscar_tecnica, el
+ * filtro aparece con las fichas que se van a usar y justo antes de escribir.
+ *
+ * SOBRE EL REGISTRO DE MERCADO. No se puede resolver aquí: es propiedad de la
+ * conversación, no de la técnica, y ningún creador del cerebro habló del
+ * mercado de destino. Lo único honesto es declarar el hueco —última regla— para
+ * que el usuario sepa que esa parte la pone él.
+ */
+export const FILTRO_DE_VOZ = `Si vas a REDACTAR un mensaje con esto, pásalo antes por este filtro. Las
+fichas traen el método; el método correcto escrito en lenguaje genérico suena
+a IA y el vendedor no lo envía.
+
+  NO: "Me quedé pensando en lo que me contaste, me pareció muy interesante."
+  SÍ: "He estado en vuestra web mirando lo de los naufragios. El Tutoya lo he
+       buscado aparte."
+
+Las dos aplican la misma técnica. La segunda tiene un verbo de acción y un
+dato que solo existe en esa cuenta.
+
+- Verbos de lo que hiciste (he mirado, me puse a buscar, fui a ver), no de lo
+  que sentiste (me quedé pensando, me impactó). Un sentimiento no se verifica
+  y no cuesta nada; una acción demuestra tiempo dedicado.
+- Si lo averiguaste DESPUÉS del encuentro, dilo así. Fingir familiaridad
+  previa se detecta, y cuando se detecta contamina todo lo demás.
+- No niegues para plantar la idea: "no te voy a hacer perder el tiempo",
+  "no vengo a venderte nada".
+- Adjetivos valorativos solo con el dato detrás. "Muy potente" no dice nada.
+- Una sola fecha concreta. Un menú de horas hace trabajar al otro, y
+  "hablamos la semana que viene" es un cierre inexistente.
+
+Dos pruebas antes de darlo por bueno:
+- Si el mensaje se puede enviar a otro destinatario cambiando solo el nombre,
+  no está terminado.
+- Todo lo que el mensaje diga que hiciste o que sabes tiene que ser cierto.
+
+El registro local NO está en el cerebro. Si el mensaje va a un idioma o un
+país distintos a los del creador, dilo: la técnica es suya, la formulación
+que funciona en ese mercado no la cubre y hay que verificarla.`;

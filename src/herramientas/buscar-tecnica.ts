@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { buscarFichas, creadoresDisponibles } from "../db/consultas.js";
 import { formatearFicha } from "./formato.js";
+import { FILTRO_DE_VOZ } from "../instrucciones.js";
 import type { ContextoDeAcceso } from "../tipos.js";
 
 /**
@@ -107,6 +108,10 @@ export function registrarBuscarTecnica(
         "que no está en estas fichas, di que es aportación tuya. Cierra con los " +
         "enlaces de la sección Fuente.";
 
+      // El filtro de voz va AL FINAL, detrás de las fichas: es una regla de
+      // redacción y tiene que llegar en el momento de redactar, que es justo
+      // después de leerlas. En la cabecera quedaría por delante del material
+      // que pretende corregir.
       return {
         content: [
           {
@@ -114,6 +119,7 @@ export function registrarBuscarTecnica(
             text: [
               cabecera,
               ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
+              FILTRO_DE_VOZ,
             ].join("\n\n---\n\n"),
           },
         ],
