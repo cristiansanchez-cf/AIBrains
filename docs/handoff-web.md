@@ -148,16 +148,92 @@ ven desde el frontend:
 - **Precios por cerebro con descuento por volumen.** Está en la visión, pero con
   uno o dos cerebros no hay volumen que descontar y el precio por unidad invita
   a comparar en vez de a decidir. Ver `docs/vision-y-mvp.md`.
-- **Planes de equipo.** El modelo es que quien paga **autoriza** a su gente por
-  correo: los miembros no se dan de alta ni se suscriben por su cuenta. Eso
-  cambia el modelo de datos —hoy la suscripción va por usuario y exige que la
-  cuenta exista— y tiene varias trampas que conviene ver antes de diseñar la
-  pantalla: `docs/planes-de-equipo.md`. Sobre todo la de quitar a alguien, que
-  tiene que revocar de inmediato, y la de qué cuenta como asiento gastado.
 - **Prometer el guion literal en el copy.** Solo es cierto en modo completo.
   Hoy los dos cerebros están ahí por beta interna, no por acuerdo — y **esa beta
   caduca el 30/11/2026**, momento en el que dejarían de servirse enteros si no
   hay acuerdo firmado.
+
+---
+
+## Planes de equipo: léelo antes de dibujar el panel
+
+El esquema **ya existe y está en producción**. Diseño completo en
+`docs/planes-de-equipo.md`; aquí va lo que cambia lo que dibujas.
+
+### Los dos caminos de compra
+
+**Particular.** Se autentica, elige plan individual, elige un cerebro, paga. Su
+correo queda autorizado y ya puede conectar el MCP. Precio: **uno por un
+cerebro**, sin escalas — con un solo acuerdo no hay volumen que descontar.
+
+**Empresa.** Se autentica, elige plan de empresa y ve el panel — pero **hasta
+que no paga no puede hacer nada, y su propio correo tampoco está autorizado**.
+
+Ese estado intermedio —sesión iniciada, panel visible, sin acceso— **es el que
+más tickets de soporte va a generar** si no se explica en pantalla. Merece un
+estado vacío bien escrito, no un panel gris.
+
+### Asiento ≠ administrador (esto cambia el panel entero)
+
+| | Qué es | ¿Acceso al cerebro? | ¿Gasta asiento? |
+|---|---|---|---|
+| **Asiento** | Un acceso al cerebro | **Sí** | Sí, uno |
+| **Administrador** | Gestiona la cuenta | **No** | **No** |
+
+Una empresa puede tener **cinco administradores** llevando una cuenta de **cinco
+asientos** que son para **otras cinco personas**. Diez implicados, cinco accesos
+pagados. Si el panel los mezcla en una sola lista de "miembros", esa distinción
+se pierde y la gente comprará mal.
+
+Son dos tablas distintas —`organizacion_admins` y `organizacion_asientos`—
+precisamente para que no se puedan confundir.
+
+### Cuatro cosas que la interfaz tiene que decir
+
+**1. Al pagar, el asiento se le asigna a quien compra.** Si no, la cuenta nace
+sin poder hacer nada. Pero es cesible, y hay que decirlo en el momento:
+
+> *"Te hemos dado uno de los 5 asientos porque todavía no has invitado a nadie.
+> Si quieres, puedes cedérselo a otra persona y quedarte solo como
+> administrador."*
+
+Sin esa frase, quien compre cinco asientos para cinco comerciales descubrirá que
+solo tiene cuatro, y lo descubrirá tarde.
+
+**2. Ceder un asiento es cambiar el correo, no borrar y volver a invitar.** El
+backend lo hace en una sola operación a propósito: si fueran dos, entre una y
+otra el asiento queda libre y alguien podría colarse en ese hueco. La interfaz
+debería ofrecer "cambiar el correo de este asiento", no "quitar" + "añadir".
+
+**3. Bajar de plan con los asientos en uso está BLOQUEADO.** La base lo rechaza
+con este mensaje:
+
+> `No se puede bajar a 3 asiento(s): hay 5 en uso. Desautoriza 2 antes de bajar de plan.`
+
+Es una decisión deliberada: no elegimos nosotros a quién se le corta el acceso.
+La interfaz debería adelantarse — mostrar la lista y pedir que desautoricen
+antes, en vez de dejar que el usuario choque con el error.
+
+**4. Los correos se normalizan solos.** `Pepe@Empresa.com` y
+`pepe@empresa.com` son la misma persona; el backend lo resuelve y la base
+rechaza cualquier correo sin normalizar. No hace falta que lo hagas tú, pero **no
+lo peleés**: si muestras el correo tal cual lo tecleó el usuario y luego no
+coincide con lo que hay guardado, la confusión es tuya.
+
+### Lo que hace un administrador
+
+Añadir y quitar cerebros, subir y bajar asientos, autorizar y desautorizar
+correos, y cambiar el correo de un asiento. `puede_facturar` es un permiso
+aparte, por si quieres separar quién ve la facturación.
+
+### Lo que todavía no existe
+
+**Nada de esto se puede hacer aún desde fuera.** Las tablas están, las reglas
+están garantizadas, pero **no hay ni cobro ni endpoints**: hoy una organización
+se crea a mano. Las operaciones que hacen falta están claras —crear
+organización, listar/añadir/ceder/revocar asientos, administradores, cambiar de
+plan—; **falta acordar contigo la forma.** Dime qué necesitas y en qué orden y
+lo monto.
 
 ---
 

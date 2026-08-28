@@ -1,7 +1,15 @@
 # Planes de equipo: notas de diseño antes de construirlos
 
-> Escrito el 29/08/2026, antes de tocar código. Para que el modelo de datos se
-> piense una vez y no salga a parches.
+> Escrito el 29/08/2026 antes de tocar código, y actualizado el mismo día cuando
+> el esquema quedó escrito y probado.
+>
+> **ESTADO: implementado y en producción.** Migración
+> `20260829120000_organizaciones.sql`. Las garantías se comprueban con
+> `npm run prueba:equipos` (once casos, todos atacando).
+>
+> Lo que NO existe todavía: el cobro y los endpoints que la web necesita para
+> crear la organización y gestionar asientos. Las tablas están; falta quién las
+> rellena.
 
 ## El modelo que queremos
 
@@ -43,32 +51,38 @@ vive solo en el texto del correo, cambiarlo desconecta a la persona en silencio.
 Resolver el correo a `user_id` en el primer acceso y **guardar los dos**: el
 correo por el que se le invitó y el usuario al que resultó ser.
 
-### 2. Normalización
+### 2. Normalización — RESUELTO
 
 `Info@Empresa.com` y `info@empresa.com` son la misma persona y dos claves
-distintas. Normalizar a minúsculas al guardar, no al comparar — comparar
-normalizando deja la puerta a que alguien consulte sin normalizar.
+distintas. Se normaliza al guardar, no al comparar — comparar normalizando deja
+la puerta a que alguien consulte sin normalizar y no encuentre nada.
 
-### 3. Quitar a alguien tiene que revocar de verdad, y ya
+Hecho en `src/email.ts`, y **la base lo exige además**:
+`check (email = lower(email))`. Lo que NO se normaliza —los puntos de Gmail y
+las etiquetas `+algo`— está explicado ahí: en otros proveedores son buzones
+distintos y unirlos daría acceso a quien no debe.
 
-Hoy no hay ninguna ruta de revocación salvo borrar la fila. Con equipos es una
-operación normal: alguien se va de la empresa el martes.
+### 3. Quitar a alguien tiene que revocar de verdad, y ya — RESUELTO
+
+Revocar es poner `revocado_en`. Comprobado de punta a punta: al desautorizar, el
+acceso desaparece en la llamada siguiente.
 
 El acceso se resuelve en cada llamada (`permisosPorCreador` y la consulta de
 suscripciones corren siempre, sin caché), así que revocar surte efecto en la
 llamada siguiente. **Eso hay que conservarlo**: si en algún momento se mete
 caché por rendimiento, la revocación deja de ser inmediata sin que nadie lo note.
 
-### 4. Dos orígenes de acceso, una sola regla
+### 4. Dos orígenes de acceso, una sola regla — RESUELTO
 
 Una persona podrá tener acceso por suscripción propia **y** por pertenecer a una
 organización. `creadoresDisponibles` tendrá que unir ambos.
 
 **Esa unión va en Postgres, no en TypeScript.** Es exactamente la lección de
 esta sesión: la regla de "qué se puede servir" vivía duplicada en el código y
-una de las dos rutas se quedó sin ella. Lo natural es extender
-`creadores_servibles()` o añadir una vista equivalente para el acceso del
-usuario.
+una de las dos rutas se quedó sin ella.
+
+Hecho: `cerebros_autorizados(user_id, email)`. Acepta el correo ADEMÁS del
+usuario porque un asiento se autoriza antes de que exista la cuenta.
 
 ### 5. Asiento y administrador son cosas distintas — RESUELTO
 
@@ -101,15 +115,20 @@ Eso hay que decirlo en la interfaz en el momento, no esconderlo en una ayuda:
 Sin esa frase, quien compre cinco asientos para cinco comerciales descubrirá
 que solo tiene cuatro, y lo descubrirá tarde.
 
-### 6. Qué pasa al bajar de plan
+### 6. Bajar de plan — RESUELTO: se bloquea
 
-Sigue abierto, y hay que decidirlo antes de cobrar: si una cuenta de 5 baja a 3
-y tiene 5 correos autorizados, ¿cuáles se caen? Lo razonable es no elegir por
-ellos — bloquear la bajada hasta que desautoricen a dos.
+Si una cuenta de 5 baja a 3 con 5 correos autorizados, **no elegimos nosotros a
+quién se le corta el acceso**. Se bloquea la bajada y se les dice cuántos tienen
+que desautorizar:
 
-## Forma tentativa
+> `No se puede bajar a 3 asiento(s): hay 5 en uso. Desautoriza 2 antes de bajar de plan.`
 
-Sin escribir todavía; para tener algo concreto que discutir:
+Elegir nosotros convierte una factura menor en una incidencia: alguien se queda
+sin acceso un lunes por la mañana sin que nadie se lo haya dicho.
+
+## El esquema, tal como está
+
+Migración `20260829120000_organizaciones.sql`, aplicada:
 
 ```sql
 organizaciones (id, nombre, dueño_user_id, plan, asientos, creado_en)
@@ -166,7 +185,32 @@ ahí invita al resto.
 Ese estado intermedio —sesión iniciada, panel visible, sin acceso— tiene que
 verse claro en la interfaz. Es el momento en que más gente escribe a soporte.
 
-## Lo que falta por decidir
+## Qué garantiza la base, y qué no
 
-Solo el punto 6: qué pasa al bajar de plan con más correos autorizados que
-asientos. Todo lo demás está resuelto y se puede escribir.
+Garantizado por Postgres, así que aguanta venga de donde venga —de la web, de un
+script o de una consulta a mano dentro de seis meses—:
+
+| Regla | Cómo |
+|---|---|
+| El correo se guarda normalizado | `check (email = lower(email))` |
+| No más asientos vivos que contratados | trigger `organizacion_asientos_tope` |
+| No se baja de plan con asientos en uso | trigger `organizaciones_bajada` |
+| Un correo no ocupa dos asientos en la misma organización | índice único parcial |
+
+Triggers y no `CHECK` porque la regla mira varias filas.
+
+**Lo que NO garantiza nada todavía**: que exista una organización solo si alguien
+ha pagado. Eso lo tendrá que hacer el webhook de Stripe, y hasta entonces las
+organizaciones se crean a mano.
+
+## Lo que falta
+
+- **Cobro.** Stripe Connect, y el webhook que crea la organización y le asigna el
+  primer asiento a quien paga.
+- **Endpoints para el panel.** Crear organización, listar y añadir asientos,
+  ceder, revocar, administradores, cambiar de plan. Las operaciones están claras;
+  falta acordar la forma con quien construya la web.
+- **Resolver el correo a `user_id` en el primer acceso.** Hoy el acceso funciona
+  por correo (comprobado), pero la columna `user_id` no se rellena sola. No es
+  urgente —el acceso ya va— pero hace falta para que cambiar de correo no
+  desconecte a nadie (trampa 1).
