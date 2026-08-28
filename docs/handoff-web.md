@@ -148,6 +148,12 @@ ven desde el frontend:
 - **Precios por cerebro con descuento por volumen.** Está en la visión, pero con
   uno o dos cerebros no hay volumen que descontar y el precio por unidad invita
   a comparar en vez de a decidir. Ver `docs/vision-y-mvp.md`.
+- **Planes de equipo.** El modelo es que quien paga **autoriza** a su gente por
+  correo: los miembros no se dan de alta ni se suscriben por su cuenta. Eso
+  cambia el modelo de datos —hoy la suscripción va por usuario y exige que la
+  cuenta exista— y tiene varias trampas que conviene ver antes de diseñar la
+  pantalla: `docs/planes-de-equipo.md`. Sobre todo la de quitar a alguien, que
+  tiene que revocar de inmediato, y la de qué cuenta como asiento gastado.
 - **Prometer el guion literal en el copy.** Solo es cierto en modo completo.
   Hoy los dos cerebros están ahí por beta interna, no por acuerdo — y **esa beta
   caduca el 30/11/2026**, momento en el que dejarían de servirse enteros si no
