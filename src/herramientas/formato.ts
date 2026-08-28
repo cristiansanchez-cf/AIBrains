@@ -21,6 +21,17 @@ export function formatearFicha(ficha: FichaConCreador, indice: number): string {
   ].filter(Boolean);
   if (contexto.length > 0) partes.push(`*${contexto.join(" · ")}*`);
 
+  // La duda se declara SIEMPRE, tenga guion o no. Sin esto una ficha de autoría
+  // dudosa se lee igual de segura que cualquier otra, y servirla sería mentir
+  // por omisión — que es peor que no servirla, porque no se ve.
+  if (ficha.origen_incierto) {
+    partes.push(
+      `> **Atribución no confirmada.** Esta ficha aparecía asignada a más de un ` +
+        `creador y no se ha podido determinar cuál la enseñó. La técnica es fiable; ` +
+        `la autoría, no. Dilo si citas esta ficha.`,
+    );
+  }
+
   if (ficha.cuando_usarlo) partes.push(`**Cuándo usarlo:** ${ficha.cuando_usarlo}`);
 
   // Van pegadas al disparador y ANTES del script, no al final. Son condiciones
@@ -38,7 +49,19 @@ export function formatearFicha(ficha: FichaConCreador, indice: number): string {
     );
   }
 
-  if (ficha.script) partes.push(`**Script literal:**\n> ${ficha.script.replace(/\n/g, "\n> ")}`);
+  // El guion solo sale si sabemos de quién son esas palabras. Una técnica es un
+  // método y atribuirla a un formador de ventas no le pone nada en la boca; un
+  // guion son palabras concretas de una persona concreta, y adjudicárselas a
+  // quien quizá no las dijo es el fallo que §5 existe para impedir.
+  if (ficha.script && !ficha.origen_incierto) {
+    partes.push(`**Script literal:**\n> ${ficha.script.replace(/\n/g, "\n> ")}`);
+  } else if (ficha.script && ficha.origen_incierto) {
+    partes.push(
+      `**Script literal:** _no se sirve. Esta ficha aparecía atribuida a más de un ` +
+        `creador y no se ha podido determinar cuál lo dijo, así que la técnica sí y ` +
+        `las palabras textuales no._`,
+    );
+  }
   if (ficha.por_que_funciona) partes.push(`**Por qué funciona:** ${ficha.por_que_funciona}`);
 
   const pasos = normalizarPasos(ficha.como_aplicarlo);
@@ -60,13 +83,24 @@ function normalizarPasos(valor: unknown): string[] {
 }
 
 /**
- * Enlace al vídeo original, con el segundo exacto si lo hay.
+ * De dónde sale la ficha, por orden de precisión: el minuto exacto, el vídeo,
+ * el perfil del creador.
  *
- * Cuando falta `fuente_url` se dice en voz alta en vez de callar: es el
- * requisito duro de §5 y hoy solo está relleno al ~32%. Que el hueco se vea.
+ * El perfil no es el vídeo y no se presenta como si lo fuera — pero es verdad y
+ * es comprobable, y hay 91 fichas sin `fuente_url` que hoy no ofrecen nada. Que
+ * el usuario pierda una técnica buena porque a nosotros nos falte un enlace es
+ * peor que darle una referencia más floja diciendo que es más floja.
+ *
+ * Si tampoco hay perfil se dice en voz alta, que es el requisito duro de §5:
+ * el hueco se ve, no se disimula.
  */
 function enlaceFuente(ficha: FichaConCreador): string {
-  if (!ficha.fuente_url) return "_(sin enlace al original — ficha incompleta)_";
+  if (!ficha.fuente_url) {
+    const perfil = ficha.creadores?.perfil_url;
+    return perfil
+      ? `${perfil} — _perfil del creador; no tenemos el vídeo exacto de esta ficha_`
+      : "_(sin enlace al original — ficha incompleta)_";
+  }
 
   const segundo = ficha.fuente_timestamp;
   if (segundo == null) return ficha.fuente_url;

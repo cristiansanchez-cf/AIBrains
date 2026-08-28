@@ -8,9 +8,10 @@ const COLUMNAS_FICHA = `
   id, creador_id, dominio,
   insight, tecnica, script, por_que_funciona, como_aplicarlo, cuando_usarlo,
   no_aplicar_cuando, verificar_antes,
+  origen_incierto,
   etapa, familia, area, objecion, tags, confianza,
   canal, fuente_url, fuente_timestamp, creado_en,
-  creadores!inner ( slug, nombre )
+  creadores!inner ( slug, nombre, perfil_url )
 `;
 
 /**
@@ -179,6 +180,9 @@ async function buscarPorSimilitud(
     creadores: {
       slug: fila["creador_slug"] as string,
       nombre: fila["creador_nombre"] as string,
+      // Sin esto el respaldo de cita al perfil funcionaría por la ruta léxica y
+      // no por la vectorial, que es la que se usa el 99% de las veces.
+      perfil_url: (fila["perfil_creador"] as string | null) ?? null,
     },
   })) as unknown as FichaConCreador[];
 }

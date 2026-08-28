@@ -179,34 +179,46 @@ async function comprobarAtribucion(): Promise<Resultado> {
   }
 
   // Fichas de Notion que produjeron más de una fila publicada: es el mecanismo
-  // que fabricaba las falsas, y puede reaparecer por otra vía.
+  // que fabricaba las falsas.
+  //
+  // Duplicar NO es un fallo por sí solo. Lo es duplicar CALLANDO: cuando no se
+  // puede saber cuál de los dos creadores lo dijo, la política es servir las dos
+  // marcadas `origen_incierto` —el usuario no pierde la técnica— y entonces la
+  // ficha lo declara y retiene el guion literal. Lo que hay que cazar es un
+  // duplicado que se presenta como si la autoría estuviera confirmada.
   const { data: paginas } = await supabase
     .from("fichas")
-    .select("notion_page_id")
+    .select("notion_page_id, origen_incierto")
     .eq("estado", "publicada")
     .not("notion_page_id", "is", null);
 
-  const cuenta = new Map<string, number>();
+  const grupos = new Map<string, { total: number; declarados: number }>();
   for (const f of paginas ?? []) {
     const k = f.notion_page_id as string;
-    cuenta.set(k, (cuenta.get(k) ?? 0) + 1);
+    const g = grupos.get(k) ?? { total: 0, declarados: 0 };
+    g.total += 1;
+    if (f.origen_incierto) g.declarados += 1;
+    grupos.set(k, g);
   }
-  const duplicadas = [...cuenta.values()].filter((n) => n > 1).length;
 
-  if (duplicadas > 0) {
+  const callados = [...grupos.values()].filter((g) => g.total > 1 && g.declarados < g.total);
+  const declarados = [...grupos.values()].filter((g) => g.total > 1 && g.declarados === g.total);
+
+  if (callados.length > 0) {
     return {
       nivel: "fallo",
       titulo: "Atribución de las fichas",
       detalle:
-        `${duplicadas} ficha(s) de Notion generaron más de una fila publicada. ` +
-        `Comparten fuente, así que alguna atribuye mal. npm run atribucion`,
+        `${callados.length} ficha(s) de Notion dieron varias filas publicadas SIN declarar ` +
+        `la duda. Comparten fuente, así que alguna atribuye mal. npm run atribucion`,
     };
   }
 
+  const nota = declarados.length > 0 ? `; ${declarados.length} con la duda declarada` : "";
   return {
     nivel: "ok",
     titulo: "Atribución de las fichas",
-    detalle: "ningún enlace contradice a su creador (solo se comprueba TikTok/Instagram)",
+    detalle: `ningún enlace contradice a su creador${nota} (solo se comprueba TikTok/Instagram)`,
   };
 }
 

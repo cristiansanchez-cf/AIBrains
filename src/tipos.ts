@@ -9,6 +9,10 @@ export interface Creador {
   acuerdo_firmado: boolean;
   /** Pruebas internas sin acuerdo. Nunca para usuarios de pago. */
   beta_interna: boolean;
+  /** Perfil público. Respaldo de cita cuando no se conoce el vídeo exacto. */
+  perfil_url: string | null;
+  /** Handles públicos (@usuario), para detectar atribuciones imposibles. */
+  handles: string[];
 }
 
 export interface Ficha {
@@ -22,6 +26,11 @@ export interface Ficha {
   por_que_funciona: string | null;
   como_aplicarlo: string[] | null;
   cuando_usarlo: string | null;
+  /**
+   * Aparecía atribuida a varios creadores sin poder decidir a cuál. Se sirve la
+   * técnica pero NO el guion literal: la idea no es de nadie, las palabras sí.
+   */
+  origen_incierto: boolean | null;
   /** Situaciones en las que NO va, aunque el disparador se parezca. */
   no_aplicar_cuando: string[] | null;
   /** Comprobaciones previas: norma del sector, quién decide, etapa real. */
@@ -44,7 +53,7 @@ export interface Ficha {
 
 /** Ficha tal y como sale de la consulta, con el creador ya resuelto. */
 export interface FichaConCreador extends Ficha {
-  creadores: Pick<Creador, "slug" | "nombre"> | null;
+  creadores: Pick<Creador, "slug" | "nombre" | "perfil_url"> | null;
 }
 
 /**

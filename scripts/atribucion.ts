@@ -24,11 +24,19 @@
  *        error de etiquetado.
  *
  *   El enlace no dice de quién es (Spotify, YouTube, o sin enlace)
- *     -> las dos copias pasan a `borrador`. No se puede saber cuál miente, y
- *        servir las dos garantiza servir una falsa. `borrador` las saca del
- *        producto sin borrarlas y las mete en la cola de `npm run revisar`.
+ *     -> las dos copias se quedan, marcadas `origen_incierto`.
  *
- * Nada se borra: `descartada` y `borrador` son reversibles.
+ *        Antes salían del catálogo, y eso castigaba a quien paga: si tienes el
+ *        cerebro de Alfonso y Cristian no deberías perder una técnica porque
+ *        nosotros no sepamos si la dijo él o Manuel Trejo. Con miles de fichas
+ *        esa política tira conocimiento a la basura por dudas nuestras.
+ *
+ *        La marca hace dos cosas: la cita apunta al PERFIL del creador en vez
+ *        de a un vídeo que no sabemos si es suyo, y el GUION LITERAL no se
+ *        sirve. La técnica es un método y atribuirla no le pone nada en la boca
+ *        a nadie; el guion son palabras concretas de una persona concreta.
+ *
+ * Nada se borra: `descartada` y la marca de origen incierto son reversibles.
  */
 import { supabase } from "../src/db/supabase.js";
 
@@ -53,7 +61,7 @@ interface Ficha {
 type Accion =
   | { tipo: "descartar"; ficha: Ficha; porque: string }
   | { tipo: "reasignar"; ficha: Ficha; aSlug: string; aId: string; porque: string }
-  | { tipo: "a-borrador"; ficha: Ficha; porque: string };
+  | { tipo: "marcar-incierta"; ficha: Ficha; porque: string };
 
 async function main(): Promise<void> {
   const { data: creadores, error: errorCreadores } = await supabase
@@ -68,13 +76,20 @@ async function main(): Promise<void> {
   // exactamente la misma regla que esta reparación.
   const { data: sospechosas, error: errorVista } = await supabase
     .from("atribuciones_sospechosas")
-    .select("id, atribuida_a, handle_del_enlace, parece_de");
+    .select("id, atribuida_a, handle_del_enlace, parece_de")
+    // Las ya descartadas no cuentan: seguirían apareciendo en la vista y harían
+    // que el informe dijera "8 sospechosas, 0 acciones", que parece un fallo.
+    .in("estado", ["publicada", "borrador"]);
   if (errorVista) throw new Error(errorVista.message);
 
   const { data: fichas, error: errorFichas } = await supabase
     .from("fichas")
     .select("id, insight, notion_page_id, fuente_url, creador_id, creadores!inner(slug)")
-    .eq("estado", "publicada");
+    // También los borradores: una reparación anterior pudo dejarlos ahí, y hay
+    // que poder revisar la decisión. Los grupos se forman por `notion_page_id`,
+    // que solo tienen las fichas migradas, así que esto no puede publicar sin
+    // querer un borrador recién ingerido y pendiente de revisar.
+    .in("estado", ["publicada", "borrador"]);
   if (errorFichas) throw new Error(errorFichas.message);
 
   const todas = (fichas ?? []) as unknown as Ficha[];
@@ -115,10 +130,11 @@ async function main(): Promise<void> {
     }
 
     // Sin veredicto: el enlace no identifica al autor, o no hay enlace.
+    // Se quedan las dos, marcadas. Ver la cabecera del archivo.
     for (const f of grupo) {
       yaTratadas.add(f.id);
       acciones.push({
-        tipo: "a-borrador",
+        tipo: "marcar-incierta",
         ficha: f,
         porque: f.fuente_url
           ? `el enlace (${new URL(f.fuente_url).hostname}) no dice de quién es el canal`
@@ -143,7 +159,7 @@ async function main(): Promise<void> {
   }
 
   // --- Informe --------------------------------------------------------------
-  console.log(`\n${grupos.length} página(s) de Notion con más de una ficha publicada.`);
+  console.log(`\n${grupos.length} página(s) de Notion con más de una ficha viva.`);
   console.log(`${(sospechosas ?? []).length} ficha(s) con el handle del enlace en contra.\n`);
 
   if (acciones.length === 0) {
@@ -151,7 +167,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const etiqueta = { descartar: "DESCARTAR ", reasignar: "REASIGNAR ", "a-borrador": "A BORRADOR" } as const;
+  const etiqueta = {
+    descartar: "DESCARTAR ",
+    reasignar: "REASIGNAR ",
+    "marcar-incierta": "INCIERTA  ",
+  } as const;
   for (const a of acciones) {
     const destino = a.tipo === "reasignar" ? ` -> ${a.aSlug}` : "";
     console.log(`${etiqueta[a.tipo]} [${a.ficha.id}] ${a.ficha.creadores?.slug}${destino}`);
@@ -162,7 +182,7 @@ async function main(): Promise<void> {
   const cuenta = (t: Accion["tipo"]): number => acciones.filter((a) => a.tipo === t).length;
   console.log(
     `Resumen: ${cuenta("descartar")} descartadas · ${cuenta("reasignar")} reasignadas · ` +
-      `${cuenta("a-borrador")} a revisión manual`,
+      `${cuenta("marcar-incierta")} marcadas de origen incierto`,
   );
 
   if (!aplicar) {
@@ -174,18 +194,25 @@ async function main(): Promise<void> {
     const cambio =
       a.tipo === "reasignar"
         ? { creador_id: a.aId }
-        : { estado: a.tipo === "descartar" ? "descartada" : "borrador" };
+        : a.tipo === "descartar"
+          ? { estado: "descartada" }
+          : // Se publica y se marca: la reparación anterior las había mandado a
+            // borrador, y ahora la política es servirlas diciendo la duda.
+            { estado: "publicada", origen_incierto: true };
 
     const { error } = await supabase.from("fichas").update(cambio).eq("id", a.ficha.id);
     if (error) throw new Error(`Ficha ${a.ficha.id}: ${error.message}`);
   }
   console.log(`\n${acciones.length} ficha(s) actualizadas.`);
 
-  console.log(
-    `\nLas que van a borrador NO se sirven hasta decidir de quién son:\n` +
-      `  npm run revisar\n` +
-      `Para resolverlas hay que ver el vídeo, o encontrar el enlace que falta.`,
-  );
+  if (cuenta("marcar-incierta") > 0) {
+    console.log(
+      `\nLas de origen incierto SÍ se sirven, con la técnica pero sin el guion\n` +
+        `literal, y citando el perfil del creador en vez de un vídeo dudoso.\n` +
+        `Para resolver una hace falta ver el vídeo o encontrar el enlace: al\n` +
+        `poner su fuente_url y quitar origen_incierto, el guion vuelve solo.`,
+    );
+  }
 }
 
 main().catch((error: unknown) => {
