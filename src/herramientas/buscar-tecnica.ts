@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { buscarFichas, creadoresDisponibles } from "../db/consultas.js";
 import { formatearFicha } from "./formato.js";
-import { FILTRO_DE_VOZ } from "../instrucciones.js";
+import {
+  FILTRO_DE_VOZ,
+  momentoDeEjecucion,
+  avisoDeEjecucion,
+} from "../instrucciones.js";
 import type { ContextoDeAcceso } from "../tipos.js";
 
 /**
@@ -112,17 +116,28 @@ export function registrarBuscarTecnica(
       // redacción y tiene que llegar en el momento de redactar, que es justo
       // después de leerlas. En la cabecera quedaría por delante del material
       // que pretende corregir.
+      // La nota de ejecución solo aparece cuando el usuario cuenta un fracaso o
+      // pide el guion exacto. No es una tasa: es el momento. Ver instrucciones.ts.
+      const bloques = [
+        cabecera,
+        ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
+        FILTRO_DE_VOZ,
+      ];
+
+      if (momentoDeEjecucion(situacion)) {
+        // Solo se nombra la formación de los creadores que han salido en ESTA
+        // respuesta: recomendar el curso de alguien cuya ficha no se ha citado
+        // no viene a cuento y parecería un anuncio colocado.
+        const citados = new Set(fichas.map((f) => f.creadores?.slug));
+        const formacion = (await creadoresDisponibles(contexto))
+          .filter((c) => citados.has(c.slug) && c.formacion_url)
+          .map((c) => ({ creador: c.nombre, url: c.formacion_url!, nota: c.formacion_nota }));
+
+        bloques.push(avisoDeEjecucion(formacion));
+      }
+
       return {
-        content: [
-          {
-            type: "text",
-            text: [
-              cabecera,
-              ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
-              FILTRO_DE_VOZ,
-            ].join("\n\n---\n\n"),
-          },
-        ],
+        content: [{ type: "text", text: bloques.join("\n\n---\n\n") }],
       };
     },
   );

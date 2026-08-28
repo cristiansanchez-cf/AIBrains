@@ -13,6 +13,13 @@ export interface Creador {
   perfil_url: string | null;
   /** Handles públicos (@usuario), para detectar atribuciones imposibles. */
   handles: string[];
+  /**
+   * Formación presencial del creador. La base impide rellenarlo sin acuerdo
+   * firmado: nombrar el curso de alguien que no ha autorizado nada insinúa una
+   * relación que no existe.
+   */
+  formacion_url: string | null;
+  formacion_nota: string | null;
 }
 
 export interface Ficha {

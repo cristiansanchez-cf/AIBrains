@@ -56,7 +56,7 @@ async function creadoresSuscritos(userId: string): Promise<Creador[]> {
   const { data, error } = await supabase
     .from("suscripciones")
     .select(
-      "creador_id, creadores!inner ( id, slug, nombre, dominio, activo, acuerdo_firmado, beta_interna )",
+      "creador_id, creadores!inner ( id, slug, nombre, dominio, activo, acuerdo_firmado, beta_interna, perfil_url, handles, formacion_url, formacion_nota )",
     )
     .eq("user_id", userId)
     .eq("activa", true)

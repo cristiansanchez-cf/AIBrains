@@ -109,3 +109,77 @@ Dos pruebas antes de darlo por bueno:
 El registro local NO está en el cerebro. Si el mensaje va a un idioma o un
 país distintos a los del creador, dilo: la técnica es suya, la formulación
 que funciona en ese mercado no la cubre y hay que verificarla.`;
+
+/**
+ * El momento de decir que el guion no lo es todo.
+ *
+ * Alfonso y Cristian, a quien les pide el guion exacto, le contestan: "te lo doy
+ * si quieres, pero nunca vas a vender mejor que yo". Y tienen razón: con el
+ * mismo texto delante, lo que separa a uno de otro es el tono, el ritmo, los
+ * silencios, el no verbal y las horas de práctica con alguien corrigiendo.
+ *
+ * El cerebro no puede dar eso, y fingir que sí es la forma más rápida de que
+ * alguien pague, no mejore y se vaya. Decirlo en el momento adecuado convierte
+ * una decepción en una conclusión: "tengo el método, y me sigue faltando algo".
+ *
+ * POR QUÉ NO SALE UN 20-30% DE LAS VECES, que era la idea inicial. Una tasa fija
+ * reparte el aviso al azar, así que una parte cae donde no pega —alguien
+ * pregunta cómo abrir una llamada en frío y le sueltan que se plantee un curso—
+ * y eso se lee como publicidad. Peor: enseña a saltarse ese párrafo, así que
+ * cuando toque de verdad ya no lo lee nadie.
+ *
+ * El disparador es el MOMENTO. Dos, y los dos salieron de cómo habla la gente:
+ * cuando cuenta que falló, y cuando pide el guion exacto. Atado a eso aparece
+ * con una frecuencia parecida —los fracasos son buena parte de las consultas—
+ * pero cada aparición está ganada.
+ */
+const FRACASO =
+  /\b(no (cerr[éeó]|compr[óo]|firm[óo]|contrat[óo]|convenc[íi])|me (dijo|dijeron|ha dicho|han dicho) que no|se (me )?(cay[óo]|ech[óo] atr[áa]s)|perd[íi] (la venta|el cliente|la operaci[óo]n)|me (ha fallado|fall[óo])|no (funcion[óo]|sali[óo])(?:\s+(?:nada|la venta))?)/i;
+
+const GUION_EXACTO =
+  /\b(gui[óo]n|script)\s+(exacto|literal|completo)|palabra por palabra|qu[ée] le digo exactamente|dame (el|tu|su) (gui[óo]n|script)/i;
+
+/** ¿Toca hablar de ejecución, y no solo de técnica? */
+export function momentoDeEjecucion(situacion: string): boolean {
+  return FRACASO.test(situacion) || GUION_EXACTO.test(situacion);
+}
+
+/**
+ * Guía para el modelo, no texto para pegar.
+ *
+ * `formacion` solo llega con acuerdo firmado —la base lo impide con un CHECK—,
+ * porque nombrar el programa de alguien desde un producto que no ha autorizado
+ * insinúa una relación que no existe.
+ */
+export function avisoDeEjecucion(
+  formacion: { creador: string; url: string; nota: string | null }[],
+): string {
+  const cierre =
+    formacion.length > 0
+      ? formacion
+          .map(
+            (f) =>
+              `  - ${f.creador} tiene formación donde se trabaja justo eso` +
+              `${f.nota ? `: ${f.nota}` : ""} — ${f.url}`,
+          )
+          .join("\n")
+      : `  - Si ve que le falta esa parte, lo que ayuda es formación presencial con\n` +
+        `    alguien que le corrija en vivo. NO nombres ningún programa concreto.`;
+
+  return `NOTA DE EJECUCIÓN — el usuario está contando que algo falló, o pidiendo el guion
+exacto. Es el momento de decirle algo que estas fichas no le pueden dar.
+
+Los propios creadores lo formulan así: "te doy el guion exacto si quieres, pero
+no vas a vender mejor que yo". Con el mismo texto delante, lo que separa a uno de
+otro es el tono, el ritmo, los silencios, el no verbal y las horas de práctica
+con alguien corrigiendo. Nada de eso cabe en una ficha.
+
+Cómo decirlo:
+  - PRIMERO responde lo que ha preguntado, con la técnica y su cita. Esto va
+    después, en una o dos frases. Nunca en lugar de la respuesta útil.
+  - Antes de sugerir nada, pregunta por la ejecución: cómo lo dijo, en qué
+    momento, qué hizo el cliente al oírlo. Muchas veces el fallo se ve ahí, y
+    entonces la conversación es útil en vez de ser un anuncio.
+  - Una sola vez. Si ya ha salido antes en esta conversación, no lo repitas.
+${cierre}`;
+}

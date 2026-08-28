@@ -168,3 +168,66 @@ Si más adelante se ve que todo el mundo lo pide, será señal para reconsiderar
 4. Página de producto + pago + guía de instalación.
 5. Vender a diez personas. Escuchar.
 6. Y solo entonces: más cerebros, volumen, comunidad.
+
+---
+
+## El cerebro como embudo hacia la formación del creador
+
+> Añadido el 28/08/2026, de una conversación sobre qué ofrecerle a los creadores.
+
+### El argumento, en sus propias palabras
+
+Alfonso y Cristian responden a quien les pide el guion exacto:
+
+> *"Te puedo dar el guion exacto, te lo doy si quieres, pero nunca vas a vender
+> mejor que yo."*
+
+Porque no es el qué se dice, es cómo. Tono, ritmo, silencios, no verbal, y sobre
+todo horas de práctica con alguien delante corrigiendo.
+
+### Por qué eso es una oportunidad y no una objeción
+
+El cerebro **es la respuesta** a esa petición. El creador puede decir: *"¿Quieres
+mi guion? Toma mi cerebro, inténtalo"*. Y entonces pasa lo interesante: la
+persona tiene todos los recursos, está pagando, lo intenta — **y sigue sin
+cerrar**. Ese es el momento en que entiende, por experiencia propia y no porque
+se lo digan, que le falta lo otro.
+
+Ahí el cerebro no vende: constata. Y la conclusión natural es la formación
+presencial del creador.
+
+**Para la negociación esto pesa más que el reparto de ingresos.** No es "déjame
+usar tu contenido a cambio del 70%", es "te llevo gente cualificada a tu programa
+de 5.000 €, gente que ya ha pagado por tu método y ya ha comprobado que necesita
+más". El cerebro deja de ser un competidor de su formación y pasa a ser su
+captación.
+
+### Cómo se implementa, y por qué NO al azar
+
+La tentación era hacerlo salir en un 20-30% de las respuestas. Es el control
+equivocado: un aviso en un momento que no lo pide se lee como publicidad, y a
+quien ya paga le molesta. Peor, enseña a saltarse ese párrafo — así que cuando
+toque de verdad, ya nadie lo lee.
+
+El disparador es **el momento, no la frecuencia**. Dos:
+
+1. El usuario cuenta que **falló** — "me dijo que no", "no cerré", "se me cayó".
+2. El usuario pide **el guion exacto** — "dime qué le digo palabra por palabra".
+
+Atado a eso sale con una frecuencia parecida (los fracasos son buena parte de las
+consultas) pero cada aparición está ganada.
+
+### Qué se nombra, y cuándo
+
+| | Sin acuerdo | Con acuerdo |
+|---|---|---|
+| El principio ("el guion no lo es todo") | Sí | Sí |
+| Recomendar formación presencial, en genérico | Sí | Sí |
+| **Nombrar el programa del creador** | **No** | Sí |
+
+Nombrar el curso de alguien desde un producto que no ha autorizado insinúa una
+relación que no existe. Es exactamente el tipo de cosa que provoca un burofax, y
+además es la pieza que hace valioso el acuerdo: se activa al firmar.
+
+Campos: `creadores.formacion_url` y `creadores.formacion_nota`. Vacíos hasta que
+haya acuerdo.
