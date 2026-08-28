@@ -48,34 +48,52 @@ describe("guion literal — modo de servicio", () => {
     expect(t).toContain("¿Aparte de eso, hay algo más que te frene?");
   });
 
-  // El fallo que este test existe para impedir es de los caros: servir la
-  // expresión literal de alguien con quien no hay acuerdo.
-  it("en modo referencia NO aparece por ninguna parte", () => {
-    const t = formatearFicha(ficha({ script: null, modo: "referencia" }), 1);
+  // ESTE TEST ESTABA MAL Y NO PODÍA FALLAR. Construía la ficha con
+  // `script: null` y luego afirmaba que el guion no salía: comprobaba que un
+  // formateador al que le pasas null no imprime null. Lo señaló una revisión
+  // independiente.
+  //
+  // La entrada que importa es la que sí trae texto. Hoy la vista de Postgres lo
+  // anula antes de llegar aquí, pero eso es precisamente lo que hay que poder
+  // comprobar por separado: si la vista fallara, esto tiene que aguantar.
+  it("con guion REAL en modo referencia, no lo imprime", () => {
+    const t = formatearFicha(
+      ficha({ script: "¿Aparte de eso, hay algo más que te frene?", modo: "referencia" }),
+      1,
+    );
     expect(t).not.toContain("¿Aparte de eso, hay algo más que te frene?");
     expect(t).toContain("no disponible en este cerebro");
   });
 
+  it("con guion REAL y origen incierto, tampoco", () => {
+    const t = formatearFicha(
+      ficha({ script: "palabras de alguien", origen_incierto: true, modo: "completo" }),
+      1,
+    );
+    expect(t).not.toContain("palabras de alguien");
+    expect(t).toContain("no se ha podido determinar cuál lo dijo");
+  });
+
   it("en modo referencia sí se sirve la técnica y el porqué", () => {
-    const t = formatearFicha(ficha({ script: null, modo: "referencia" }), 1);
+    const t = formatearFicha(ficha({ script: "texto real", modo: "referencia" }), 1);
     expect(t).toContain("Aísla la objeción antes de resolverla");
     expect(t).toContain("Evita ir resolviendo objeciones en cadena");
     expect(t).toContain("https://www.tiktok.com/@x/video/1");
-  });
-
-  it("origen incierto retiene el guion aunque el modo sea completo", () => {
-    const t = formatearFicha(ficha({ script: null, origen_incierto: true }), 1);
-    expect(t).not.toContain("¿Aparte de eso");
   });
 
   // Los dos motivos para retener el guion se arreglan de formas distintas —uno
   // encontrando el vídeo, otro firmando un acuerdo—, así que el mensaje tiene
   // que distinguirlos o el usuario no sabe qué falta.
   it("distingue por qué falta el guion en cada caso", () => {
-    expect(formatearFicha(ficha({ script: null, origen_incierto: true }), 1))
+    expect(formatearFicha(ficha({ origen_incierto: true }), 1))
       .toContain("no se ha podido determinar cuál lo dijo");
-    expect(formatearFicha(ficha({ script: null, modo: "referencia" }), 1))
+    expect(formatearFicha(ficha({ modo: "referencia" }), 1))
       .toContain("solo se sirven con su acuerdo");
+  });
+
+  it("una ficha sin guion no finge que se le ha retenido uno", () => {
+    const t = formatearFicha(ficha({ script: null, tiene_script: false }), 1);
+    expect(t).not.toContain("Script literal");
   });
 });
 

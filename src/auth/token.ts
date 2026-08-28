@@ -37,6 +37,9 @@ export async function verificarToken(token: string): Promise<UsuarioAutenticado>
     // aparte, abajo, para poder decir QUÉ vino cuando no cuadra.
     const { payload } = await jwtVerify(token, jwks, {
       issuer: issuerDeAutorizacion(),
+      // Explícito aunque jose ya impida la confusión de claves por diseño: no
+      // cuesta nada y quita la duda a quien lo lea.
+      algorithms: ["ES256", "RS256"],
     });
 
     comprobarProcedencia(payload);
@@ -81,6 +84,16 @@ export async function verificarToken(token: string): Promise<UsuarioAutenticado>
  * del servidor OAuth. Sin esta comprobación, el token de sesión de cualquier
  * usuario de cualquier aplicación del mismo proyecto de Supabase serviría para
  * leer las fichas.
+ *
+ * LO QUE ESTO NO GARANTIZA, y conviene no leerlo de más: `client_id` prueba que
+ * el token salió del flujo OAuth, NO que saliera PARA este servidor. Cualquier
+ * cliente registrado contra el mismo proyecto de Supabase produce tokens que
+ * aquí valen, y el registro dinámico está abierto por diseño de MCP.
+ *
+ * Mientras el único consumidor de este proyecto sea el Cerebro, el riesgo es el
+ * de siempre en OAuth: que alguien convenza al usuario de pulsar "Autorizar" en
+ * una pantalla que dice qué está autorizando. Cuando en el mismo proyecto viva
+ * otra aplicación —la web—, hay que rellenar CEREBRO_CLIENTES_PERMITIDOS.
  */
 function comprobarProcedencia(payload: Record<string, unknown>): void {
   if (typeof payload["client_id"] !== "string" || !payload["client_id"]) {
@@ -88,8 +101,23 @@ function comprobarProcedencia(payload: Record<string, unknown>): void {
       "El token no procede del flujo OAuth (le falta client_id)",
     );
   }
-  if (typeof payload["scope"] !== "string" || !payload["scope"]) {
+  const scope = payload["scope"];
+  if (typeof scope !== "string" || !scope) {
     throw new TokenInvalido("El token no lleva scopes");
+  }
+
+  // Se exige `openid` de verdad, no solo "que haya algo". Comprobado con
+  // `npm run prueba:oauth` el 29/08/2026: un token real trae "openid email".
+  // Antes los scopes se parseaban y no se miraban en ningún sitio.
+  if (!scope.split(" ").includes("openid")) {
+    throw new TokenInvalido(`El token no incluye el scope "openid" (trae: ${scope})`);
+  }
+
+  // Lista blanca de clientes, si está configurada. Vacía por defecto porque el
+  // registro dinámico hace impredecibles los client_id; ver config.ts.
+  const permitidos = config.auth.clientesPermitidos;
+  if (permitidos.length > 0 && !permitidos.includes(payload["client_id"] as string)) {
+    throw new TokenInvalido("El token es de un cliente que no está autorizado en este servidor");
   }
 
   // Si algún día Supabase implementa RFC 8707, basta con poner esta variable

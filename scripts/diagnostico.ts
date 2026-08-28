@@ -238,16 +238,61 @@ async function comprobarVerjas(): Promise<Resultado> {
     }
   }
 
-  // 2. Ningún borrador puede estar en la vista.
-  const { count: borradoresVisibles } = await supabase
-    .from("fichas_servibles")
-    .select("id", { count: "exact", head: true })
-    .in("id", await idsDeBorradores());
-  if ((borradoresVisibles ?? 0) > 0) {
-    fallos.push(`${borradoresVisibles} borrador(es) visibles en fichas_servibles`);
+  // 2. Ninguna ficha no publicada puede estar en la vista.
+  //
+  // Antes solo miraba 'borrador' y HOY NO HAY NINGUNO: el check pasaba en vacío
+  // y aun así el mensaje decía "probado: borradores". Declaraba una
+  // comprobación que no había hecho, que es peor que no tenerla — un verde
+  // falso no se vuelve a mirar. Lo señaló una revisión independiente.
+  //
+  // Ahora mira los dos estados y solo dice haber probado lo que había.
+  const { data: noPublicadas } = await supabase
+    .from("fichas")
+    .select("id, estado")
+    .neq("estado", "publicada");
+
+  const ids = (noPublicadas ?? []).map((f) => f.id as number);
+  const estados = [...new Set((noPublicadas ?? []).map((f) => f.estado as string))];
+
+  if (ids.length > 0) {
+    const { count: visibles } = await supabase
+      .from("fichas_servibles")
+      .select("id", { count: "exact", head: true })
+      .in("id", ids);
+    if ((visibles ?? 0) > 0) {
+      fallos.push(`${visibles} ficha(s) no publicadas visibles en fichas_servibles`);
+    }
   }
 
-  // 3. Ningún guion de un creador en modo referencia puede salir de la base.
+  // 3. La clave PÚBLICA no puede ejecutar funciones ni leer las vistas.
+  //
+  // Durante nueve migraciones el patrón `revoke all ... from public` no revocaba
+  // nada: Supabase concede EXECUTE a anon/authenticated por NOMBRE, y revocar de
+  // PUBLIC no toca concesiones nominales. Con la clave pública —que va dentro
+  // del HTML de la pantalla de login— se podía llamar a `reindexar_fichas`, que
+  // es security definer y hace DROP INDEX sobre producción.
+  //
+  // Se comprueba porque es un control invisible: si vuelve a abrirse, todo
+  // sigue funcionando igual y nadie se entera.
+  const publica = config.supabase.publishableKey;
+  if (publica) {
+    const base = config.supabase.url.replace(/\/$/, "");
+    const cabeceras = { apikey: publica, Authorization: `Bearer ${publica}` };
+
+    const rpc = await fetch(`${base}/rest/v1/rpc/creadores_servibles`, {
+      method: "POST",
+      headers: { ...cabeceras, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (rpc.ok) fallos.push(`la clave pública puede ejecutar creadores_servibles (HTTP ${rpc.status})`);
+
+    const vista = await fetch(`${base}/rest/v1/fichas_servibles?select=id&limit=1`, {
+      headers: cabeceras,
+    });
+    if (vista.ok) fallos.push(`la clave pública puede leer fichas_servibles (HTTP ${vista.status})`);
+  }
+
+  // 4. Ningún guion de un creador en modo referencia puede salir de la base.
   const referencia = (servibles ?? [])
     .filter((c: { modo: string }) => c.modo === "referencia")
     .map((c: { id: string }) => c.id);
@@ -266,26 +311,29 @@ async function comprobarVerjas(): Promise<Resultado> {
     return { nivel: "fallo", titulo: "Verjas de la base", detalle: fallos.join("; ") };
   }
 
+  // Solo se nombra lo que se ha podido probar de verdad. Si no hay fichas no
+  // publicadas, no se dice "probado: borradores": no se probó nada.
   const cubierto = [
     noAutorizado ? "creador no autorizado" : null,
-    "borradores",
+    ids.length > 0 ? `fichas ${estados.join("/")}` : null,
+    publica ? "clave pública sin acceso" : null,
     referencia.length > 0 ? "guion en modo referencia" : null,
+  ].filter(Boolean);
+
+  const sinProbar = [
+    ids.length === 0 ? "fichas no publicadas (no hay ninguna)" : null,
+    referencia.length === 0 ? "guion en modo referencia (ningún creador en ese modo)" : null,
   ].filter(Boolean);
 
   return {
     nivel: "ok",
     titulo: "Verjas de la base",
-    detalle: `nada se cuela por fichas_servibles (probado: ${cubierto.join(", ")})`,
+    detalle:
+      `nada se cuela por fichas_servibles (probado: ${cubierto.join(", ")})` +
+      (sinProbar.length > 0 ? ` — SIN probar: ${sinProbar.join(", ")}` : ""),
   };
 }
 
-/** Ids de fichas en borrador, para poder preguntar si alguna se cuela. */
-async function idsDeBorradores(): Promise<number[]> {
-  const { data } = await supabase.from("fichas").select("id").eq("estado", "borrador");
-  // Sin borradores, un `.in("id", [])` devolvería 0 igualmente, que es lo
-  // correcto: no hay nada que se pueda colar.
-  return (data ?? []).map((f) => f.id as number);
-}
 
 /**
  * Fichas atribuidas a quien no publicó el vídeo de origen.

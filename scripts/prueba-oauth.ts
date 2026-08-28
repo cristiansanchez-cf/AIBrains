@@ -231,12 +231,19 @@ async function main(): Promise<void> {
     }
 
     // Y con suscripción, lo contrario: tiene que ver justo ese.
+    //
+    // Se elige un creador SERVIBLE de verdad, preguntándoselo a la base. Antes
+    // estaba fijo a `demo-pruebas`, que en algún momento se desactivó: desde
+    // entonces la prueba decía "NO ve su cerebro <-- ROTO" cuando el código
+    // hacía justo lo correcto —creadores_servibles() exige `activo`—. Una
+    // prueba que grita sin motivo se acaba ignorando, igual que una que calla.
     const creadorDemo = await json(
-      await fetch(
-        `${config.supabase.url}/rest/v1/creadores?slug=eq.demo-pruebas&select=id`,
-        { headers: { apikey: CLAVE, Authorization: `Bearer ${CLAVE}` } },
-      ),
-      "buscar creador de demo",
+      await fetch(`${config.supabase.url}/rest/v1/rpc/creadores_servibles`, {
+        method: "POST",
+        headers: cabecerasAdmin,
+        body: "{}",
+      }),
+      "buscar un creador servible",
     );
 
     if (creadorDemo[0]) {
@@ -249,12 +256,25 @@ async function main(): Promise<void> {
         tipo: "usuario",
         userId: userId!,
       });
+      const esperado = creadorDemo[0].slug as string;
+      const loVe = conAcceso.some((c) => c.slug === esperado);
       console.log(
-        conAcceso.some((c) => c.slug === "demo-pruebas")
-          ? "  usuario con suscripción → ve su cerebro. Correcto."
-          : "  usuario con suscripción → NO ve su cerebro  <-- ROTO",
+        loVe
+          ? `  usuario con suscripción → ve su cerebro (${esperado}). Correcto.`
+          : `  usuario con suscripción → NO ve ${esperado}  <-- ROTO`,
       );
-      if (!conAcceso.some((c) => c.slug === "demo-pruebas")) process.exitCode = 1;
+      if (!loVe) process.exitCode = 1;
+
+      // Y no debe ver NADA MÁS que lo suscrito, que es la regla 4.
+      const sobrantes = conAcceso.filter((c) => c.slug !== esperado);
+      if (sobrantes.length > 0) {
+        console.log(
+          `  pero VE ADEMÁS ${sobrantes.map((c) => c.slug).join(", ")}  <-- FUGA`,
+        );
+        process.exitCode = 1;
+      }
+    } else {
+      console.log("  no hay ningún creador servible: no se puede comprobar el acceso.");
     }
   } finally {
     // Limpieza. Los fallos se dicen en voz alta: la primera versión se los

@@ -57,9 +57,17 @@ export function formatearFicha(ficha: FichaConCreador, indice: number): string {
   // Esto era un parámetro `modo` obligatorio que el llamante tenía que acertar.
   // Funcionaba, pero dejaba la regla legal dependiendo de que cada sitio se
   // acordara. Ahora la aplica Postgres y esta función solo redacta.
-  if (ficha.script) {
+  //
+  // La condición repite lo que ya hace la vista, y es a propósito. Al bajar la
+  // regla a Postgres esto quedó en `if (ficha.script)` a secas: correcto
+  // mientras la vista funcione, pero se perdió el segundo cerrojo. Si algún día
+  // una consulta lee de otro sitio, o alguien toca la vista, esto sigue sin
+  // imprimir el guion. Cuesta una condición.
+  const puedeServirGuion = ficha.modo === "completo" && !ficha.origen_incierto;
+
+  if (ficha.script && puedeServirGuion) {
     partes.push(`**Script literal:**\n> ${ficha.script.replace(/\n/g, "\n> ")}`);
-  } else if (ficha.tiene_script) {
+  } else if (ficha.tiene_script || ficha.script) {
     partes.push(
       ficha.origen_incierto
         ? `**Script literal:** _no se sirve. Esta ficha aparecía atribuida a más de un ` +

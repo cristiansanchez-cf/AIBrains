@@ -190,7 +190,10 @@ async function main(): Promise<void> {
     return autores.map((nombre) => ({
       notion_page_id: f.pageId,
       creador_id: idsPorNombre.get(nombre)!,
-      ...(enBorrador && { estado: "borrador" }),
+      // Explícito desde que el default de la columna es 'borrador'. Estas 402
+      // vienen de Notion, donde ya pasaron por revisión humana, así que se
+      // publican — pero dicho aquí, no heredado de un default que puede cambiar.
+      estado: enBorrador ? "borrador" : "publicada",
       dominio: aDominio(f.area),
       insight: f.insight,
       tecnica: f.tecnica,

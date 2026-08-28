@@ -253,7 +253,13 @@ http.listen(config.http.puerto, () => {
   console.error(
     `[cerebro] HTTP escuchando en :${config.http.puerto}${RUTA_MCP} — Supabase: ${config.supabase.url}`,
   );
+  // Condicional. Salía siempre, también con CEREBRO_AUTH=si, así que quien
+  // leyera los logs de Railway concluía que el servidor estaba abierto cuando
+  // no lo estaba. Un aviso que miente en un sentido acabará ignorándose en el
+  // otro, que es el que importa.
   console.error(
-    "[cerebro] AVISO: sin autenticación. Cualquiera con la URL puede leer las fichas que se sirvan.",
+    config.auth.activada
+      ? "[cerebro] Autenticación OAuth ACTIVA."
+      : "[cerebro] AVISO: SIN autenticación. Cualquiera con la URL puede leer las fichas que se sirvan.",
   );
 });

@@ -138,6 +138,25 @@ export const config = {
      * Cuando Supabase lo implemente, poner aquí la URL del recurso.
      */
     audienciaEsperada: process.env.CEREBRO_AUDIENCIA_ESPERADA ?? "",
+    /**
+     * Lista blanca de `client_id`, separados por comas. VACÍA POR DEFECTO.
+     *
+     * El problema, señalado por una revisión independiente: `client_id` prueba
+     * que el token salió del flujo OAuth, pero NO que saliera para este
+     * servidor. Cualquier cliente registrado contra el mismo proyecto de
+     * Supabase sirve — y el registro dinámico está abierto por diseño.
+     *
+     * Por qué no se activa por defecto: con registro dinámico cada cliente MCP
+     * (Claude Desktop, Claude Code, ChatGPT) se registra solo y su `client_id`
+     * no se puede conocer de antemano. Una lista blanca obligatoria rompería
+     * las conexiones nuevas.
+     *
+     * Para qué sirve entonces: cuando en este mismo proyecto de Supabase viva
+     * otra aplicación —la web de la fase 4, por ejemplo—, sus tokens también
+     * valdrían aquí. Ese día se rellena esto con los client_id conocidos y se
+     * cierra la puerta.
+     */
+    clientesPermitidos: listaOpcional("CEREBRO_CLIENTES_PERMITIDOS"),
   },
 
   http: {
