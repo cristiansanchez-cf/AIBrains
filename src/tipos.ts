@@ -1,4 +1,11 @@
-/** Tipos del modelo de datos. Espejo de supabase/migrations/0001_esquema_inicial.sql */
+/**
+ * Tipos del modelo de datos.
+ *
+ * Espejo de `supabase/migrations/`, que es donde manda el esquema. Si añades una
+ * columna allí y la lees desde aquí, añádela también: `select("*")` la traerá en
+ * tiempo de ejecución aunque el tipo la niegue, y entonces el compilador deja de
+ * avisar de nada.
+ */
 
 export interface Creador {
   id: string;
@@ -9,6 +16,16 @@ export interface Creador {
   acuerdo_firmado: boolean;
   /** Pruebas internas sin acuerdo. Nunca para usuarios de pago. */
   beta_interna: boolean;
+  /** Fin de vigencia del acuerdo. Nulo = sin fecha de fin pactada. */
+  acuerdo_hasta: string | null;
+  acuerdo_nota: string | null;
+  /** El acuerdo autoriza servir el guion literal, y usar el nombre como marca. */
+  permite_guion: boolean;
+  permite_marca: boolean;
+  /** Caducidad de la beta sin acuerdo. Sin ella la beta no puede encenderse. */
+  beta_interna_hasta: string | null;
+  /** Decisión explícita de servirlo en modo referencia. Por defecto false. */
+  servir_sin_acuerdo: boolean;
   /** Perfil público. Respaldo de cita cuando no se conoce el vídeo exacto. */
   perfil_url: string | null;
   /** Handles públicos (@usuario), para detectar atribuciones imposibles. */
@@ -70,11 +87,24 @@ export type ModoDeServicio = "completo" | "referencia";
 /** Creador con el modo en el que puede servirse ahora mismo. */
 export interface CreadorServible extends Creador {
   modo: ModoDeServicio;
+  /** Si la web puede usar su nombre como marca del producto. Regla legal. */
+  puede_usar_marca: boolean;
+  /** Si se puede recomendar su formación: exige acuerdo EN VIGOR, no firmado alguna vez. */
+  puede_formacion: boolean;
 }
 
-/** Ficha tal y como sale de la consulta, con el creador ya resuelto. */
+/**
+ * Ficha tal y como sale de `fichas_servibles`, con el creador resuelto.
+ *
+ * `script` viene ya retenido por la base cuando no se puede servir, así que
+ * `tiene_script` es lo que distingue "retenido" de "esta ficha nunca tuvo
+ * guion". Sin esa distinción, una ficha sin guion mostraría un aviso de
+ * "no disponible" que sería mentira.
+ */
 export interface FichaConCreador extends Ficha {
   creadores: Pick<Creador, "slug" | "nombre" | "perfil_url"> | null;
+  modo: ModoDeServicio;
+  tiene_script: boolean;
 }
 
 /**

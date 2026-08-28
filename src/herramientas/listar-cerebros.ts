@@ -80,7 +80,10 @@ async function contarFichasPorCreador(
   creadorIds: string[],
 ): Promise<Map<string, number>> {
   const { data, error } = await supabase
-    .from("fichas")
+    // `fichas_servibles`, no `fichas`: contar sobre la tabla incluía borradores
+    // que la búsqueda nunca puede devolver, así que el usuario veía un número
+    // mayor que el contenido real. Era la tercera copia de la misma regla.
+    .from("fichas_servibles")
     .select("creador_id")
     .in("creador_id", creadorIds);
 

@@ -18,7 +18,7 @@ const DESCRIPCION = `Busca en el cerebro de ventas la técnica destilada que apl
 
 Úsala SIEMPRE que el usuario plantee una situación de ventas —redactar un mensaje a un cliente, rebatir una objeción, precio, seguimiento, cierre, negociación— ANTES de responder desde conocimiento general.
 
-Devuelve fichas con el guion literal del creador y el enlace al vídeo original. Al usar el resultado: di en qué creador y ficha te basas, y cierra con las referencias y sus enlaces.`;
+Devuelve la técnica, cuándo usarla, por qué funciona y el enlace al vídeo original. En algunos cerebros incluye además el guion literal del creador; en otros no está disponible y la propia ficha lo dice. Al usar el resultado: di en qué creador y ficha te basas, y cierra con las referencias y sus enlaces.`;
 
 export function registrarBuscarTecnica(
   servidor: McpServer,
@@ -108,7 +108,9 @@ export function registrarBuscarTecnica(
       // en el handshake.
       const cabecera =
         `${fichas.length} ficha(s) del cerebro para: "${situacion}".` +
-        "\n\nUsa los guiones tal cual y atribúyelos a su creador. Si añades algo " +
+        "\n\nAtribuye cada técnica a su creador. Donde haya guion literal, úsalo tal " +
+        "cual; donde la ficha diga que no está disponible, NO lo reconstruyas. " +
+        "Si añades algo " +
         "que no está en estas fichas, di que es aportación tuya. Cierra con los " +
         "enlaces de la sección Fuente.";
 
@@ -118,24 +120,15 @@ export function registrarBuscarTecnica(
       // que pretende corregir.
       // La nota de ejecución solo aparece cuando el usuario cuenta un fracaso o
       // pide el guion exacto. No es una tasa: es el momento. Ver instrucciones.ts.
-      // El modo lo decide la base, creador a creador. Se resuelve una vez y se
-      // aplica a cada ficha según de quién sea: en una respuesta pueden salir
-      // fichas de un creador con acuerdo y de otro sin él.
+      // El modo viaja DENTRO de cada ficha, desde `fichas_servibles`. Antes se
+      // resolvía aquí un mapa slug -> modo y se cruzaba a mano, con un respaldo
+      // defensivo que solo existía porque el dato se había perdido por el
+      // camino. Ahora no se pierde.
       const disponibles = await creadoresDisponibles(contexto);
-      const modoPorSlug = new Map(disponibles.map((c) => [c.slug, c.modo]));
 
       const bloques = [
         cabecera,
-        ...fichas.map((ficha, i) =>
-          formatearFicha(
-            ficha,
-            i + 1,
-            // Si el creador no aparece, el modo restrictivo. No debería pasar
-            // —la ficha ha salido de una búsqueda ya filtrada— pero ante la
-            // duda se retiene el guion, no se regala.
-            modoPorSlug.get(ficha.creadores?.slug ?? "") ?? "referencia",
-          ),
-        ),
+        ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
         FILTRO_DE_VOZ,
       ];
 
@@ -145,7 +138,9 @@ export function registrarBuscarTecnica(
         // no viene a cuento y parecería un anuncio colocado.
         const citados = new Set(fichas.map((f) => f.creadores?.slug));
         const formacion = disponibles
-          .filter((c) => citados.has(c.slug) && c.formacion_url)
+          // `puede_formacion`, no `formacion_url`: la base comprueba que el acuerdo
+          // esté EN VIGOR. Un acuerdo vencido seguía recomendando el curso.
+          .filter((c) => citados.has(c.slug) && c.puede_formacion && c.formacion_url)
           .map((c) => ({ creador: c.nombre, url: c.formacion_url!, nota: c.formacion_nota }));
 
         bloques.push(avisoDeEjecucion(formacion));

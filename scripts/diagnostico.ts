@@ -117,7 +117,9 @@ async function comprobarCreadores(): Promise<Resultado> {
 
   const { data, error } = await supabase
     .from("creadores")
-    .select("id, slug, acuerdo_firmado, acuerdo_hasta, beta_interna, beta_interna_hasta");
+    .select(
+      "id, slug, acuerdo_firmado, acuerdo_hasta, beta_interna, beta_interna_hasta, servir_sin_acuerdo",
+    );
   if (error) throw new Error(error.message);
 
   const idsServibles = new Set((servibles ?? []).map((c: { id: string }) => c.id));
@@ -135,7 +137,7 @@ async function comprobarCreadores(): Promise<Resultado> {
   // después de que pase no sirve de nada: para entonces el cerebro ya no
   // responde y parece una avería.
   const caducan = servidos
-    .filter((c) => !c.acuerdo_firmado && dias(c.beta_interna_hasta) <= 30)
+    .filter((c) => !c.acuerdo_firmado && c.beta_interna && dias(c.beta_interna_hasta) <= 30)
     .map((c) => `${c.slug} en ${dias(c.beta_interna_hasta)} día(s)`);
 
   if (caducan.length > 0) {
@@ -148,7 +150,24 @@ async function comprobarCreadores(): Promise<Resultado> {
     };
   }
 
-  const enBeta = servidos.filter((c) => !c.acuerdo_firmado);
+  // Modo referencia NO es beta: es el producto sin acuerdos, que sí se puede
+  // comercializar. Meterlos en el mismo saco daba un "no comercializable" falso
+  // y permanente sobre justo el caso que existe para poder vender — y un aviso
+  // que miente se acaba ignorando, arrastrando a los demás.
+  const enReferencia = servidos.filter(
+    (c) => !c.acuerdo_firmado && !c.beta_interna && c.servir_sin_acuerdo,
+  );
+  if (enReferencia.length > 0) {
+    return {
+      nivel: "aviso",
+      titulo: "Respaldo legal de lo que se sirve",
+      detalle:
+        `${enReferencia.map((c) => c.slug).join(", ")} en MODO REFERENCIA: sin acuerdo, ` +
+        `se sirve la técnica y no el guion literal. Comercializable; revisar con un abogado.`,
+    };
+  }
+
+  const enBeta = servidos.filter((c) => !c.acuerdo_firmado && c.beta_interna);
   if (enBeta.length > 0) {
     return {
       nivel: "aviso",
@@ -174,6 +193,99 @@ async function comprobarCreadores(): Promise<Resultado> {
 }
 
 // --- 4. Embeddings ----------------------------------------------------------
+
+/**
+ * Ataca las verjas en vez de confirmarlas.
+ *
+ * Existe porque una revisión independiente encontró que la ruta de búsqueda de
+ * respaldo —la léxica, la que corre cuando el RPC falla— no filtraba por estado
+ * ni cruzaba con los creadores autorizados. O sea que degradar fallaba hacia
+ * ABIERTO, y justo cuando nadie mira.
+ *
+ * El arreglo fue bajar las tres reglas a la vista `fichas_servibles`. Esto
+ * comprueba que siguen ahí, preguntando por lo que NO debería salir. Un test que
+ * solo confirma que lo bueno pasa no habría detectado nada de aquello.
+ */
+async function comprobarVerjas(): Promise<Resultado> {
+  const fallos: string[] = [];
+
+  // 1. Un creador sin autorización tiene fichas en la tabla; no debe tener
+  //    ninguna en la vista.
+  const { data: creadores } = await supabase.from("creadores").select("id, slug, activo");
+  const { data: servibles } = await supabase.rpc("creadores_servibles");
+  const autorizados = new Set((servibles ?? []).map((c: { id: string }) => c.id));
+  const noAutorizado = (creadores ?? []).find((c) => !autorizados.has(c.id));
+
+  if (noAutorizado) {
+    const { count: enTabla } = await supabase
+      .from("fichas")
+      .select("id", { count: "exact", head: true })
+      .eq("creador_id", noAutorizado.id)
+      .eq("estado", "publicada");
+    const { count: enVista } = await supabase
+      .from("fichas_servibles")
+      .select("id", { count: "exact", head: true })
+      .eq("creador_id", noAutorizado.id);
+
+    if ((enVista ?? 0) > 0) {
+      fallos.push(
+        `${noAutorizado.slug} no está autorizado y aparecen ${enVista} fichas suyas en fichas_servibles`,
+      );
+    } else if ((enTabla ?? 0) === 0) {
+      fallos.push(
+        `no se ha podido comprobar la verja de creador: ${noAutorizado.slug} no tiene fichas publicadas`,
+      );
+    }
+  }
+
+  // 2. Ningún borrador puede estar en la vista.
+  const { count: borradoresVisibles } = await supabase
+    .from("fichas_servibles")
+    .select("id", { count: "exact", head: true })
+    .in("id", await idsDeBorradores());
+  if ((borradoresVisibles ?? 0) > 0) {
+    fallos.push(`${borradoresVisibles} borrador(es) visibles en fichas_servibles`);
+  }
+
+  // 3. Ningún guion de un creador en modo referencia puede salir de la base.
+  const referencia = (servibles ?? [])
+    .filter((c: { modo: string }) => c.modo === "referencia")
+    .map((c: { id: string }) => c.id);
+  if (referencia.length > 0) {
+    const { count: guionesFiltrados } = await supabase
+      .from("fichas_servibles")
+      .select("id", { count: "exact", head: true })
+      .in("creador_id", referencia)
+      .not("script", "is", null);
+    if ((guionesFiltrados ?? 0) > 0) {
+      fallos.push(`${guionesFiltrados} guion(es) literales saliendo de creadores en modo referencia`);
+    }
+  }
+
+  if (fallos.length > 0) {
+    return { nivel: "fallo", titulo: "Verjas de la base", detalle: fallos.join("; ") };
+  }
+
+  const cubierto = [
+    noAutorizado ? "creador no autorizado" : null,
+    "borradores",
+    referencia.length > 0 ? "guion en modo referencia" : null,
+  ].filter(Boolean);
+
+  return {
+    nivel: "ok",
+    titulo: "Verjas de la base",
+    detalle: `nada se cuela por fichas_servibles (probado: ${cubierto.join(", ")})`,
+  };
+}
+
+/** Ids de fichas en borrador, para poder preguntar si alguna se cuela. */
+async function idsDeBorradores(): Promise<number[]> {
+  const { data } = await supabase.from("fichas").select("id").eq("estado", "borrador");
+  // Sin borradores, un `.in("id", [])` devolvería 0 igualmente, que es lo
+  // correcto: no hay nada que se pueda colar.
+  return (data ?? []).map((f) => f.id as number);
+}
 
 /**
  * Fichas atribuidas a quien no publicó el vídeo de origen.
@@ -387,6 +499,7 @@ async function main(): Promise<void> {
   comprobarEntorno();
   await comprobar("Base de datos", comprobarBase);
   await comprobar("Creadores", comprobarCreadores);
+  await comprobar("Verjas", comprobarVerjas);
   await comprobar("Atribución", comprobarAtribucion);
   await comprobar("Embeddings", comprobarEmbeddings);
   await comprobar("Búsqueda semántica", comprobarSemantica);

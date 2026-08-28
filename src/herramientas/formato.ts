@@ -1,4 +1,4 @@
-import type { FichaConCreador, ModoDeServicio } from "../tipos.js";
+import type { FichaConCreador } from "../tipos.js";
 
 /**
  * Renderiza una ficha para el cliente MCP.
@@ -7,17 +7,7 @@ import type { FichaConCreador, ModoDeServicio } from "../tipos.js";
  * modelo tiene que citar (arquitectura §5) y no queremos que se pierdan en
  * medio de un script largo.
  */
-export function formatearFicha(
-  ficha: FichaConCreador,
-  indice: number,
-  /**
-   * Obligatorio a propósito: no tiene valor por defecto porque cualquiera de
-   * los dos sería el equivocado. 'completo' por defecto serviría material sin
-   * licencia si alguien olvida pasarlo; 'referencia' escondería en silencio lo
-   * que sí se ha pagado. Que el compilador obligue a decidir en cada sitio.
-   */
-  modo: ModoDeServicio,
-): string {
+export function formatearFicha(ficha: FichaConCreador, indice: number): string {
   const creador = ficha.creadores?.nombre ?? "creador desconocido";
   const partes: string[] = [
     `### ${indice}. ${ficha.insight}`,
@@ -59,31 +49,28 @@ export function formatearFicha(
     );
   }
 
-  // El guion literal se retiene por dos razones distintas, y conviene que el
-  // mensaje diga cuál, porque una se arregla encontrando un vídeo y la otra
+  // El guion ya viene retenido por la base: `fichas_servibles` lo anula cuando
+  // no se puede servir. Aquí solo se explica POR QUÉ falta, que es información
+  // distinta según el caso — uno se arregla encontrando un vídeo y el otro
   // firmando un acuerdo.
   //
-  //   origen_incierto  -> no sabemos de QUIÉN son esas palabras.
-  //   modo referencia  -> sabemos de quién son y no tenemos permiso para
-  //                       reproducirlas. La técnica es un método y no está
-  //                       protegida; el guion es expresión ajena y sí lo está.
+  // Esto era un parámetro `modo` obligatorio que el llamante tenía que acertar.
+  // Funcionaba, pero dejaba la regla legal dependiendo de que cada sitio se
+  // acordara. Ahora la aplica Postgres y esta función solo redacta.
   if (ficha.script) {
-    if (ficha.origen_incierto) {
-      partes.push(
-        `**Script literal:** _no se sirve. Esta ficha aparecía atribuida a más de un ` +
-          `creador y no se ha podido determinar cuál lo dijo, así que la técnica sí y ` +
-          `las palabras textuales no._`,
-      );
-    } else if (modo === "referencia") {
-      partes.push(
-        `**Script literal:** _no disponible en este cerebro. La técnica y el ` +
-          `razonamiento son tuyos; las palabras textuales de ${creador} solo se ` +
-          `sirven con su acuerdo. Tienes el enlace al original para oírselas a él._`,
-      );
-    } else {
-      partes.push(`**Script literal:**\n> ${ficha.script.replace(/\n/g, "\n> ")}`);
-    }
+    partes.push(`**Script literal:**\n> ${ficha.script.replace(/\n/g, "\n> ")}`);
+  } else if (ficha.tiene_script) {
+    partes.push(
+      ficha.origen_incierto
+        ? `**Script literal:** _no se sirve. Esta ficha aparecía atribuida a más de un ` +
+            `creador y no se ha podido determinar cuál lo dijo, así que la técnica sí y ` +
+            `las palabras textuales no._`
+        : `**Script literal:** _no disponible en este cerebro. La técnica y el ` +
+            `razonamiento son tuyos; las palabras textuales de ${creador} solo se ` +
+            `sirven con su acuerdo. Tienes el enlace al original para oírselas a él._`,
+    );
   }
+
   if (ficha.por_que_funciona) partes.push(`**Por qué funciona:** ${ficha.por_que_funciona}`);
 
   const pasos = normalizarPasos(ficha.como_aplicarlo);

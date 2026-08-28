@@ -9,10 +9,17 @@ import type {
   ModoDeServicio,
 } from "../tipos.js";
 
-/** Columnas que se devuelven al cliente. `transcripcion` y `embedding` no salen. */
+/**
+ * Columnas que se devuelven al cliente, leídas de `fichas_servibles`.
+ *
+ * Esa vista NO es la tabla: trae ya aplicadas las tres reglas —creador
+ * autorizado, ficha publicada, y el guion solo si el acuerdo lo permite—. Leer
+ * de `public.fichas` para servir es lo que provocó que esta ruta sirviera
+ * borradores y saltara la verja de autorización.
+ */
 const COLUMNAS_FICHA = `
-  id, creador_id, dominio,
-  insight, tecnica, script, por_que_funciona, como_aplicarlo, cuando_usarlo,
+  id, creador_id, dominio, modo,
+  insight, tecnica, script, tiene_script, por_que_funciona, como_aplicarlo, cuando_usarlo,
   no_aplicar_cuando, verificar_antes,
   origen_incierto,
   etapa, familia, area, objecion, tags, confianza,
@@ -36,13 +43,6 @@ const CAMPOS_BUSCABLES = [
 ] as const;
 
 /**
- * Creadores que se le pueden servir a quien pregunta.
- *
- * Dos condiciones que no se saltan nunca: `activo`, y respaldo para servirse
- * —`acuerdo_firmado` (arquitectura §8) o `beta_interna` para el círculo
- * cerrado de pruebas. Encima de eso, quién pregunta decide qué ve.
- */
-/**
  * Quién puede servirse, según la ÚNICA definición: `creadores_servibles()` en
  * Postgres (migración 20260828194500).
  *
@@ -54,14 +54,37 @@ const CAMPOS_BUSCABLES = [
  * El RPC de búsqueda la vuelve a aplicar por dentro. Es a propósito: si este
  * código se equivocara, no saldría contenido sin licencia igualmente.
  */
-async function modoPorCreador(): Promise<Map<string, ModoDeServicio>> {
+interface FilaServible {
+  id: string;
+  modo: ModoDeServicio;
+  puede_usar_marca: boolean;
+  puede_formacion: boolean;
+}
+
+async function permisosPorCreador(): Promise<Map<string, FilaServible>> {
   const { data, error } = await supabase.rpc("creadores_servibles");
   if (error) {
     throw new Error(`No se pudo comprobar qué creadores son servibles: ${error.message}`);
   }
-  return new Map(
-    (data ?? []).map((c: { id: string; modo: ModoDeServicio }) => [c.id, c.modo]),
-  );
+  return new Map((data ?? []).map((c: FilaServible) => [c.id, c]));
+}
+
+/**
+ * Pega los permisos al creador.
+ *
+ * El respaldo restrictivo —'referencia', sin marca, sin formación— es
+ * deliberado: ante una ausencia inesperada se retiene, no se regala. Está en
+ * una función y no repetido en cada consulta para que la política de respaldo
+ * viva en un solo sitio.
+ */
+function conPermisos(c: Creador, permisos: Map<string, FilaServible>): CreadorServible {
+  const p = permisos.get(c.id);
+  return {
+    ...c,
+    modo: p?.modo ?? "referencia",
+    puede_usar_marca: p?.puede_usar_marca ?? false,
+    puede_formacion: p?.puede_formacion ?? false,
+  };
 }
 
 export async function creadoresDisponibles(
@@ -80,7 +103,7 @@ export async function creadoresDisponibles(
  */
 async function creadoresSuscritos(userId: string): Promise<CreadorServible[]> {
   const ahora = new Date().toISOString();
-  const modos = await modoPorCreador();
+  const modos = await permisosPorCreador();
   if (modos.size === 0) return [];
 
   const { data, error } = await supabase
@@ -91,7 +114,7 @@ async function creadoresSuscritos(userId: string): Promise<CreadorServible[]> {
     .eq("user_id", userId)
     .eq("activa", true)
     .or(`expira_en.is.null,expira_en.gt.${ahora}`)
-    // La verja de autorización ya no se repite aquí: la pone `idsServibles`.
+    // La verja de autorización no se repite aquí: la pone `modoPorCreador`.
     .in("creador_id", [...modos.keys()]);
 
   if (error) {
@@ -101,7 +124,7 @@ async function creadoresSuscritos(userId: string): Promise<CreadorServible[]> {
   const creadores = (data ?? [])
     .map((fila) => (fila as unknown as { creadores: Creador }).creadores)
     .filter(Boolean)
-    .map((c) => ({ ...c, modo: modos.get(c.id) ?? "referencia" }) as CreadorServible);
+    .map((c) => conPermisos(c, modos));
 
   return creadores.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
@@ -113,7 +136,7 @@ async function creadoresSuscritos(userId: string): Promise<CreadorServible[]> {
  * CEREBRO_CREADORES_POR_DEFECTO. Vacía = todos los que pasen los dos gates.
  */
 async function creadoresSinAuth(): Promise<CreadorServible[]> {
-  const modos = await modoPorCreador();
+  const modos = await permisosPorCreador();
   if (modos.size === 0) return [];
 
   let consulta = supabase
@@ -129,9 +152,7 @@ async function creadoresSinAuth(): Promise<CreadorServible[]> {
 
   const { data, error } = await consulta.order("nombre");
   if (error) throw new Error(`No se pudieron leer los creadores: ${error.message}`);
-  // El "referencia" del respaldo es deliberado: ante una ausencia inesperada, el
-  // modo restrictivo. Un fallo aquí debe retener el guion, no regalarlo.
-  return (data ?? []).map((c) => ({ ...c, modo: modos.get(c.id) ?? "referencia" }) as CreadorServible);
+  return (data ?? []).map((c) => conPermisos(c, modos));
 }
 
 export interface FiltrosBusqueda {
@@ -210,15 +231,12 @@ async function buscarPorSimilitud(
 
   // La función devuelve el creador aplanado; se vuelve a anidar para que el
   // formateo no tenga que saber de dónde vino la ficha.
-  return (data ?? []).map((fila: Record<string, unknown>) => ({
-    ...fila,
-    creadores: {
-      slug: fila["creador_slug"] as string,
-      nombre: fila["creador_nombre"] as string,
-      // Sin esto el respaldo de cita al perfil funcionaría por la ruta léxica y
-      // no por la vectorial, que es la que se usa el 99% de las veces.
-      perfil_url: (fila["perfil_creador"] as string | null) ?? null,
-    },
+  // El RPC devuelve { ficha: jsonb, similitud }. Antes devolvía columnas sueltas
+  // y aquí se reconstruía el objeto a mano, campo por campo — que es como se
+  // perdió `perfil_url` por esta ruta y no por la otra durante un rato.
+  return (data ?? []).map((fila: { ficha: FichaConCreador; similitud: number }) => ({
+    ...fila.ficha,
+    similitud: fila.similitud,
   })) as unknown as FichaConCreador[];
 }
 
@@ -237,7 +255,11 @@ async function buscarPorTexto(
   const terminos = terminosDeBusqueda(filtros.situacion);
 
   let consulta = supabase
-    .from("fichas")
+    // `fichas_servibles`, no `fichas`. La diferencia es todo: la vista aplica el
+    // estado, la autorización del creador y la retención del guion. Antes esta
+    // ruta —la de respaldo, la que corre cuando el RPC falla— no aplicaba
+    // ninguna de las tres, así que degradar fallaba hacia ABIERTO.
+    .from("fichas_servibles")
     .select(COLUMNAS_FICHA)
     .in("creador_id", creadorIds);
 
