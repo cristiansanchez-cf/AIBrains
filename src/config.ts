@@ -93,6 +93,20 @@ export const config = {
     timeoutMs: Number(process.env.INTERNALAPPS_TIMEOUT_MS ?? 20 * 60 * 1000),
   },
 
+  stripe: {
+    /**
+     * dashboard.stripe.com > Desarrolladores > Claves API. Empieza por sk_.
+     *
+     * Sin ella el servidor arranca igual y el flujo de acuerdo funciona hasta el
+     * paso de Stripe: el creador queda autorizado y su contenido se sirve; lo
+     * único pendiente es transferirle, y su parte se acumula. Es a propósito —
+     * un problema de papeleo no debe bloquear una venta.
+     */
+    secretKey: process.env.STRIPE_SECRET_KEY ?? "",
+    /** Para verificar la firma de los webhooks. Empieza por whsec_. */
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+  },
+
   notion: {
     /** Token de integración interna. Solo lo usa el script de migración. */
     token: process.env.NOTION_TOKEN ?? "",

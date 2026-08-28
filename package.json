@@ -35,13 +35,15 @@
     "atribucion": "tsx scripts/atribucion.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prueba:equipos": "tsx scripts/prueba-equipos.ts"
+    "prueba:equipos": "tsx scripts/prueba-equipos.ts",
+    "acuerdo": "tsx scripts/acuerdo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@supabase/supabase-js": "^2.112.3",
     "jose": "^6.2.9",
+    "stripe": "^22.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
