@@ -9,8 +9,10 @@
  * actualiza en vez de duplicar. Esa es también la base del futuro flujo de
  * mantenimiento continuo.
  *
- * Las fichas con dos autores se duplican, una copia por creador: la
- * atribución queda limpia y cada suscripción ve la suya.
+ * Las fichas con dos autores NO se duplican a ciegas. Se hacía, y producía
+ * atribuciones falsas: dos filas con la misma `fuente_url`, así que una de las
+ * dos siempre firmaba un vídeo que no era suyo. Ahora decide el handle del
+ * enlace, y si no lo dice, la ficha entra en borrador.
  *
  * OJO: los creadores se crean con `acuerdo_firmado = false`, o sea que quedan
  * cargados pero NO se sirven. Es el gate legal de la arquitectura §8 y se
@@ -113,17 +115,19 @@ async function main(): Promise<void> {
   // --- Creadores ------------------------------------------------------------
   console.log("\n=== creadores ===");
   const idsPorNombre = new Map<string, string>();
+  const handlesPorNombre = new Map<string, string[]>();
 
   for (const [nombre, suyas] of porCreador) {
     const slug = aSlug(nombre);
     const { data: existente } = await supabase
       .from("creadores")
-      .select("id, acuerdo_firmado")
+      .select("id, acuerdo_firmado, handles")
       .eq("slug", slug)
       .maybeSingle();
 
     if (existente) {
       idsPorNombre.set(nombre, existente.id);
+      handlesPorNombre.set(nombre, existente.handles ?? []);
       console.log(
         `  ${nombre} — ya existía (acuerdo firmado: ${existente.acuerdo_firmado ? "sí" : "NO"})`,
       );
@@ -145,14 +149,48 @@ async function main(): Promise<void> {
 
     if (error) throw new Error(`Creador ${nombre}: ${error.message}`);
     idsPorNombre.set(nombre, data.id);
+    // Un creador recién creado no tiene handles todavía: sus fichas con doble
+    // autoría irán a borrador hasta que alguien los rellene. Es el lado seguro.
+    handlesPorNombre.set(nombre, []);
     console.log(`  ${nombre} — creado, SIN acuerdo firmado (no se servirá)`);
   }
 
   // --- Filas ----------------------------------------------------------------
-  const porInsertar = fichas.flatMap((f) =>
-    f.creadores.map((nombre) => ({
+  //
+  // Una ficha de Notion con dos autores producía UNA FILA POR CREADOR, todas con
+  // la MISMA `fuente_url`. Con un solo vídeo de origen eso garantiza que una de
+  // las copias atribuya a quien no lo dijo, y así se sirvieron 11 fichas: el
+  // TikTok de Manuel Trejo firmado por Alfonso y Cristian.
+  //
+  // Ahora el enlace decide. Si lleva el handle de uno de los autores, la ficha es
+  // suya y solo suya. Si no lo lleva —Spotify, YouTube, o sin enlace— no se puede
+  // saber, así que se emiten las dos copias pero como BORRADOR: quedan fuera del
+  // producto y entran en la cola de `npm run revisar`. Misma política que usa
+  // `npm run atribucion` para reparar lo que ya estaba escrito.
+  const ambiguas: string[] = [];
+
+  const porInsertar = fichas.flatMap((f) => {
+    let autores = f.creadores;
+
+    if (autores.length > 1) {
+      const handle = f.fuenteUrl?.match(/@([A-Za-z0-9_.\-]+)/)?.[1]?.toLowerCase();
+      const dueño = handle
+        ? autores.find((n) => (handlesPorNombre.get(n) ?? []).includes(handle))
+        : undefined;
+
+      if (dueño) {
+        autores = [dueño];
+      } else {
+        ambiguas.push(`${f.insight.slice(0, 58)} — ${autores.join(" / ")}`);
+      }
+    }
+
+    const enBorrador = autores.length > 1;
+
+    return autores.map((nombre) => ({
       notion_page_id: f.pageId,
       creador_id: idsPorNombre.get(nombre)!,
+      ...(enBorrador && { estado: "borrador" }),
       dominio: aDominio(f.area),
       insight: f.insight,
       tecnica: f.tecnica,
@@ -172,8 +210,16 @@ async function main(): Promise<void> {
       fuente_timestamp: segundoDeLaUrl(f.fuenteUrl),
       creado_en: f.creadoEn,
       embedding: null as string | null,
-    })),
-  );
+    }));
+  });
+
+  if (ambiguas.length > 0) {
+    console.log(
+      `\n=== ${ambiguas.length} ficha(s) con doble autoría SIN poder decidir de quién son ===`,
+    );
+    console.log(`Entran como BORRADOR, no se sirven. Para resolverlas: npm run revisar\n`);
+    for (const a of ambiguas) console.log(`  ${a}`);
+  }
 
   // --- Embeddings -----------------------------------------------------------
   console.log(`\n=== embeddings (${porInsertar.length} vectores) ===`);

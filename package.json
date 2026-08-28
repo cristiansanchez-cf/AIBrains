@@ -31,7 +31,8 @@
     "revisar": "tsx scripts/revisar.ts",
     "fuentes": "tsx scripts/fuentes.ts",
     "voz": "tsx scripts/evaluar-voz.ts",
-    "condiciones": "tsx scripts/condiciones-de-uso.ts"
+    "condiciones": "tsx scripts/condiciones-de-uso.ts",
+    "atribucion": "tsx scripts/atribucion.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

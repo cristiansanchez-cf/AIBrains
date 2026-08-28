@@ -136,6 +136,80 @@ async function comprobarCreadores(): Promise<Resultado> {
 
 // --- 4. Embeddings ----------------------------------------------------------
 
+/**
+ * Fichas atribuidas a quien no publicó el vídeo de origen.
+ *
+ * Es el fallo más caro que puede tener este producto, porque lo único que vende
+ * es que la cita sea correcta, y además es SILENCIOSO: la ficha se ve impecable,
+ * el enlace funciona, y solo se nota si alguien reconoce el vídeo. Se sirvieron
+ * 11 así hasta que se midió.
+ *
+ * ALCANCE, para que un OK no se lea como más de lo que es: la vista solo compara
+ * plataformas cuyo enlace lleva el handle dentro (TikTok, Instagram). Spotify y
+ * YouTube no dicen de quién es el canal, y ahí está la mayor parte del catálogo
+ * de Alfonso y Cristian. Que esto salga en verde no significa que toda la
+ * atribución esté verificada.
+ */
+async function comprobarAtribucion(): Promise<Resultado> {
+  const { data, error } = await supabase
+    .from("atribuciones_sospechosas")
+    .select("id, atribuida_a, parece_de")
+    .eq("estado", "publicada");
+
+  if (error) {
+    return {
+      nivel: "fallo",
+      titulo: "Atribución de las fichas",
+      detalle: `no se pudo comprobar: ${error.message}`,
+    };
+  }
+
+  if ((data ?? []).length > 0) {
+    const ejemplos = (data ?? [])
+      .slice(0, 3)
+      .map((f) => `[${f.id}] dice ${f.atribuida_a}, el enlace es de ${f.parece_de}`)
+      .join("; ");
+    return {
+      nivel: "fallo",
+      titulo: "Atribución de las fichas",
+      detalle:
+        `${data!.length} ficha(s) publicadas citan a quien no publicó el vídeo. ` +
+        `${ejemplos}. Repara con: npm run atribucion`,
+    };
+  }
+
+  // Fichas de Notion que produjeron más de una fila publicada: es el mecanismo
+  // que fabricaba las falsas, y puede reaparecer por otra vía.
+  const { data: paginas } = await supabase
+    .from("fichas")
+    .select("notion_page_id")
+    .eq("estado", "publicada")
+    .not("notion_page_id", "is", null);
+
+  const cuenta = new Map<string, number>();
+  for (const f of paginas ?? []) {
+    const k = f.notion_page_id as string;
+    cuenta.set(k, (cuenta.get(k) ?? 0) + 1);
+  }
+  const duplicadas = [...cuenta.values()].filter((n) => n > 1).length;
+
+  if (duplicadas > 0) {
+    return {
+      nivel: "fallo",
+      titulo: "Atribución de las fichas",
+      detalle:
+        `${duplicadas} ficha(s) de Notion generaron más de una fila publicada. ` +
+        `Comparten fuente, así que alguna atribuye mal. npm run atribucion`,
+    };
+  }
+
+  return {
+    nivel: "ok",
+    titulo: "Atribución de las fichas",
+    detalle: "ningún enlace contradice a su creador (solo se comprueba TikTok/Instagram)",
+  };
+}
+
 async function comprobarEmbeddings(): Promise<Resultado> {
   if (!hayEmbeddings()) {
     return { nivel: "aviso", titulo: "Clave de OpenAI válida", detalle: "no configurada" };
@@ -262,6 +336,7 @@ async function main(): Promise<void> {
   comprobarEntorno();
   await comprobar("Base de datos", comprobarBase);
   await comprobar("Creadores", comprobarCreadores);
+  await comprobar("Atribución", comprobarAtribucion);
   await comprobar("Embeddings", comprobarEmbeddings);
   await comprobar("Búsqueda semántica", comprobarSemantica);
   await comprobar("Suscripciones", comprobarSuscripciones);
