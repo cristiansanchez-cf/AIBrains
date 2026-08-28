@@ -26,6 +26,7 @@ import {
   documentoDeRecursoProtegido,
 } from "./auth/metadatos.js";
 import { TokenInvalido, tokenDeCabecera, verificarToken } from "./auth/token.js";
+import { catalogo } from "./api/catalogo.js";
 import type { ContextoDeAcceso } from "./tipos.js";
 
 const RUTA_MCP = "/mcp";
@@ -106,6 +107,33 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
 
   await servidor.connect(transporte);
   await transporte.handleRequest(req, res);
+}
+
+/**
+ * Catálogo público de cerebros.
+ *
+ * `Access-Control-Allow-Origin: *` es correcto aquí y no una dejadez: el
+ * endpoint no lleva autenticación, no lee cookies y no devuelve nada que no sea
+ * público. Restringirlo por origen daría una sensación de control que no
+ * existe —cualquiera puede pedirlo con curl igualmente— y complicaría el
+ * despliegue de la web sin ganar nada.
+ *
+ * Se cachea cinco minutos. El catálogo cambia cuando se firma un acuerdo o se
+ * ingiere un lote, o sea rara vez; y así una caída de este servidor no deja la
+ * portada en blanco de inmediato.
+ */
+async function servirCatalogo(res: ServerResponse): Promise<void> {
+  const cerebros = await catalogo();
+  const cuerpo = JSON.stringify({ cerebros });
+
+  res.writeHead(200, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": Buffer.byteLength(cuerpo),
+    "access-control-allow-origin": "*",
+    "cache-control": "public, max-age=300, stale-while-revalidate=3600",
+    "x-content-type-options": "nosniff",
+  });
+  res.end(cuerpo);
 }
 
 function falloDeScript(res: ServerResponse): void {
@@ -189,6 +217,31 @@ const http = createServer((req, res) => {
       return;
     }
     responderJson(res, 200, documentoDeRecursoProtegido());
+    return;
+  }
+
+  // API de lectura para la web. Ver src/api/catalogo.ts para por qué es un
+  // endpoint y no un permiso de Supabase sobre la vista.
+  if (ruta === "/api/catalogo") {
+    if (req.method === "OPTIONS") {
+      // Preflight. Sin esto el navegador no llega ni a hacer el GET.
+      res.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, OPTIONS",
+        "access-control-allow-headers": "content-type",
+        "access-control-max-age": "86400",
+      });
+      res.end();
+      return;
+    }
+    if (req.method !== "GET") {
+      responderJson(res, 405, { error: "Solo GET." });
+      return;
+    }
+    servirCatalogo(res).catch((error: unknown) => {
+      console.error("[cerebro] /api/catalogo:", error);
+      responderJson(res, 500, { error: "No se pudo leer el catálogo." });
+    });
     return;
   }
 
