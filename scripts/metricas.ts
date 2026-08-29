@@ -205,14 +205,31 @@ async function main(): Promise<void> {
   console.log(`\n=== uso real (últimos 7 días) ===\n`);
 
   const desde = new Date(Date.now() - 7 * 86_400_000).toISOString();
+
+  // SOLO EL TRÁFICO DE PERSONAS. `user_id` nulo son las comprobaciones internas
+  // —`npm run prueba`, `npm run diagnostico`, cualquier script de estos— y
+  // contarlas como uso real es un verde falso en el único informe que existe
+  // para no tenerlos: hoy dirían "68 consultas esta semana" cuando las personas
+  // han hecho cero. Y peor, los huecos de contenido saldrían de MIS preguntas,
+  // o sea que la lista de "fichas que faltan, ordenada por demanda" estaría
+  // ordenada por lo que yo escribo al probar.
   const { data: uso } = await supabase
     .from("consultas")
     .select("resultados, degradada, ms, similitud_max")
+    .not("user_id", "is", null)
+    .gte("cuando", desde);
+
+  const { count: internas } = await supabase
+    .from("consultas")
+    .select("id", { count: "exact", head: true })
+    .is("user_id", null)
     .gte("cuando", desde);
 
   const n = uso?.length ?? 0;
+  if (internas) console.log(`  (${internas} consultas internas excluidas: pruebas y diagnósticos)`);
   if (n === 0) {
-    console.log("  Sin consultas todavía. Nada que medir — no es un problema.");
+    console.log("  Sin consultas de personas todavía. Nada que medir — no es un problema.");
+    console.log("  Lo que SÍ es un problema: decidir cosas como si lo hubiera.");
   } else {
     const degradadas = uso!.filter((c) => c.degradada).length;
 
@@ -260,10 +277,13 @@ async function main(): Promise<void> {
   // este informe no lo miraba: se recogía el dato y no se leía nunca.
   console.log(`\n=== ¿se tira de las fichas relacionadas? ===\n`);
 
+  // Mismo filtro que arriba, por el mismo motivo: si un día pruebo `ver_ficha`
+  // a mano, no puede contar como que a la gente le interesan las relacionadas.
   const { data: usos } = await supabase
     .from("usos_de_herramienta")
     .select("origen")
     .eq("herramienta", "ver_ficha")
+    .not("user_id", "is", null)
     .gte("cuando", desde);
 
   const vistas = usos?.length ?? 0;
@@ -295,13 +315,28 @@ async function main(): Promise<void> {
     );
   }
 
-  const { data: topHuecos } = await supabase
-    .from("huecos_de_contenido")
-    .select("pregunta, veces")
-    .limit(5);
-  if (topHuecos?.length) {
+  // No se usa la vista `huecos_de_contenido` porque NO filtra por `user_id`:
+  // mezclaría mis pruebas con las preguntas de la gente. Se calcula aquí con el
+  // filtro puesto; la vista necesita la misma condición en una migración, y
+  // está anotado en docs/pendiente.md.
+  const { data: huecosReales } = await supabase
+    .from("consultas")
+    .select("situacion")
+    .not("user_id", "is", null)
+    .not("similitud_max", "is", null)
+    .lt("similitud_max", UMBRAL_HUECO)
+    .gte("cuando", desde);
+
+  if (huecosReales?.length) {
+    const veces = new Map<string, number>();
+    for (const h of huecosReales) {
+      const k = (h.situacion ?? "").trim();
+      veces.set(k, (veces.get(k) ?? 0) + 1);
+    }
     console.log(`\n=== lo que se pregunta y el cerebro no sabe ===\n`);
-    for (const h of topHuecos) console.log(`  ${String(h.veces).padStart(3)}x  "${h.pregunta.slice(0, 62)}"`);
+    for (const [pregunta, n] of [...veces.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+      console.log(`  ${String(n).padStart(3)}x  "${pregunta.slice(0, 62)}"`);
+    }
     console.log(`\n  Esto es la lista de fichas que faltan, ordenada por demanda.`);
   }
 

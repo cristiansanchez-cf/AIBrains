@@ -126,6 +126,12 @@ adaptador que las exponga con esos nombres, no la lógica.
 - **Políticas RLS para el rol `authenticated`.** Hoy el servidor usa la clave
   secreta y salta RLS, así que no cambia nada — pero es la siguiente puerta
   cuando la web consulte con el token del usuario.
+- **La vista `huecos_de_contenido` no filtra por `user_id`.** Mezcla las
+  preguntas de la gente con las de mis pruebas, así que "las fichas que faltan,
+  ordenadas por demanda" saldría ordenada por lo que escribo yo al probar.
+  `npm run metricas` ya no la usa —calcula los huecos con el filtro puesto—
+  pero la vista sigue mal para cualquier otro que la lea. Necesita `where
+  user_id is not null` en una migración.
 - **La política de privacidad tiene que mencionar el registro de consultas.**
   Se guarda lo que un comercial pregunta sobre sus operaciones. Retención: 90
   días, sin automatizar todavía.
