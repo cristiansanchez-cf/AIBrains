@@ -21,6 +21,7 @@ import { paginaDeConsentimiento } from "./auth/consentimiento.js";
 import { esRutaDeScript, scriptDeConsentimiento } from "./auth/script-consentimiento.js";
 import { crearServidor } from "./servidor.js";
 import { config } from "./config.js";
+import { estadoDeSalud, ultimoEstadoConocido } from "./salud.js";
 import {
   cabeceraWwwAuthenticate,
   documentoDeRecursoProtegido,
@@ -265,13 +266,28 @@ const http = createServer((req, res) => {
 
   // Railway comprueba que el proceso está vivo por aquí.
   //
+  // SIEMPRE 200 mientras el proceso pueda atender, y a propósito. Es el
+  // healthcheck de `railway.json`, con reinicio automático: si esto devolviera
+  // error porque OpenAI está caído, Railway mataría un contenedor sano que
+  // está sirviendo respuestas degradadas pero útiles, y lo reiniciaría en
+  // bucle mientras durase una avería que no es nuestra. El juicio honesto está
+  // en /salud, que no reinicia a nadie.
+  //
+  // Tampoco toca la base ni llama a nadie: se sondea sin parar y tiene que
+  // contestar en microsegundos.
+  //
   // Devuelve además qué protecciones están activas. Sin esto no hay forma de
   // saber desde fuera si una variable de entorno se quedó sin poner en la
   // plataforma. Son banderas de configuración, nunca valores: ni claves, ni
   // la URL de Supabase, ni los dominios permitidos.
   if (ruta === "/health") {
+    const conocido = ultimoEstadoConocido();
     responderJson(res, 200, {
       estado: "ok",
+      // Lo que /salud vio la última vez. `null` significa que nadie ha
+      // preguntado todavía: decir "ok" sin haberlo mirado sería justamente la
+      // mentira que este trabajo venía a quitar.
+      calidad: conocido,
       servidor: "cerebro-ventas",
       version: config.version,
       autenticacion: config.auth.activada ? "oauth (supabase)" : "ninguna",
@@ -279,6 +295,35 @@ const http = createServer((req, res) => {
       comprobacionDeHost: config.http.hostsPermitidos.length > 0,
       comprobacionDeOrigen: config.http.origenesPermitidos.length > 0,
     });
+    return;
+  }
+
+  // El estado de verdad. Lo miran una alarma y un humano, nunca el orquestador.
+  //
+  // 503 solo cuando está ROTO —la base no responde—, no cuando está degradado:
+  // degradado significa que se sigue sirviendo, peor, y una alarma que no
+  // distingue "responde peor" de "no responde" acaba ignorándose entera.
+  //
+  // Público y sin detalle sensible: nombres de comprobación y frases. Ni claves,
+  // ni consultas de usuarios, ni la URL de la base.
+  if (ruta === "/salud") {
+    void estadoDeSalud().then(
+      (salud) => responderJson(res, salud.estado === "roto" ? 503 : 200, salud),
+      (error: unknown) => {
+        // Que falle el propio medidor es en sí una avería, y tiene que verse
+        // como tal: un medidor que se rompe en silencio deja un verde eterno.
+        responderJson(res, 503, {
+          estado: "roto",
+          comprobaciones: [
+            {
+              nombre: "medidor",
+              estado: "roto",
+              detalle: error instanceof Error ? error.message : String(error),
+            },
+          ],
+        });
+      },
+    );
     return;
   }
 

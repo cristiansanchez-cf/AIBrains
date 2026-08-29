@@ -22,6 +22,7 @@
 | **Reglas duras** escritas | `docs/reglas-duras.md`, 11 reglas |
 | **Bucle de medición cerrado**: se guarda, se compara y falla solo | `npm run metricas`, semanal en CI |
 | **Fichas relacionadas** por parecido real, del mismo creador | `ver_ficha`, con su uso registrado |
+| **`/salud` dice la verdad y avisa solo** | Issue automática cada hora, se cierra sola |
 
 ---
 
@@ -43,15 +44,7 @@ estaban guardados, que no cuesta ninguna llamada a OpenAI.)*
 
 ## Siguiente, por orden
 
-### 1. Que `/health` diga la verdad, y avisar
-
-Hoy devuelve `"estado":"ok"` mientras el proceso esté vivo. Si OpenAI falla, la
-búsqueda degrada al respaldo léxico —del 90% al 79%— y `/health` sigue en verde.
-
-Con el registro ya puesto, la señal existe (`degradada`); falta que alguien la
-mire sin que se lo pidan.
-
-### 2. Velocidad, con el dato delante
+### 1. Velocidad, con el dato delante
 
 Medido: 656 ms por búsqueda, de los cuales **435 son viajes de red** y 284 la
 llamada a OpenAI. La búsqueda vectorial en sí son microsegundos.
@@ -61,24 +54,24 @@ calidad**: son deterministas (ver `docs/reglas-duras.md` §2). Pero primero hay
 que medir cuántas consultas se repiten, porque eso decide si la caché sirve del
 30% o del 90%.
 
-### 3. Calidad del contenido (P2)
+### 2. Calidad del contenido (P2)
 
 - `como_suena_mal` por ficha — la aportación principal del informe de uso
 - Medidor de la calidad de la destilación
 - Las 5 fichas que faltan (necesita material de los creadores)
 
-### 4. Ingesta a escala (P3)
+### 3. Ingesta a escala (P3)
 
 PDF, vídeo privado, troceado con reunificación de procedencia. **Se vuelve
 urgente el día que un creador diga que sí y pase 500 vídeos**, no antes.
 
-### 5. Lo que pida la web
+### 4. Lo que pida la web
 
 Estado de suscripción y panel de organización. Requiere decidir cómo autentica
 la web: el MCP usa tokens OAuth y la web tendrá sesiones normales de Supabase, y
 son cosas distintas.
 
-### 6. Adaptador `search`/`fetch` para ChatGPT
+### 5. Adaptador `search`/`fetch` para ChatGPT
 
 Quita dos de las tres pegas que hoy hacen que el producto se vea mal ahí. `ver_ficha`
 ya hace lo que tendría que hacer `fetch`, pero **no cumple el requisito**:

@@ -1,0 +1,126 @@
+# Que alguien mire el estado sin que se lo pidan.
+#
+# El servidor ya sabe si está respondiendo peor: /salud junta el tráfico real
+# (la columna `degradada`) con una sonda a OpenAI. Lo que faltaba es que ese
+# dato llegue a un sitio donde se vea sin ir a buscarlo.
+#
+# POR QUÉ AQUÍ Y NO DENTRO DEL SERVIDOR. Un vigilante que vive en el proceso
+# que vigila no sirve para el caso que más importa: el proceso caído. Mismo
+# motivo que `calidad.yml`.
+#
+# POR QUÉ CADA HORA Y NO CADA CINCO MINUTOS. Este repositorio es privado, y en
+# los privados GitHub cobra minutos de Actions redondeando cada ejecución al
+# minuto. Cada hora son ~720 minutos al mes de los 2.000 del plan gratuito;
+# cada cinco minutos serían 8.640, o sea imposible. Con tres usuarios en beta,
+# enterarse dentro de la hora es suficiente.
+#
+# SI ALGÚN DÍA HACE FALTA MÁS FINO, la respuesta NO es bajar el cron: es apuntar
+# un monitor externo (UptimeRobot y similares tienen plan gratuito de 5 minutos)
+# a https://cerebro.cofundo.io/salud, que devuelve 503 cuando está roto y 200
+# cuando no. Eso cuesta cero minutos de Actions.
+name: salud
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+
+# Sin esto, `gh issue` da 403: el permiso por defecto del repositorio es solo
+# lectura. Ya pasó con calidad.yml y el síntoma era una X en un workflow
+# programado de un repo privado, que es como no avisar.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  mirar:
+    runs-on: ubuntu-latest
+    # Un job sin checkout ni npm: es un curl. Cuanto menos haga, menos minutos
+    # cuesta y menos motivos tiene de fallar por su cuenta.
+    steps:
+      - name: Preguntar por el estado
+        id: estado
+        run: |
+          # Sin `-f`: interesa el cuerpo también cuando responde 503, que es
+          # justo el caso que hay que contar.
+          codigo=$(curl -s -m 30 -o respuesta.json -w "%{http_code}" \
+            https://cerebro.cofundo.io/salud || echo "000")
+
+          if [ "$codigo" = "000" ]; then
+            # No contestó siquiera. Es peor que roto: ni el medidor está.
+            echo "estado=incomunicado" >> "$GITHUB_OUTPUT"
+            echo "resumen=El servidor no responde en /salud (sin conexión o caído del todo)." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          estado=$(jq -r '.estado // "desconocido"' respuesta.json)
+          resumen=$(jq -r '[.comprobaciones[]? | select(.estado != "ok") | "- \(.nombre): \(.detalle)"] | join("\n")' respuesta.json)
+          [ -z "$resumen" ] && resumen="(todas las comprobaciones en orden)"
+
+          echo "estado=$estado" >> "$GITHUB_OUTPUT"
+          {
+            echo "resumen<<FIN"
+            echo "$resumen"
+            echo "FIN"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "HTTP $codigo · estado: $estado"
+          cat respuesta.json
+
+      - name: Abrir o cerrar el aviso
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ESTADO: ${{ steps.estado.outputs.estado }}
+          RESUMEN: ${{ steps.estado.outputs.resumen }}
+        run: |
+          # Se busca por el marcador del título en vez de por etiqueta: crear
+          # una incidencia con una etiqueta que no existe falla, y no quiero que
+          # la alarma dependa de que alguien haya creado la etiqueta a mano.
+          abierta=$(gh issue list --state open --search 'in:title "[salud]"' \
+            --json number --jq '.[0].number // empty')
+
+          if [ "$ESTADO" = "ok" ]; then
+            if [ -n "$abierta" ]; then
+              gh issue comment "$abierta" --body "Ya responde bien. Cerrada automáticamente."
+              gh issue close "$abierta"
+              echo "Recuperado: cerrada la incidencia #$abierta."
+            else
+              echo "Todo en orden."
+            fi
+            exit 0
+          fi
+
+          # UNA incidencia por episodio, no una por hora: un buzón con
+          # veinticuatro avisos idénticos se ignora igual que ninguno.
+          if [ -n "$abierta" ]; then
+            echo "Sigue mal, pero ya está abierta la #$abierta. No se duplica."
+            exit 0
+          fi
+
+          gh issue create \
+            --title "[salud] El cerebro está $ESTADO" \
+            --body "$(cat <<CUERPO
+          Detectado por el workflow \`salud\` a la hora en punto.
+
+          **Estado:** \`$ESTADO\`
+
+          Lo que no está bien:
+
+          $RESUMEN
+
+          ---
+
+          Qué significa cada estado, para no correr sin motivo:
+
+          - **degradado** — se sigue respondiendo, pero peor. Casi siempre es
+            OpenAI: la búsqueda cae del 90% de acierto al 79% y sigue el camino
+            léxico. El producto funciona; es menos bueno que la IA a secas
+            mientras dure. No hace falta despertar a nadie de madrugada.
+          - **roto** — la base no responde. Eso sí es una caída.
+          - **incomunicado** — el servidor no contesta. Mirar Railway.
+
+          Comprobar a mano: \`curl -s https://cerebro.cofundo.io/salud | jq\`
+
+          Se cierra sola en cuanto \`/salud\` vuelva a decir \`ok\`.
+          CUERPO
+          )"

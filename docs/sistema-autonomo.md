@@ -74,13 +74,14 @@ servidor está caído, el vigilante también).
 
 Lo que ya existe y solo hay que programar:
 
-| Comprobación | Cada cuánto | Coste |
-|---|---|---|
-| `npm test` + `npm run typecheck` | En cada push | 0 |
-| `npm run diagnostico` | Cada hora | ~0 |
-| `npm run evaluar` (recuperación) | Semanal | céntimos |
-| `npm run voz` (marcadores de IA) | Semanal | céntimos |
-| Latencia y degradación en uso real | Continuo, ya recogiendo | 0 |
+| Comprobación | Cada cuánto | Coste | Estado |
+|---|---|---|---|
+| `npm test` + `npm run typecheck` | En cada push | 0 | hecho (`ci.yml`) |
+| `/salud` | Cada hora | 0 | hecho (`salud.yml`) |
+| `npm run evaluar` (recuperación) | Semanal | céntimos | hecho (`calidad.yml`) |
+| `npm run voz` (marcadores de IA) | Semanal | céntimos | hecho (`calidad.yml`) |
+| Latencia y degradación en uso real | Continuo | 0 | hecho (tabla `consultas`) |
+| `npm run diagnostico` completo | — | ~0 | a mano; el caro es que prueba las verjas |
 
 Los resultados van a la tabla `metricas`, porque **un número aislado no dice
 nada y la tendencia sí**: un 88% no alarma, un 90 → 89 → 88 sí.
@@ -88,15 +89,48 @@ nada y la tendencia sí**: un 88% no alarma, un 90 → 89 → 88 sí.
 Los suelos están en `docs/reglas-duras.md` §1. Bajar de ahí es lo que dispara
 todo lo demás.
 
+### La trampa del healthcheck, que casi convierte esto en un arma
+
+`/health` es el healthcheck de Railway y tiene **reinicio automático**. La
+tentación al construir esta capa era hacer que `/health` dijera la verdad —que
+devolviera error cuando la búsqueda está degradada—. Habría sido un desastre:
+ante una caída de OpenAI, Railway habría matado un contenedor sano que estaba
+sirviendo respuestas peores pero útiles, y lo habría reiniciado en bucle
+mientras durase una avería ajena. Una avería de un proveedor convertida en una
+caída propia, por hacer el monitor "más honesto".
+
+Por eso son dos:
+
+- **`/health`** — señal de vida para el orquestador. Siempre 200 mientras el
+  proceso pueda atender. No toca la base ni llama a nadie.
+- **`/salud`** — el juicio de verdad, con 503 cuando está roto. Lo miran una
+  alarma y un humano; no reinicia a nadie.
+
+Y `/salud` distingue **degradado** de **roto** a propósito: degradado se sigue
+sirviendo. Una alarma que trata igual "responde peor" y "no responde" acaba
+ignorándose entera, que es como no tener alarma.
+
 ---
 
 ## Capa 1 — Aviso
 
-Empieza con una *issue* de GitHub: es gratis, queda registrada, y no hay que
-configurar nada. Cuando haya usuarios de pago, correo o Slack.
+**Hecha.** `.github/workflows/salud.yml` mira `/salud` cada hora y abre una
+issue si no está en orden; la cierra sola al recuperarse. Una issue por
+episodio, no una por hora: un buzón con veinticuatro avisos idénticos se ignora
+igual que ninguno.
 
 Lo que **no** es un aviso útil: "algo falla". Lo que sirve es qué medida, cuánto
-ha cambiado, desde cuándo, y qué cambió justo antes.
+ha cambiado, desde cuándo, y qué cambió justo antes. Por eso el cuerpo de la
+issue lleva qué comprobación falla, con su detalle, y qué significa cada estado
+—para que un `degradado` de madrugada no despierte a nadie.
+
+**Por qué cada hora y no cada cinco minutos:** en repositorios privados GitHub
+cobra minutos redondeando cada ejecución al minuto. Cada hora son ~720 al mes de
+los 2.000 gratuitos; cada cinco minutos serían 8.640. Si algún día hace falta
+más fino, la respuesta no es bajar el cron, es apuntar un monitor externo
+gratuito a `/salud`, que ya devuelve los códigos correctos.
+
+Cuando haya usuarios de pago, correo o Slack.
 
 ---
 
