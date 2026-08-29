@@ -90,6 +90,13 @@ Quita dos de las tres pegas que hoy hacen que el producto se vea mal ahí.
 
 ## Deuda conocida, dicha en voz alta
 
+- **Ninguna ficha tiene marca de tiempo.** Cero de 126 candidatas con enlace y
+  confianza alta. La promesa del producto dice "el enlace al minuto exacto" y
+  eso **hoy no es cierto**: hay enlace al vídeo, no al minuto. O se rebaja la
+  promesa a "el vídeo del que sale", o se rellenan los `fuente_timestamp` —que
+  es trabajo manual, como los 89 enlaces. Descubierto buscando fichas reales
+  para el mockup de la web.
+
 - **Políticas RLS para el rol `authenticated`.** Hoy el servidor usa la clave
   secreta y salta RLS, así que no cambia nada — pero es la siguiente puerta
   cuando la web consulte con el token del usuario.
