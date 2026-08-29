@@ -198,21 +198,75 @@ export async function buscarFichas(
   if (candidatos.length === 0) return [];
 
   const ids = candidatos.map((c) => c.id);
+  const empezo = Date.now();
+  let degradada = false;
+  let fichas: FichaConCreador[] = [];
 
   if (hayEmbeddings()) {
     try {
-      return await buscarPorSimilitud(ids, filtros);
+      fichas = await buscarPorSimilitud(ids, filtros);
     } catch (error) {
       // Degradar, no caerse: una respuesta peor vale más que ninguna. Pero se
       // deja constancia, o el fallo se vuelve invisible y nadie lo arregla.
+      degradada = true;
       console.error(
         "[cerebro] la búsqueda semántica falló, se usa texto:",
         error instanceof Error ? error.message : error,
       );
     }
+  } else {
+    // Sin clave de OpenAI TAMBIÉN se está sirviendo peor —del 90% al 79%—, así
+    // que cuenta como degradada. Antes esto era indistinguible de una búsqueda
+    // normal en cualquier registro.
+    degradada = true;
   }
 
-  return buscarPorTexto(ids, filtros);
+  if (degradada) fichas = await buscarPorTexto(ids, filtros);
+
+  registrar(filtros, fichas, degradada, Date.now() - empezo, contexto);
+  return fichas;
+}
+
+/**
+ * Deja constancia de la consulta. No espera a que termine.
+ *
+ * Sin `await` a propósito: una búsqueda no debe ir más lenta ni fallar porque el
+ * registro falle. Si se pierde una fila de medición no pasa nada; si se pierde
+ * una respuesta al usuario, sí.
+ *
+ * Lo que se busca con esto no es vigilar el servicio, es encontrar los HUECOS:
+ * qué pregunta la gente que el cerebro no sabe responder (`resultados = 0`), y
+ * cuándo está respondiendo peor sin que nadie se entere (`degradada`).
+ */
+function registrar(
+  filtros: FiltrosBusqueda,
+  fichas: FichaConCreador[],
+  degradada: boolean,
+  ms: number,
+  contexto: ContextoDeAcceso,
+): void {
+  // La similitud del MEJOR resultado, que es lo que distingue "sabía responder"
+  // de "devolvió lo menos malo". Contar resultados no sirve: la búsqueda
+  // vectorial casi nunca devuelve cero — a "cómo monto una startup de
+  // biotecnología cuántica" le encontró cinco fichas de ventas tan tranquila.
+  const similitud = (fichas[0] as { similitud?: number } | undefined)?.similitud;
+
+  void supabase
+    .from("consultas")
+    .insert({
+      situacion: filtros.situacion,
+      etapa: filtros.etapa ?? null,
+      objecion: filtros.objecion ?? null,
+      creador: filtros.creador ?? null,
+      resultados: fichas.length,
+      similitud_max: typeof similitud === "number" ? similitud : null,
+      degradada,
+      ms,
+      user_id: contexto.tipo === "usuario" ? contexto.userId : null,
+    })
+    .then(({ error }) => {
+      if (error) console.error("[cerebro] no se pudo registrar la consulta:", error.message);
+    });
 }
 
 /**
