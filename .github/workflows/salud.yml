@@ -23,7 +23,19 @@ name: salud
 on:
   schedule:
     - cron: "17 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      simular:
+        description: >-
+          Ensayar la alarma sin esperar a una avería: fuerza el estado en vez
+          de preguntar al servidor. Existe porque una alarma que no se ha
+          disparado nunca no se sabe si funciona — ya pasó con calidad.yml, que
+          llevaba semanas en verde con la rama de aviso rota por permisos. La
+          issue que cree se cerrará sola en la siguiente ejecución de verdad.
+        required: false
+        default: ""
+        type: choice
+        options: ["", "degradado", "roto", "incomunicado"]
 
 # Sin esto, `gh issue` da 403: el permiso por defecto del repositorio es solo
 # lectura. Ya pasó con calidad.yml y el síntoma era una X en un workflow
@@ -40,7 +52,16 @@ jobs:
     steps:
       - name: Preguntar por el estado
         id: estado
+        env:
+          SIMULAR: ${{ inputs.simular }}
         run: |
+          if [ -n "$SIMULAR" ]; then
+            echo "estado=$SIMULAR" >> "$GITHUB_OUTPUT"
+            echo "resumen=- ENSAYO: estado forzado a mano, el servidor no se ha consultado." >> "$GITHUB_OUTPUT"
+            echo "ENSAYO de la alarma con estado $SIMULAR."
+            exit 0
+          fi
+
           # Sin `-f`: interesa el cuerpo también cuando responde 503, que es
           # justo el caso que hay que contar.
           codigo=$(curl -s -m 30 -o respuesta.json -w "%{http_code}" \
