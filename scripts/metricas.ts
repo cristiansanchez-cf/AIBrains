@@ -3,7 +3,7 @@
  *
  *   npm run metricas             # mide, guarda y compara con la anterior
  *   npm run metricas -- --rapido # se salta las evaluaciones que cuestan dinero
- *   npm run metricas -- --limpiar # borra consultas de más de 90 días
+ *   npm run metricas -- --limpiar # borra el registro de más de 90 días
  *
  * POR QUÉ GUARDAR Y NO SOLO IMPRIMIR. `npm run evaluar` y `npm run voz` dan un
  * número y lo escupen por pantalla. Un número aislado no dice nada: un 88% no
@@ -160,11 +160,24 @@ function percentil(ordenados: number[], p: number): number {
 async function main(): Promise<void> {
   if (process.argv.includes("--limpiar")) {
     const limite = new Date(Date.now() - 90 * 86_400_000).toISOString();
-    const { count } = await supabase
-      .from("consultas")
-      .delete({ count: "exact" })
-      .lt("cuando", limite);
-    console.log(`Consultas de más de 90 días borradas: ${count ?? 0}`);
+
+    // LAS DOS TABLAS, no solo `consultas`. `usos_de_herramienta` guarda el
+    // texto de la consulta cuando entra por el `search` de ChatGPT, así que
+    // borrar solo una dejaba lo que un comercial pregunta sobre sus propias
+    // operaciones guardado para siempre en la otra. La retención declarada son
+    // 90 días; una retención que solo se cumple en la mitad de los sitios no
+    // es una retención.
+    for (const tabla of ["consultas", "usos_de_herramienta"] as const) {
+      const { count, error } = await supabase
+        .from(tabla)
+        .delete({ count: "exact" })
+        .lt("cuando", limite);
+      console.log(
+        error
+          ? `  ${tabla}: NO se pudo borrar — ${error.message}`
+          : `  ${tabla}: ${count ?? 0} fila(s) de más de 90 días borradas`,
+      );
+    }
     return;
   }
 

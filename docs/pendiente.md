@@ -140,8 +140,10 @@ cuenta real. Hasta entonces, `docs/consignas-web.md` no lo promete.
   pero la vista sigue mal para cualquier otro que la lea. Necesita `where
   user_id is not null` en una migración.
 - **La política de privacidad tiene que mencionar el registro de consultas.**
-  Se guarda lo que un comercial pregunta sobre sus operaciones. Retención: 90
-  días, sin automatizar todavía.
+  Se guarda lo que un comercial pregunta sobre sus operaciones. La retención de
+  90 días **ya se ejecuta sola** cada semana (`calidad.yml`), y borra las dos
+  tablas —`consultas` y `usos_de_herramienta`—; lo que falta es decirlo en la
+  política, que es lo que legalmente cuenta.
 - **La vista de relacionadas es cuadrática en fichas por creador.** Hoy son
   ~55.000 distancias y se calcula en un momento; con 50.000 fichas de un mismo
   creador serían ~5×10⁸. El día que un creador pase su catálogo entero hay que
