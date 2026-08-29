@@ -282,18 +282,45 @@ async function provisionarEquipo(
 // Bajas y cambios
 // ---------------------------------------------------------------------------
 
+/**
+ * Cortar el acceso cuando Stripe dice que la suscripción ha muerto.
+ *
+ * LAS TRES TABLAS, y hay que enumerarlas de verdad. Una suscripción individual
+ * vive en `suscripciones_dominio` si se vendió por producto y en `suscripciones`
+ * si es de antes o de un alta manual; una de empresa se apaga por
+ * `estado_pago`. Olvidar una deja acceso servido y sin cobrar, que es la mitad
+ * mala de equivocarse: nadie se queja, así que no se entera nadie.
+ *
+ * Se comprueba cuántas filas se apagaron. Si no se apagó ninguna en ningún
+ * sitio, es que esta suscripción no la conocíamos, y eso hay que decirlo en el
+ * registro en vez de dar la baja por buena.
+ */
 async function cortarAcceso(sub: Stripe.Subscription): Promise<void> {
-  await supabase
-    .from("suscripciones")
-    .update({ activa: false })
-    .eq("stripe_subscription_id", sub.id);
+  const apagadas = await Promise.all(
+    (
+      [
+        ["suscripciones", { activa: false }],
+        ["suscripciones_dominio", { activa: false }],
+        ["organizaciones", { estado_pago: "cancelada" }],
+      ] as const
+    ).map(async ([tabla, cambio]) => {
+      const { data, error } = await supabase
+        .from(tabla)
+        .update(cambio)
+        .eq("stripe_subscription_id", sub.id)
+        .select("stripe_subscription_id");
+      if (error) throw new Error(`Al cortar el acceso en ${tabla}: ${error.message}`);
+      return data?.length ?? 0;
+    }),
+  );
 
-  await supabase
-    .from("organizaciones")
-    .update({ estado_pago: "cancelada" })
-    .eq("stripe_subscription_id", sub.id);
-
-  console.error(`[stripe] baja: ${sub.id}`);
+  const total = apagadas.reduce((a, b) => a + b, 0);
+  console.error(
+    total > 0
+      ? `[stripe] baja: ${sub.id} — ${total} fila(s) desactivada(s)`
+      : `[stripe] baja: ${sub.id} — OJO, no había nada que desactivar. ` +
+          `O ya estaba dada de baja, o esta suscripción nunca se registró aquí.`,
+  );
 }
 
 /**

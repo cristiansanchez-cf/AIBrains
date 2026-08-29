@@ -212,6 +212,13 @@ Y lo que ha fallado, para no repetirlo:
   eligió el umbral, y la cobertura de la vista materializada en el diagnóstico,
   que avisaba de una vista rancia que estaba al día. Para contar, `count:
   "exact"` con `head: true`.
+- **Dar por hecha una sustitución de texto que no encajó.** Cambiar un fichero
+  buscando y reemplazando una cadena: si la cadena no coincide exactamente, no
+  pasa nada — y "no pasa nada" incluye que compile, que los tests pasen y que se
+  despliegue. Pasó con el corte de acceso al cancelar una suscripción: el cambio
+  se dio por hecho, se subió, y la baja no apagaba la tabla nueva. Lo cazó una
+  prueba de punta a punta, no el typecheck. **Después de editar así, comprobar
+  que el cambio está**, o hacer que el script falle si no encuentra el texto.
 - **Añadir una función sin decírselo al modelo.** `ver_ficha` se sirvió y se
   registró su uso, pero no se puso en las instrucciones del servidor: se estaba
   midiendo algo que nadie sabía usar, y el cero resultante parecía una
