@@ -11,8 +11,10 @@
 sigue pidiendo modo desarrollador y si Deep Research lo ve. Es lo único de todo
 esto que no puedo comprobar yo, y de ello depende qué prometemos en la web.
 
-**2. Decirme qué tiene que ver el usuario en su panel**, para construir
-`GET /api/mi` con esa forma en vez de adivinarla.
+**2. Confirmar el empaquetado.** La web vende "elige tu cerebro" y hay dos
+creadores; la propuesta es vender UN producto —Cerebro de Ventas— con todo lo de
+ventas dentro. Toca el checkout y el reparto de dinero, por eso no lo he
+cambiado por mi cuenta. Razonado en `docs/consignas-web-2.md` §2 y §3.
 
 *(Hechas el 30/08/2026: las dos migraciones de vistas —comprobado desde fuera
 que la clave pública recibe `permission denied` en las cuatro— y el cambio de
