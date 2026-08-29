@@ -4,36 +4,20 @@
 
 ---
 
-## Cuando vuelvas: cuatro cosas que necesitan tus manos
+## Cuando vuelvas: dos cosas que necesitan tus manos
 
-Están ordenadas por lo que desbloquean. Ninguna me la puedo hacer yo.
+**1. Conectar ChatGPT a la URL nueva y decirme qué pasa.**
+`https://cerebro.cofundo.io/mcp/chatgpt` — no la de siempre. Quiero saber si
+sigue pidiendo modo desarrollador y si Deep Research lo ve. Es lo único de todo
+esto que no puedo comprobar yo, y de ello depende qué prometemos en la web.
 
-**1. Aplicar dos migraciones** (SQL Editor de Supabase, pegar y ejecutar en este
-orden). No tengo forma de ejecutar SQL contra la base desde aquí.
-
-- `supabase/migrations/20260830140000_vistas_con_invocador.sql` — tres vistas de
-  medición se crearon sin `security_invoker`, o sea con los permisos de quien
-  las creó en vez de los de quien consulta. Hoy da igual porque el servidor usa
-  la clave de servicio; deja de dar igual en cuanto la web consulte con el token
-  del usuario.
-- `supabase/migrations/20260830160000_vistas_de_uso_real.sql` — `huecos_de_contenido`
-  mezclaba mis pruebas con las preguntas de la gente **y** medía `resultados = 0`,
-  que no pasa casi nunca porque la búsqueda siempre devuelve *lo menos malo*.
-  Habría dicho "no falta contenido" para siempre.
-
-**2. Una línea en InternalApps para tener el minuto exacto.** El endpoint usa
-Supadata, que devuelve los subtítulos troceados con su `offset` en
-milisegundos, y se está quedando solo con el texto plano. Reenviarlos como
-`segments: [{offset, text}]` es todo lo que falta: este repo ya los lee, el
-destilador ya sabe usarlos y ya está probado. Ver la deuda de más abajo.
-
-**3. Conectar ChatGPT a la URL nueva y decirme qué pasa.**
-`https://cerebro.cofundo.io/mcp/chatgpt`. Lo que quiero saber es si sigue
-pidiendo modo desarrollador y si Deep Research lo ve. Es lo único de esto que
-no puedo comprobar yo, y de ello depende qué prometemos en la web.
-
-**4. Decirme qué tiene que ver el usuario en su panel**, para poder construir
+**2. Decirme qué tiene que ver el usuario en su panel**, para construir
 `GET /api/mi` con esa forma en vez de adivinarla.
+
+*(Hechas el 30/08/2026: las dos migraciones de vistas —comprobado desde fuera
+que la clave pública recibe `permission denied` en las cuatro— y el cambio de
+InternalApps, que resultó que sí podía hacer yo: está en el PR
+cristianalbertosanchez00-afk/InternalApps#5, solo hay que mezclarlo.)*
 
 ---
 
