@@ -22,11 +22,12 @@ import { esRutaDeScript, scriptDeConsentimiento } from "./auth/script-consentimi
 import { crearServidor, type Perfil } from "./servidor.js";
 import { config } from "./config.js";
 import { estadoDeSalud, ultimoEstadoConocido } from "./salud.js";
+import { panelDelUsuario } from "./api/mi.js";
 import {
   cabeceraWwwAuthenticate,
   documentoDeRecursoProtegido,
 } from "./auth/metadatos.js";
-import { TokenInvalido, tokenDeCabecera, verificarToken } from "./auth/token.js";
+import { TokenInvalido, tokenDeCabecera, verificarToken, verificarSesion } from "./auth/token.js";
 import { catalogo } from "./api/catalogo.js";
 import { crearSesionDePago, PeticionInvalida } from "./pagos/checkout.js";
 import { procesarWebhook, FirmaInvalida, hayWebhook } from "./pagos/webhook.js";
@@ -65,6 +66,49 @@ function exigirAutenticacion(res: ServerResponse, motivo?: string, rutaMcp?: str
     "www-authenticate": cabeceraWwwAuthenticate(motivo, rutaMcp),
   });
   res.end(cuerpo);
+}
+
+/**
+ * El origen permitido para el panel.
+ *
+ * NO es `*`, a diferencia del catálogo: aquí viajan datos de una persona con su
+ * cabecera `authorization`, y un comodín permitiría que cualquier página que el
+ * usuario visite le pidiera su panel con su sesión. El catálogo es público y da
+ * igual; esto no.
+ *
+ * Con la lista vacía se refleja el origen recibido, que es el comportamiento de
+ * desarrollo — la web corre en localhost:3100. En producción se rellena
+ * CEREBRO_ORIGENES_PERMITIDOS y solo pasa lo que esté ahí.
+ */
+function corsOrigen(req: IncomingMessage): string {
+  const origen = req.headers.origin;
+  const permitidos = config.http.origenesPermitidos;
+  if (permitidos.length === 0) return typeof origen === "string" ? origen : "*";
+  return typeof origen === "string" && permitidos.includes(origen) ? origen : permitidos[0]!;
+}
+
+async function manejarMi(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const token = tokenDeCabecera(req.headers.authorization);
+  if (!token) {
+    responderJson(res, 401, { error: "Hace falta iniciar sesión." }, corsOrigen(req));
+    return;
+  }
+
+  let usuario;
+  try {
+    usuario = await verificarSesion(token);
+  } catch (error) {
+    responderJson(
+      res,
+      401,
+      { error: error instanceof TokenInvalido ? error.message : "Sesión no válida." },
+      corsOrigen(req),
+    );
+    return;
+  }
+
+  const panel = await panelDelUsuario(usuario.userId, usuario.email ?? "");
+  responderJson(res, 200, panel, corsOrigen(req));
 }
 
 async function manejarMcp(
@@ -270,11 +314,17 @@ async function servirScript(res: ServerResponse): Promise<void> {
   res.end(contenido);
 }
 
-function responderJson(res: ServerResponse, codigo: number, cuerpo: unknown): void {
+function responderJson(
+  res: ServerResponse,
+  codigo: number,
+  cuerpo: unknown,
+  origenCors?: string,
+): void {
   const texto = JSON.stringify(cuerpo);
   res.writeHead(codigo, {
     "content-type": "application/json",
     "content-length": Buffer.byteLength(texto),
+    ...(origenCors && { "access-control-allow-origin": origenCors, vary: "origin" }),
   });
   res.end(texto);
 }
@@ -394,6 +444,33 @@ const http = createServer((req, res) => {
     servirCatalogo(res).catch((error: unknown) => {
       console.error("[cerebro] /api/catalogo:", error);
       responderJson(res, 500, { error: "No se pudo leer el catálogo." });
+    });
+    return;
+  }
+
+  // Panel del usuario. Es la ÚNICA ruta que acepta una sesión normal de
+  // Supabase; /mcp sigue exigiendo un token del flujo OAuth. Ver
+  // `verificarSesion` en src/auth/token.ts para por qué son dos puertas.
+  if (ruta === "/api/mi") {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": corsOrigen(req),
+        "access-control-allow-methods": "GET, OPTIONS",
+        // `authorization` en la lista o el navegador ni manda la cabecera.
+        "access-control-allow-headers": "content-type, authorization",
+        "access-control-max-age": "86400",
+        vary: "origin",
+      });
+      res.end();
+      return;
+    }
+    if (req.method !== "GET") {
+      responderJson(res, 405, { error: "Solo GET." });
+      return;
+    }
+    manejarMi(req, res).catch((error: unknown) => {
+      console.error("[cerebro] /api/mi:", error);
+      responderJson(res, 500, { error: "No se pudo leer la cuenta." });
     });
     return;
   }
