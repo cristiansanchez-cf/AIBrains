@@ -1,5 +1,11 @@
 # Contexto para quien construya la web
 
+> **HAY UN SEGUNDO DOCUMENTO: `docs/handoff-web-2.md` (29/08/2026).** Léelo
+> también. Corrige una recomendación de este que resultó equivocada —la de leer
+> el catálogo con permiso sobre la vista de Supabase— y documenta los endpoints
+> que ya existen. Lo de aquí sigue valiendo para el contexto y las reglas firmes.
+
+
 > Para el agente que trabaja en cofundo.io. Esto **no es una especificación**:
 > es el contexto que necesitas para que tus decisiones sean informadas. La
 > estética, la estructura, el copy y los flujos los define Cristian contigo.
