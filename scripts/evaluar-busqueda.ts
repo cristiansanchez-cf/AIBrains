@@ -80,8 +80,11 @@ async function main(): Promise<void> {
         proporcion_minima: 0,
       });
 
+      // El RPC devuelve { ficha: jsonb, similitud }, no columnas sueltas. Esto
+      // leía `f.id` —que quedó `undefined` al cambiar la firma— y la evaluación
+      // pasó a dar 0% sin dar ningún error. Un cero que parecía un resultado.
       const posicion = (data ?? []).findIndex(
-        (f: { id: number }) => f.id === caso.id,
+        (f: { ficha?: { id: number } }) => f.ficha?.id === caso.id,
       );
       if (posicion === 0) enPrimera++;
       if (posicion !== -1) entreCinco++;

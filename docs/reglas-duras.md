@@ -141,7 +141,67 @@ se presenta como hecho.
 
 ---
 
-## 10. Y lo que no es una regla dura
+## 10. Se para entre fases, aunque se pueda seguir
+
+No se encadenan tres cosas seguidas porque haya inercia. Al cerrar cada una:
+
+1. **Revisión por alguien que no la escribió** — un agente distinto. Quien acaba
+   de escribir algo lo entiende porque estaba dentro, y esa es justamente la
+   razón por la que no puede juzgar si se entiende desde fuera.
+2. **Buscar código que sobra**: restos de refactor, comentarios que ya no dicen
+   la verdad, dos formas de hacer lo mismo.
+3. **Tests que queden**, con su caso de ataque.
+4. **Documentar lo que cambió de criterio**, no solo lo que cambió de código.
+
+Se construye más lento y sale mejor. Las dos revisiones de esta sesión
+encontraron un endpoint con el que se podía tumbar la base y tests que no podían
+fallar; ninguna de las dos cosas la habría visto quien las escribió.
+
+### El corolario que más ha dolido
+
+**Cuando se cambia un contrato, se buscan TODOS sus llamantes.** No el que se
+tenía delante.
+
+Pasó con el RPC de búsqueda: cambió a devolver `jsonb`, se arregló
+`consultas.ts` y se olvidó `evaluar-busqueda.ts`. Como el evaluador leía un
+campo que pasó a ser `undefined`, **empezó a dar 0% sin dar ningún error** — y
+el 90% se siguió citando durante horas sin haberlo vuelto a medir.
+
+Un `grep` del nombre de la función habría bastado. Cuesta diez segundos.
+
+---
+
+## 11. Aprender del propio trabajo
+
+Cuando algo funciona mejor que la alternativa, se escribe. Cuando algo falla, se
+escribe **por qué**, no solo el arreglo.
+
+Lo que ha demostrado valer en este repo, y conviene repetir:
+
+- **Un agente revisor que no escribió el código.** Ha encontrado dos veces cosas
+  graves. No es ceremonia: es que el autor no puede ver lo que da por supuesto.
+- **Medir antes de optimizar.** "656 ms, de los cuales 435 son red" cambió por
+  completo qué había que tocar. Sin medir, se habría optimizado el algoritmo de
+  búsqueda, que ya era gratis.
+- **Casos de control en todo detector.** Tres veces ha salvado de un falso
+  verde.
+- **Atacar en vez de confirmar.** Los agujeros reales aparecieron preguntando
+  "¿qué NO debería poder hacerse?", nunca comprobando que lo bueno funciona.
+- **Escribir el porqué en el sitio donde se va a leer** — en la migración, en la
+  cabecera del script—, no en un documento aparte que nadie abre.
+
+Y lo que ha fallado, para no repetirlo:
+
+- Cambiar un contrato sin buscar sus llamantes (regla 10).
+- Dar por bueno un número sin volver a medirlo tras tocar algo cerca.
+- Anunciar cobertura que no se tenía ("probado: borradores" sin borradores).
+
+Este apartado se actualiza. Si en tres meses no ha cambiado, es que nadie está
+aprendiendo nada.
+
+---
+
+## 12. Y lo que no es una regla dura
 
 Todo lo demás. La estética, la estructura del código, los nombres, qué framework,
 en qué orden se hacen las cosas. Ahí no hace falta pedir permiso a nadie.

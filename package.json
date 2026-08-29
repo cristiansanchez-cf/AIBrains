@@ -37,7 +37,8 @@
     "test:watch": "vitest",
     "prueba:equipos": "tsx scripts/prueba-equipos.ts",
     "acuerdo": "tsx scripts/acuerdo.ts",
-    "stripe": "tsx scripts/stripe-comprobar.ts"
+    "stripe": "tsx scripts/stripe-comprobar.ts",
+    "metricas": "tsx scripts/metricas.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

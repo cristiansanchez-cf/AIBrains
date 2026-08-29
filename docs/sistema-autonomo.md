@@ -1,0 +1,170 @@
+# El sistema que se vigila y se arregla solo
+
+> Diseño completo, construcción por capas. Escrito el 29/08/2026.
+>
+> El objetivo: que esto no dependa de que Cristian se acuerde de mirar. Que lo
+> fácil se arregle solo, que lo difícil escale con contexto suficiente para
+> decidir, y que **ningún agente pueda tumbar producción intentando arreglarla**.
+
+---
+
+## Cuatro capas, y solo una es peligrosa
+
+| Capa | Qué hace | Riesgo |
+|---|---|---|
+| **0. Detección** | Comprobaciones periódicas que dan un veredicto | Ninguno |
+| **1. Aviso** | Alguien se entera sin pedirlo | Ninguno |
+| **2. Diagnóstico** | Un agente lee las señales y dice qué cree que pasa | Ninguno: solo lee |
+| **3. Reparación** | Un agente actúa | **Aquí está todo el riesgo** |
+
+Las tres primeras se pueden construir sin miedo. La cuarta necesita límites
+duros, y son el resto de este documento.
+
+---
+
+## La regla que hace segura la capa 3
+
+No es "el agente arregla producción". Es **qué tipo de acción puede tomar sin
+que un humano lo mire**:
+
+| Acción | ¿Automática? | Por qué |
+|---|---|---|
+| Reiniciar el servicio | **Sí** | Acotada, reversible, no cambia estado |
+| Volver al último despliegue bueno | **Sí** | El estado anterior se sabe que funcionaba |
+| Reintentar un webhook fallido | **Sí** | Es idempotente por diseño |
+| Cambiar código | **Solo como PR** | Un diff que se lee, con los tests corriendo, y lo mezcla una persona |
+| Tocar datos, permisos o dinero | **NUNCA** | Ni siquiera como PR |
+
+Esa última fila es la importante, y se puede enumerar exactamente porque este
+repo ya tiene el modelo de permisos montado. Un agente **no toca**:
+
+- `acuerdo_firmado`, `permite_guion`, `permite_marca`, `servir_sin_acuerdo`
+- `suscripciones`, `organizacion_asientos`, `organizacion_admins`
+- `creador_condiciones` — el reparto de dinero
+- migraciones de esquema
+- nada de Stripe que mueva dinero
+
+### Y no como norma, sino como imposibilidad
+
+Una regla que el agente "debe recordar" es una regla que un día no recuerda.
+
+**El agente corre con su propio rol de base de datos**, con permisos de lectura
+sobre las tablas de medición y nada más. Que no pueda cambiar `acuerdo_firmado`
+no depende de su buen criterio: depende de que Postgres se lo rechace. Es la
+regla 6 de `docs/reglas-duras.md` aplicada al propio agente.
+
+Lo mismo con Stripe: si algún día necesita clave, será una **restringida de solo
+lectura**, distinta de la del servidor.
+
+---
+
+## Dónde vive cada capa
+
+**GitHub Actions.** No hace falta infraestructura nueva: es programable, guarda
+secretos, deja registro visible, y —esto es lo que lo hace la elección
+correcta— **puede abrir un PR**, que es exactamente la forma segura de que un
+agente proponga un cambio de código.
+
+No en el Mac de Cristian (se apaga) ni dentro del propio servidor (si el
+servidor está caído, el vigilante también).
+
+---
+
+## Capa 0 — Detección
+
+Lo que ya existe y solo hay que programar:
+
+| Comprobación | Cada cuánto | Coste |
+|---|---|---|
+| `npm test` + `npm run typecheck` | En cada push | 0 |
+| `npm run diagnostico` | Cada hora | ~0 |
+| `npm run evaluar` (recuperación) | Semanal | céntimos |
+| `npm run voz` (marcadores de IA) | Semanal | céntimos |
+| Latencia y degradación en uso real | Continuo, ya recogiendo | 0 |
+
+Los resultados van a la tabla `metricas`, porque **un número aislado no dice
+nada y la tendencia sí**: un 88% no alarma, un 90 → 89 → 88 sí.
+
+Los suelos están en `docs/reglas-duras.md` §1. Bajar de ahí es lo que dispara
+todo lo demás.
+
+---
+
+## Capa 1 — Aviso
+
+Empieza con una *issue* de GitHub: es gratis, queda registrada, y no hay que
+configurar nada. Cuando haya usuarios de pago, correo o Slack.
+
+Lo que **no** es un aviso útil: "algo falla". Lo que sirve es qué medida, cuánto
+ha cambiado, desde cuándo, y qué cambió justo antes.
+
+---
+
+## Capa 2 — Diagnóstico
+
+Un agente que lee —y solo lee— las métricas, el registro de consultas, los
+últimos commits y el estado del despliegue, y escribe qué cree que pasa.
+
+Su salida es **texto en la issue**, no una acción. Se equivocará a veces; como
+no puede tocar nada, equivocarse sale gratis.
+
+Aquí es donde el trabajo de esta sesión rinde: `salud_de_la_busqueda`,
+`huecos_de_contenido`, `stripe_eventos` con sus errores y `creadores_auditoria`
+le dan contexto real en vez de conjeturas.
+
+---
+
+## Capa 3 — Reparación
+
+Tres carriles, y el carril lo decide **el tipo de acción, no la confianza del
+agente**:
+
+**Carril verde — automático.** Reiniciar, volver al despliegue anterior,
+reintentar un webhook. Acotado, reversible, sin cambio de estado. Con un tope:
+**si un arreglo automático no funciona a la primera, escala**. Un agente
+reintentando en bucle es peor que la avería.
+
+**Carril ámbar — PR.** Cambio de código. El agente abre un PR con su
+diagnóstico, los tests corren solos, y lo mezcla una persona. Los suelos de
+calidad de `reglas-duras.md` §1 se comprueban en el PR: **un arreglo que baje la
+recuperación al 85% no se puede mezclar aunque arregle el síntoma.**
+
+**Carril rojo — solo aviso.** Cualquier cosa que toque datos, permisos, dinero o
+esquema. El agente describe qué haría y por qué; lo hace un humano.
+
+---
+
+## Soporte, que es el mismo sistema con otra entrada
+
+La entrada es un correo en vez de una alerta, y los carriles son los mismos:
+
+**Verde:** responder con la guía de instalación, reenviar el enlace mágico,
+explicar por qué ChatGPT no ve el cerebro sin modo desarrollador. Preguntas cuya
+respuesta ya está escrita.
+
+**Ámbar:** algo que parece un fallo real. Se responde acusando recibo y se
+escala con el contexto ya recogido.
+
+**Rojo:** cualquier cosa sobre facturación, acceso de otra persona o datos.
+Directo a un humano. Un agente no le explica a nadie por qué se le cobró.
+
+Y una regla del propio correo: **siempre una salida a persona**, visible desde
+la primera respuesta. Nada de laberintos.
+
+---
+
+## Orden de construcción, y por qué este
+
+1. **Capa 0** — sin medición no hay nada que vigilar. *En curso.*
+2. **Capa 1** — el aviso. Barato y es el 80% del valor: casi todos los desastres
+   son "llevaba dos días roto y nadie lo sabía".
+3. **Capa 2** — diagnóstico. Cuando haya suficientes incidentes reales para que
+   el agente tenga de qué aprender. Con tres usuarios no hay muestra.
+4. **Capa 3** — reparación. **Lo último, y solo el carril verde al principio.**
+
+El motivo del orden es que las capas 3 y 4 sin la 0 son un agente adivinando. Y
+un agente que adivina y además actúa es exactamente cómo se provoca la avería
+que se quería evitar.
+
+**Ninguna capa se salta porque haya prisa.** Si un día hay que elegir, se elige
+avisar antes que arreglar.
