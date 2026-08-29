@@ -167,6 +167,95 @@ async function creadoresSinAuth(): Promise<CreadorServible[]> {
   return (data ?? []).map((c) => conPermisos(c, modos));
 }
 
+/**
+ * Umbral de parecido para considerar dos fichas relacionadas.
+ *
+ * ELEGIDO MIRANDO LAS PAREJAS, no la distribución. El primer intento fue un
+ * 0.55 escrito de memoria, que habría dejado pasar el 94% de las relaciones
+ * —incluido todo el ruido—. Leyendo ejemplos reales por bandas:
+ *
+ *   0.65+       "escalar la frecuencia de publicación" <-> "TikTok reintenta
+ *               distribuir en oleadas"                          coherente
+ *   0.58-0.61   "apertura in media res" <-> "mostrar con B-roll"  flojo
+ *   0.50-0.54   "empezar cuentas desde cero" <-> "republicar un
+ *               vídeo que no funcionó"                           ruido
+ *
+ * A 0.65 salen unas 2 relacionadas por ficha. Una sugerencia mala enseña a
+ * ignorar la sección entera, así que ante la duda se corta alto.
+ */
+const PARECIDO_MINIMO = 0.65;
+
+/** Cuántas relacionadas se enseñan como mucho. Tres caben sin estorbar. */
+const MAX_RELACIONADAS = 3;
+
+export interface FichaRelacionada {
+  id: number;
+  insight: string;
+  parecido: number;
+}
+
+/**
+ * Fichas parecidas a una dada, respetando el acceso de quien pregunta.
+ *
+ * Se lee de la vista materializada `fichas_relacionadas`, así que no cuesta ni
+ * una llamada a OpenAI ni una consulta vectorial: las relaciones están
+ * precalculadas y solo cambian al ingerir.
+ *
+ * El cruce con `fichas_servibles` NO es decorativo: la vista materializada se
+ * calcula sobre todas las fichas publicadas, incluidas las de creadores que no
+ * se sirven. Sugerir una de esas enseñaría lo que el usuario no ha contratado.
+ */
+export async function fichasRelacionadas(
+  contexto: ContextoDeAcceso,
+  fichaId: number,
+): Promise<FichaRelacionada[]> {
+  const permitidos = await creadoresDisponibles(contexto);
+  if (permitidos.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("fichas_relacionadas")
+    .select("relacionada_id, parecido")
+    .eq("ficha_id", fichaId)
+    .gte("parecido", PARECIDO_MINIMO)
+    .order("orden")
+    .limit(MAX_RELACIONADAS);
+
+  if (error || !data?.length) return [];
+
+  const { data: fichas } = await supabase
+    .from("fichas_servibles")
+    .select("id, insight")
+    .in("id", data.map((r) => r.relacionada_id))
+    .in("creador_id", permitidos.map((c) => c.id));
+
+  const parecidoPorId = new Map(data.map((r) => [r.relacionada_id as number, Number(r.parecido)]));
+
+  return (fichas ?? []).map((f) => ({
+    id: f.id as number,
+    insight: f.insight as string,
+    parecido: parecidoPorId.get(f.id as number) ?? 0,
+  }));
+}
+
+/** Una ficha concreta, si quien pregunta puede verla. */
+export async function fichaPorId(
+  contexto: ContextoDeAcceso,
+  id: number,
+): Promise<FichaConCreador | null> {
+  const permitidos = await creadoresDisponibles(contexto);
+  if (permitidos.length === 0) return null;
+
+  const { data, error } = await supabase
+    .from("fichas_servibles")
+    .select(COLUMNAS_FICHA)
+    .eq("id", id)
+    .in("creador_id", permitidos.map((c) => c.id))
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as unknown as FichaConCreador;
+}
+
 export interface FiltrosBusqueda {
   situacion: string;
   etapa?: string | undefined;

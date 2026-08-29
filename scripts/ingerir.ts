@@ -268,6 +268,14 @@ async function main(): Promise<void> {
     await marcarFuente(fuente.id, "procesada", { hash: huella, fichas: filas.length });
   }
 
+  // Las relacionadas están precalculadas, así que hay que recalcularlas o las
+  // fichas nuevas no aparecerán como relacionadas de nadie ni tendrán las suyas.
+  const { error: errorRel } = await supabase.rpc("refrescar_relacionadas");
+  if (errorRel) {
+    console.error(`AVISO: no se pudieron refrescar las relacionadas: ${errorRel.message}`);
+    console.error(`Hazlo a mano cuando puedas, o estas fichas quedarán sueltas.`);
+  }
+
   console.log(`${filas.length} ficha(s) guardadas como BORRADOR.`);
   console.log(`\nNo se sirven hasta revisarlas:\n  npm run revisar`);
 }

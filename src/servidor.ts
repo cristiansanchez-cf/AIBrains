@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { INSTRUCCIONES_DEL_SERVIDOR } from "./instrucciones.js";
 import { registrarBuscarTecnica } from "./herramientas/buscar-tecnica.js";
 import { registrarListarCerebros } from "./herramientas/listar-cerebros.js";
+import { registrarVerFicha } from "./herramientas/ver-ficha.js";
 import type { ContextoDeAcceso } from "./tipos.js";
 
 /**
@@ -28,6 +29,7 @@ export function crearServidor(contexto: ContextoDeAcceso): McpServer {
 
   registrarBuscarTecnica(servidor, contexto);
   registrarListarCerebros(servidor, contexto);
+  registrarVerFicha(servidor, contexto);
 
   return servidor;
 }

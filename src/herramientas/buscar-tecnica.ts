@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { buscarFichas, creadoresDisponibles } from "../db/consultas.js";
+import { buscarFichas, creadoresDisponibles, fichasRelacionadas } from "../db/consultas.js";
 import { formatearFicha } from "./formato.js";
 import {
   FILTRO_DE_VOZ,
@@ -131,6 +131,27 @@ export function registrarBuscarTecnica(
         ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
         FILTRO_DE_VOZ,
       ];
+
+      // Relacionadas de la PRIMERA ficha nada más. Con las cinco saldrían hasta
+      // quince sugerencias y la respuesta pasaría a ser un índice. La primera es
+      // la más relevante y es donde una sugerencia tiene sentido.
+      //
+      // Y se sugieren para poder MEDIR si alguien tira de ellas (ver_ficha con
+      // origen='relacionada'): de eso depende si el grafo merece la pena.
+      const primera = fichas[0];
+      if (primera) {
+        const cerca = await fichasRelacionadas(contexto, primera.id);
+        if (cerca.length > 0) {
+          bloques.splice(
+            bloques.length - 1,
+            0,
+            `**Relacionadas con la ficha 1:**\n` +
+              cerca.map((r) => `- [${r.id}] ${r.insight}`).join("\n") +
+              `\n\n_Si alguna encaja mejor con lo que pregunta, ábrela con ` +
+              `ver_ficha(id, origen="relacionada")._`,
+          );
+        }
+      }
 
       if (momentoDeEjecucion(situacion)) {
         // Solo se nombra la formación de los creadores que han salido en ESTA
