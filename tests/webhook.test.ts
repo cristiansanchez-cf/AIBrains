@@ -15,7 +15,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Lo que cada tabla ha recibido. Es lo que se comprueba. */
-let cambios: Array<{ tabla: string; datos: unknown; filtro: unknown }> = [];
+let cambios: Array<{ tabla: string; datos: unknown; filtro: unknown[] }> = [];
 
 function constructor(tabla: string) {
   const q: Record<string, unknown> = {};
