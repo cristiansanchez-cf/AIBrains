@@ -44,15 +44,27 @@ estaban guardados, que no cuesta ninguna llamada a OpenAI.)*
 
 ## Siguiente, por orden
 
-### 1. Velocidad, con el dato delante
+### 1. Velocidad — media hecha, y la otra media bloqueada por falta de datos
 
-Medido: 656 ms por búsqueda, de los cuales **435 son viajes de red** y 284 la
-llamada a OpenAI. La búsqueda vectorial en sí son microsegundos.
+**Hecho:** solapar lo que no depende entre sí. El embedding de la pregunta se
+pide a la vez que los permisos, y los dos RPC de permisos van juntos. Medido con
+las mismas consultas y la misma red, tres pasadas: **527 ms → 384 ms de
+mediana**, un 25% menos. La recuperación sigue en 90,0% / 96,7% después del
+cambio, vuelta a medir y no supuesta.
 
-Las dos palancas —cachear embeddings y bajar de 5 viajes a 2— **no tocan la
-calidad**: son deterministas (ver `docs/reglas-duras.md` §2). Pero primero hay
-que medir cuántas consultas se repiten, porque eso decide si la caché sirve del
-30% o del 90%.
+**Bloqueado, y no por trabajo:** la caché de embeddings. Depende de cuántas
+consultas se repiten, y **hoy hay CERO consultas de usuarios reales
+registradas**. Las 22 que hay son mías: el 59% de repetición que salía era mi
+propia comprobación `"me dice que se lo tiene que pensar"` seis veces. Decidir
+con eso sería exactamente lo que prohíbe la regla 9.
+
+La medición ya distingue una cosa de otra (`user_id` nulo = comprobación
+interna). En cuanto haya uso de verdad durante unos días, el dato se lee solo.
+
+*(Y ojo con el precio ya asumido: al lanzar el embedding antes de saber si la
+persona tiene acceso, quien no lo tiene también gasta una llamada a OpenAI. Son
+0,0000004 $; lo que habría que vigilar si esto creciera es el límite de
+peticiones, no el gasto.)*
 
 ### 2. Calidad del contenido (P2)
 

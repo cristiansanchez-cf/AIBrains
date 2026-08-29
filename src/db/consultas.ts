@@ -106,21 +106,32 @@ async function creadoresDelUsuario(
   userId: string,
   email: string | undefined,
 ): Promise<CreadorServible[]> {
-  const modos = await permisosPorCreador();
-  if (modos.size === 0) return [];
-
-  // Una sola pregunta a la base: `cerebros_autorizados` une la suscripción
-  // individual y el asiento de organización. Antes esto era una consulta a
-  // `suscripciones` escrita aquí; con dos orígenes de acceso, tener la unión en
-  // TypeScript habría sido repetir el error que ya nos costó dos revisiones.
+  // Las dos preguntas van A LA VEZ porque no dependen una de otra: qué
+  // creadores son servibles es una propiedad del catálogo, y qué tiene
+  // contratado esta persona es una propiedad suya. Encadenarlas costaba un
+  // viaje entero de red por consulta, y la latencia de este producto es casi
+  // toda viajes de red (656 ms medidos, 435 de ellos de red).
+  //
+  // Esto NO es cachear permisos, que la regla 2 prohíbe: son las dos consultas
+  // de siempre, hechas al mismo tiempo. Se siguen preguntando en cada búsqueda.
+  //
+  // `cerebros_autorizados` une la suscripción individual y el asiento de
+  // organización en la base. Con dos orígenes de acceso, hacer esa unión en
+  // TypeScript habría sido repetir el error que ya costó dos revisiones.
   //
   // Se manda también el correo porque un asiento se autoriza ANTES de que
   // exista la cuenta: la primera vez que esa persona entra, su `user_id`
   // todavía no está en la fila.
-  const { data, error } = await supabase.rpc("cerebros_autorizados", {
-    p_user_id: userId,
-    p_email: normalizarEmail(email ?? ""),
-  });
+  const [modos, autorizacion] = await Promise.all([
+    permisosPorCreador(),
+    supabase.rpc("cerebros_autorizados", {
+      p_user_id: userId,
+      p_email: normalizarEmail(email ?? ""),
+    }),
+  ]);
+
+  if (modos.size === 0) return [];
+  const { data, error } = autorizacion;
   if (error) {
     throw new Error(`No se pudo comprobar el acceso del usuario: ${error.message}`);
   }
@@ -296,6 +307,22 @@ export async function buscarFichas(
   contexto: ContextoDeAcceso,
   filtros: FiltrosBusqueda,
 ): Promise<FichaConCreador[]> {
+  // El embedding de la pregunta se pide A LA VEZ que los permisos: vectorizar
+  // "me dice que se lo tiene que pensar" no depende de quién pregunta. En serie
+  // era la suma (unos 200 ms de base + 284 de OpenAI); así es el mayor de los
+  // dos. Es la mejora de latencia más grande disponible hoy, y no toca la
+  // calidad: se calcula exactamente lo mismo.
+  //
+  // `void` en el catch para que un fallo de OpenAI no llegue como rechazo sin
+  // capturar mientras se resuelven los permisos; el error se vuelve a mirar
+  // abajo, donde ya se puede degradar con criterio.
+  const embedding = hayEmbeddings()
+    ? generarEmbeddings([filtros.situacion]).then(
+        (v) => ({ vector: v[0] ?? null, error: null as unknown }),
+        (error: unknown) => ({ vector: null, error }),
+      )
+    : null;
+
   const permitidos = await creadoresDisponibles(contexto);
 
   // Si piden un creador concreto, tiene que estar entre los permitidos.
@@ -311,6 +338,13 @@ export async function buscarFichas(
   // invisible en las métricas. Un cero de consultas puede significar "nadie
   // pregunta" o "nadie tiene acceso", y son cosas opuestas.
   if (candidatos.length === 0) {
+    // EL PRECIO DE LANZAR EL EMBEDDING ANTES: aquí ya se ha pagado, para una
+    // persona que no tiene acceso a nada. Se asume a sabiendas. Un embedding de
+    // una frase corta son unos 0,0000004 $ —harían falta millones de peticiones
+    // para llegar a un euro— y a cambio TODAS las búsquedas de quien sí paga se
+    // ahorran los ~284 ms de OpenAI. Lo que habría que vigilar si esto creciera
+    // no es el gasto sino el límite de peticiones de OpenAI; hoy con 6
+    // suscripciones no es un problema, y queda anotado por si algún día lo es.
     registrar(filtros, [], false, Date.now() - empezo, contexto);
     return [];
   }
@@ -319,9 +353,12 @@ export async function buscarFichas(
   let degradada = false;
   let fichas: FichaConCreador[] = [];
 
-  if (hayEmbeddings()) {
+  if (embedding) {
     try {
-      fichas = await buscarPorSimilitud(ids, filtros);
+      const { vector, error } = await embedding;
+      if (error) throw error;
+      if (!vector) throw new Error("OpenAI devolvió un embedding vacío");
+      fichas = await buscarPorSimilitud(ids, filtros, vector);
     } catch (error) {
       // Degradar, no caerse: una respuesta peor vale más que ninguna. Pero se
       // deja constancia, o el fallo se vuelve invisible y nadie lo arregla.
@@ -396,9 +433,9 @@ function registrar(
 async function buscarPorSimilitud(
   creadorIds: string[],
   filtros: FiltrosBusqueda,
+  /** Ya calculado por el llamante, en paralelo con la comprobación de acceso. */
+  consulta: number[],
 ): Promise<FichaConCreador[]> {
-  const [consulta] = await generarEmbeddings([filtros.situacion]);
-
   const { data, error } = await supabase.rpc("buscar_fichas_similares", {
     consulta: JSON.stringify(consulta),
     creadores: creadorIds,
