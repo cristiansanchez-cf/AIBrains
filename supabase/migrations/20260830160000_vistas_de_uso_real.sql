@@ -1,33 +1,39 @@
--- Las vistas de uso mezclaban a las personas con mis propias pruebas, y una de
--- ellas medía algo que no ocurre nunca.
+-- Las vistas de uso mezclaban a las personas con las pruebas internas.
 --
--- PROBLEMA 1: NINGUNA FILTRABA POR `user_id`. `npm run prueba`, `npm run
--- diagnostico` y cualquier script que pase por la búsqueda escriben en
--- `consultas` con `user_id` nulo. Así, "las fichas que faltan, ordenadas por
--- demanda" salía ordenada por lo que escribo yo al probar — y decidir qué
--- contenido crear con esa lista sería crear contenido para mí mismo.
+-- `npm run prueba`, `npm run diagnostico` y cualquier script que pase por la
+-- busqueda escriben en `consultas` con `user_id` nulo. Sin filtrar:
 --
--- PROBLEMA 2: `huecos_de_contenido` usaba `resultados = 0`, que no pasa casi
--- nunca. La búsqueda híbrida SIEMPRE devuelve lo menos malo: "receta de
--- tortilla de patatas" devolvió cinco fichas de ventas. Un hueco no es "no
--- encontré nada", es "lo que encontré no se parecía a lo que preguntabas", y
--- eso se mide con `similitud_max`. Tal y como estaba, la vista habría dicho
--- "no falta contenido" para siempre: un cero que parece una respuesta.
+--   * "las fichas que faltan, ordenadas por demanda" sale ordenada por lo que
+--     escribo yo al probar, y decidir que contenido crear con esa lista seria
+--     crear contenido para mi mismo;
+--   * una tarde de desarrollo parece un dia de mucho trafico.
 --
--- El umbral 0.45 es el mismo que usa `scripts/metricas.ts`. Sigue en dos
--- sitios; si se cambia, hay que cambiarlo en los dos.
+-- Y de paso, un fallo real en la condicion de hueco: `coalesce(similitud_max,
+-- 0)` convierte en cero el nulo que deja el camino lexico, o sea que una caida
+-- de OpenAI se leia como "el contenido no cubre lo que preguntan". Eso lleva a
+-- la decision contraria: escribir fichas en vez de mirar la API. Un hueco solo
+-- se puede juzgar cuando la busqueda semantica funciono.
+--
+-- NOTA PARA QUIEN LEA ESTO DESPUES: la primera version de esta migracion se
+-- escribio leyendo 20260829230000_medicion.sql y dando por hecho que era el
+-- estado actual. No lo era: 20260829234500 ya habia rehecho
+-- `huecos_de_contenido` anadiendo `mejor_parecido`. Al aplicarla, Postgres la
+-- rechazo con "cannot drop columns from view", que fue una suerte -- con una
+-- columna de mas habria pasado en silencio. Antes de tocar una vista, mirar la
+-- ULTIMA migracion que la toca, no la que la creo.
 
-create or replace view public.huecos_de_contenido as
+drop view if exists public.huecos_de_contenido;
+
+create view public.huecos_de_contenido as
   select
-    lower(situacion) as pregunta,
-    count(*)         as veces,
-    max(cuando)      as ultima_vez
+    lower(situacion)             as pregunta,
+    count(*)                     as veces,
+    round(max(similitud_max), 3) as mejor_parecido,
+    max(cuando)                  as ultima_vez
   from public.consultas
   where user_id is not null
-    -- Solo cuando la búsqueda semántica funcionó: por el camino léxico
-    -- `similitud_max` es nulo, y tratarlo como cero convertiría una caída de
-    -- OpenAI en "el contenido no cubre lo que preguntan", que lleva a la
-    -- decisión contraria — escribir fichas en vez de mirar la API.
+    -- Solo cuando la busqueda semantica funciono. Con el camino lexico
+    -- `similitud_max` es nulo y no se sabe si habia hueco o no.
     and similitud_max is not null
     and similitud_max < 0.45
   group by lower(situacion)
@@ -36,7 +42,7 @@ create or replace view public.huecos_de_contenido as
 comment on view public.huecos_de_contenido is
   'Lo que la gente pregunta y el cerebro responde mal (parecido < 0.45). Solo '
   'consultas de personas: las pruebas internas no cuentan. Es la lista de '
-  'fichas que faltan, ordenada por cuánto se pide.';
+  'contenido que falta, ordenada por cuanto se pide.';
 
 create or replace view public.salud_de_la_busqueda as
   select
@@ -53,8 +59,10 @@ create or replace view public.salud_de_la_busqueda as
 
 comment on view public.salud_de_la_busqueda is
   'Uso diario real: volumen, degradaciones y latencia. Solo consultas de '
-  'personas — con las pruebas internas dentro, una tarde de desarrollo parece '
-  'un día de mucho tráfico.';
+  'personas: con las pruebas internas dentro, una tarde de desarrollo parece '
+  'un dia de mucho trafico.';
 
 alter view public.huecos_de_contenido  set (security_invoker = on);
 alter view public.salud_de_la_busqueda set (security_invoker = on);
+
+grant select on public.huecos_de_contenido, public.salud_de_la_busqueda to service_role;
