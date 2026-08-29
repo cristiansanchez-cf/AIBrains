@@ -66,7 +66,12 @@ export function registrarHerramientasDeChatGpt(
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ query }) => {
-      registrarUso("search", query.slice(0, 200), "chatgpt", contexto);
+      // SIN el texto de la consulta. `buscarFichas` ya lo registra en
+      // `consultas`, que es donde tiene sentido —de ahí salen los huecos de
+      // contenido—. Guardarlo también aquí sería tener por duplicado lo que un
+      // comercial pregunta sobre sus operaciones, a cambio de nada: de esta
+      // tabla solo interesa QUÉ herramienta se usa, no con qué.
+      registrarUso("search", null, "chatgpt", contexto);
       const fichas = await buscarFichas(contexto, { situacion: query });
 
       return comoJson({

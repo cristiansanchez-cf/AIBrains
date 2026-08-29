@@ -125,25 +125,29 @@ async function comprobarBusqueda(): Promise<Comprobacion> {
   const n = data?.length ?? 0;
   const malas = data?.filter((c) => c.degradada).length ?? 0;
 
+  // SIN NÚMEROS ABSOLUTOS. Este endpoint es público, y "4 consultas en 30
+  // minutos" es información de negocio: cualquiera que mire sabría el volumen
+  // que movemos. Se dice si hay tráfico y qué proporción va mal, que es todo lo
+  // que necesitan la alarma y quien diagnostica.
   if (n === 0) {
     return {
       nombre: "busqueda",
       estado: "ok",
-      detalle: `sin consultas en ${VENTANA_MIN} min; se juzga por la sonda`,
+      detalle: `sin tráfico en ${VENTANA_MIN} min; se juzga por la sonda`,
     };
   }
 
   // UNA sola degradada ya es alguien que recibió una respuesta peor. No se
-  // exige un porcentaje: con el volumen de hoy, exigir "más del 20%" sería
-  // pedir que fallen varias personas antes de mirar.
+  // exige un porcentaje mínimo: con el volumen de hoy, exigir "más del 20%"
+  // sería pedir que fallen varias personas antes de mirar.
   if (malas > 0) {
     return {
       nombre: "busqueda",
       estado: "degradado",
-      detalle: `${malas} de ${n} consultas degradadas en ${VENTANA_MIN} min`,
+      detalle: `el ${Math.round((malas / n) * 100)}% de las búsquedas de los últimos ${VENTANA_MIN} min se sirvieron degradadas`,
     };
   }
-  return { nombre: "busqueda", estado: "ok", detalle: `${n} consultas, ninguna degradada` };
+  return { nombre: "busqueda", estado: "ok", detalle: `con tráfico y sin degradadas` };
 }
 
 /**
