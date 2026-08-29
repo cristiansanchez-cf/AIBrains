@@ -70,6 +70,12 @@ jobs:
       - name: Abrir o cerrar el aviso
         env:
           GH_TOKEN: ${{ github.token }}
+          # `gh` averigua el repositorio leyendo el remoto de git, y aquí no hay
+          # git: este job no hace checkout a propósito, para que sea un curl y
+          # nada más. Sin esto falla con "not a git repository" — y falló, en la
+          # primera ejecución de verdad. El ensayo con un `gh` falso no podía
+          # cazarlo: probaba la lógica, no el entorno.
+          GH_REPO: ${{ github.repository }}
           ESTADO: ${{ steps.estado.outputs.estado }}
           RESUMEN: ${{ steps.estado.outputs.resumen }}
         run: |
