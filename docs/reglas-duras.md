@@ -198,12 +198,24 @@ Lo que ha demostrado valer en este repo, y conviene repetir:
   "¿qué NO debería poder hacerse?", nunca comprobando que lo bueno funciona.
 - **Escribir el porqué en el sitio donde se va a leer** — en la migración, en la
   cabecera del script—, no en un documento aparte que nadie abre.
+- **Romper el código a propósito para ver si el test lo caza.** Es la única
+  forma de saber si un test prueba algo. Aplicado a `tests/relacionadas.test.ts`
+  descubrió que no probaba nada: leía el fichero fuente y buscaba cadenas.
 
 Y lo que ha fallado, para no repetirlo:
 
 - Cambiar un contrato sin buscar sus llamantes (regla 10).
 - Dar por bueno un número sin volver a medirlo tras tocar algo cerca.
 - Anunciar cobertura que no se tenía ("probado: borradores" sin borradores).
+- **Contar filas con `data.length` en PostgREST.** Corta en 1000 sin decirlo.
+  Ha falseado dos medidas distintas: la distribución de parecidos con la que se
+  eligió el umbral, y la cobertura de la vista materializada en el diagnóstico,
+  que avisaba de una vista rancia que estaba al día. Para contar, `count:
+  "exact"` con `head: true`.
+- **Añadir una función sin decírselo al modelo.** `ver_ficha` se sirvió y se
+  registró su uso, pero no se puso en las instrucciones del servidor: se estaba
+  midiendo algo que nadie sabía usar, y el cero resultante parecía una
+  respuesta.
 
 Este apartado se actualiza. Si en tres meses no ha cambiado, es que nadie está
 aprendiendo nada.
