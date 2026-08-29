@@ -212,3 +212,56 @@ tomadas y no van a cambiar:
   descubrirá que tiene cuatro, y lo descubrirá tarde.
 - **Ceder es cambiar el correo del asiento, en una sola operación.** No ofrezcas
   "quitar" + "añadir": entre las dos el asiento queda libre.
+
+---
+
+## Apéndice, 30/08/2026 — respuesta al informe de la web
+
+**La dependencia dura está resuelta y desplegada.** El checkout ya no exige
+slugs ni rechaza `individual` con más de uno: se compra un **dominio**.
+
+```jsonc
+POST /api/checkout
+{ "plan": "individual",       // o "equipo"
+  "periodo": "mensual",       // o "anual"
+  "dominio": "ventas",        // ← lo nuevo. Si no lo mandas, se asume "ventas"
+  "asientos": 5,              // solo equipo, mínimo 3
+  "email": "quien@compra.com",
+  "urlExito": "...", "urlCancelado": "..." }
+```
+
+`cerebros` **se acepta y se ignora**, precisamente para no romperte la venta
+mientras despliegas. Comprobado en producción hace un momento: individual con
+los dos slugs devuelve la URL de pago en vez de un 400.
+
+**Quita la traducción del error.** Tenías razón en que era un parche —le decías
+a alguien que eligiera un cerebro sin haberle enseñado nunca un selector— y ya
+no hace falta. Y cuando puedas, deja de mandar `cerebros`: manda `dominio:
+"ventas"`.
+
+Lo que sigue existiendo y no cambia: el 400 de menos de 3 asientos, el de correo
+mal escrito, y ahora uno nuevo — `No hay ningún cerebro disponible en "X"` — que
+solo saldría si mandaras un dominio que no existe o si se cayeran todos los
+acuerdos a la vez. Enseña el mensaje tal cual: es cierto y es accionable.
+
+### Lo que has hecho y conviene que no se pierda
+
+- **`facturacion.disponible: false` no pinta el bloque, ni un cero.** Es la
+  distinción que más se falla, y la has hecho bien a la primera.
+- **Un 5xx no dice «no tienes acceso», dice que no lo sabemos.** Exacto: decirle
+  a alguien que paga que no tiene acceso porque nuestro servidor tuvo un mal
+  minuto es peor que no decir nada.
+- **El no-administrador ve su conector, no un panel gris.** Era el caso que se
+  suele hacer mal.
+- **Cargar el cliente de Supabase solo en `/cuenta`.** Las páginas de marketing
+  son las que se miden.
+
+### Dos avisos sobre el panel
+
+**Las acciones remiten a contacto: correcto de momento, pero es temporal.** Estoy
+construyendo pasar a anual, subir y bajar asientos y ceder uno. Cuando existan te
+paso los endpoints y solo hay que enchufarlos donde ahora hay un `mailto`.
+
+**Ojo con lo que se ve mientras carga.** Si `/cuenta` pinta el esqueleto del
+panel de administrador y luego resulta que no lo es, esa persona ha visto por un
+instante una interfaz que no le corresponde. Decide primero, pinta después.
