@@ -116,31 +116,36 @@ async function despachar(evento: Stripe.Event): Promise<void> {
 async function provisionar(sesion: Stripe.Checkout.Session): Promise<void> {
   const meta = sesion.metadata ?? {};
   const plan = meta["plan"];
-  const cerebros = (meta["cerebros"] ?? "").split(",").filter(Boolean);
   const email = normalizarEmail(meta["email"] ?? sesion.customer_email ?? "");
+  if (!email) throw new Error(`Sesión ${sesion.id} sin email en los metadatos.`);
 
-  if (!email || cerebros.length === 0) {
-    throw new Error(`Sesión ${sesion.id} sin email o sin cerebros en los metadatos.`);
-  }
+  // COMPATIBILIDAD CON LO YA VENDIDO. Las sesiones creadas antes del 30/08/2026
+  // llevan `cerebros` y no `dominio`. Se siguen atendiendo tal cual: un cobro
+  // ya hecho no se puede reinterpretar, y menos para dar MENOS de lo que se
+  // pagó. Si algún día no queda ninguna viva, esta rama se puede borrar.
+  const cerebrosViejos = (meta["cerebros"] ?? "").split(",").filter(Boolean);
+  const dominio = meta["dominio"];
 
-  const { data: creadores, error } = await supabase
-    .from("creadores")
-    .select("id, slug")
-    .in("slug", cerebros);
-  if (error) throw new Error(error.message);
-
-  const ids = (creadores ?? []).map((c) => c.id as string);
-  if (ids.length !== cerebros.length) {
-    throw new Error(
-      `Sesión ${sesion.id}: se pagaron ${cerebros.length} cerebros y solo existen ${ids.length}.`,
-    );
+  if (!dominio && cerebrosViejos.length === 0) {
+    throw new Error(`Sesión ${sesion.id}: ni dominio ni cerebros en los metadatos.`);
   }
 
   if (plan === "equipo") {
-    await provisionarEquipo(sesion, email, ids, Number(meta["asientos"] ?? 0));
+    await provisionarEquipo(sesion, email, dominio, cerebrosViejos, Number(meta["asientos"] ?? 0));
   } else {
-    await provisionarIndividual(sesion, email, ids);
+    await provisionarIndividual(sesion, email, dominio, cerebrosViejos);
   }
+}
+
+/** Traduce slugs a identificadores, fallando si alguno no existe. */
+async function idsDeCerebros(slugs: string[], sesionId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("creadores").select("id").in("slug", slugs);
+  if (error) throw new Error(error.message);
+  const ids = (data ?? []).map((c) => c.id as string);
+  if (ids.length !== slugs.length) {
+    throw new Error(`Sesión ${sesionId}: se pagaron ${slugs.length} cerebros y solo existen ${ids.length}.`);
+  }
+  return ids;
 }
 
 /**
@@ -181,10 +186,29 @@ async function usuarioDe(email: string): Promise<string> {
 async function provisionarIndividual(
   sesion: Stripe.Checkout.Session,
   email: string,
-  creadorIds: string[],
+  dominio: string | undefined,
+  cerebrosViejos: string[],
 ): Promise<void> {
   const userId = await usuarioDe(email);
 
+  if (dominio) {
+    const { error } = await supabase.from("suscripciones_dominio").upsert(
+      {
+        user_id: userId,
+        dominio,
+        activa: true,
+        expira_en: null,
+        stripe_subscription_id: sesion.subscription as string,
+        stripe_customer_id: sesion.customer as string,
+      },
+      { onConflict: "user_id,dominio" },
+    );
+    if (error) throw new Error(`Al dar de alta la suscripción: ${error.message}`);
+    console.error(`[stripe] alta individual: ${email} -> dominio ${dominio}`);
+    return;
+  }
+
+  const creadorIds = await idsDeCerebros(cerebrosViejos, sesion.id);
   const { error } = await supabase.from("suscripciones").upsert(
     creadorIds.map((creador_id) => ({
       user_id: userId,
@@ -204,7 +228,8 @@ async function provisionarIndividual(
 async function provisionarEquipo(
   sesion: Stripe.Checkout.Session,
   email: string,
-  creadorIds: string[],
+  dominio: string | undefined,
+  cerebrosViejos: string[],
   asientos: number,
 ): Promise<void> {
   const { data: org, error } = await supabase
@@ -224,10 +249,18 @@ async function provisionarEquipo(
 
   const oid = org.id as string;
 
-  const { error: errorCerebros } = await supabase
-    .from("organizacion_cerebros")
-    .insert(creadorIds.map((creador_id) => ({ organizacion_id: oid, creador_id })));
-  if (errorCerebros) throw new Error(`Al asignar cerebros: ${errorCerebros.message}`);
+  if (dominio) {
+    const { error: e } = await supabase
+      .from("organizacion_dominios")
+      .insert({ organizacion_id: oid, dominio });
+    if (e) throw new Error(`Al asignar el dominio: ${e.message}`);
+  } else {
+    const creadorIds = await idsDeCerebros(cerebrosViejos, sesion.id);
+    const { error: e } = await supabase
+      .from("organizacion_cerebros")
+      .insert(creadorIds.map((creador_id) => ({ organizacion_id: oid, creador_id })));
+    if (e) throw new Error(`Al asignar cerebros: ${e.message}`);
+  }
 
   // Quien paga entra como administrador Y con un asiento. El asiento porque si
   // no la cuenta nace sin poder hacer nada; y es cesible después, cosa que la
@@ -302,7 +335,14 @@ async function marcarImpago(factura: Stripe.Invoice): Promise<void> {
   const sub = (factura as unknown as { subscription?: string }).subscription;
   if (!sub) return;
 
+  // LAS DOS TABLAS. Una suscripción nueva vive en `suscripciones_dominio` y una
+  // vieja en `suscripciones`; dar de baja solo una dejaría acceso servido y sin
+  // cobrar, que es la mitad mala de equivocarse.
   await supabase.from("suscripciones").update({ activa: false }).eq("stripe_subscription_id", sub);
+  await supabase
+    .from("suscripciones_dominio")
+    .update({ activa: false })
+    .eq("stripe_subscription_id", sub);
   await supabase
     .from("organizaciones")
     .update({ estado_pago: "impagada" })

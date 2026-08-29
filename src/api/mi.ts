@@ -25,6 +25,7 @@
  */
 import Stripe from "stripe";
 import { supabase } from "../db/supabase.js";
+import { creadoresDisponibles } from "../db/consultas.js";
 import { config } from "../config.js";
 import { normalizarEmail } from "../email.js";
 
@@ -147,25 +148,29 @@ async function facturacionDeStripe(subscriptionId: string | null): Promise<Factu
   }
 }
 
-/** Los cerebros con su nombre y su número de fichas servibles. */
-async function detallarCerebros(creadorIds: string[]): Promise<CerebroContratado[]> {
-  if (creadorIds.length === 0) return [];
-
-  const { data } = await supabase
-    .from("creadores")
-    .select("id, slug, nombre, perfil_url")
-    .in("id", creadorIds);
+/**
+ * Los cerebros a los que llega esta persona.
+ *
+ * Se pregunta por `creadoresDisponibles`, la MISMA función que decide qué se
+ * sirve por MCP, en vez de leer `suscripciones` aquí. Así el panel no puede
+ * decir una cosa y el cerebro hacer otra — que es exactamente lo que pasaría
+ * con dos consultas parecidas escritas en dos sitios, y ya nos costó dos
+ * revisiones aprenderlo. Desde que se vende por dominio importa más: el acceso
+ * ya no es una lista guardada, se calcula.
+ */
+async function cerebrosDe(userId: string, email: string): Promise<CerebroContratado[]> {
+  const creadores = await creadoresDisponibles({ tipo: "usuario", userId, email });
 
   return Promise.all(
-    (data ?? []).map(async (c) => {
+    creadores.map(async (c) => {
       const { count } = await supabase
         .from("fichas_servibles")
         .select("id", { count: "exact", head: true })
-        .eq("creador_id", c.id as string);
+        .eq("creador_id", c.id);
       return {
-        slug: c.slug as string,
-        nombre: c.nombre as string,
-        perfil_url: (c.perfil_url as string | null) ?? null,
+        slug: c.slug,
+        nombre: c.nombre,
+        perfil_url: c.perfil_url ?? null,
         fichas: count ?? 0,
       };
     }),
@@ -214,12 +219,6 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
       .eq("organizacion_id", orgId)
       .is("revocado_en", null);
 
-    const { data: cerebros } = await supabase
-      .from("organizacion_cerebros")
-      .select("creador_id")
-      .eq("organizacion_id", orgId)
-      .eq("activa", true);
-
     // Los administradores no gastan asiento y son dos tablas a propósito: una
     // empresa puede tener cinco admins llevando cinco asientos que son para
     // otras cinco personas. Mezclarlos haría que se comprara mal.
@@ -240,9 +239,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
         pasar_a_anual: esAdmin,
         gestionar_asientos: esAdmin,
       },
-      cerebros: await detallarCerebros(
-        (cerebros ?? []).map((c) => c.creador_id as string),
-      ),
+      cerebros: await cerebrosDe(userId, correo),
       conector,
       facturacion: esAdmin
         ? await facturacionDeStripe((org?.stripe_subscription_id as string | null) ?? null)
@@ -267,15 +264,24 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
   }
 
   // --- Individual ----------------------------------------------------------
-  const { data: subs } = await supabase
-    .from("suscripciones")
-    .select("creador_id, activa, expira_en, stripe_subscription_id")
-    .eq("user_id", userId);
-
+  // Las dos formas de tener una suscripción individual: por dominio (lo que se
+  // vende hoy) y por creador (las altas manuales y lo vendido antes).
   const ahora = Date.now();
-  const vivas = (subs ?? []).filter(
-    (s) => s.activa && (!s.expira_en || new Date(s.expira_en as string).getTime() > ahora),
-  );
+  const viva = (s: { activa: unknown; expira_en: unknown }): boolean =>
+    Boolean(s.activa) && (!s.expira_en || new Date(s.expira_en as string).getTime() > ahora);
+
+  const [porDominio, porCreador] = await Promise.all([
+    supabase
+      .from("suscripciones_dominio")
+      .select("activa, expira_en, stripe_subscription_id")
+      .eq("user_id", userId),
+    supabase
+      .from("suscripciones")
+      .select("activa, expira_en, stripe_subscription_id")
+      .eq("user_id", userId),
+  ]);
+
+  const vivas = [...(porDominio.data ?? []), ...(porCreador.data ?? [])].filter(viva);
 
   if (vivas.length === 0) {
     return {
@@ -304,7 +310,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
       pasar_a_anual: facturacion.periodo === "mensual" && !facturacion.cancelada,
       gestionar_asientos: false,
     },
-    cerebros: await detallarCerebros(vivas.map((s) => s.creador_id as string)),
+    cerebros: await cerebrosDe(userId, correo),
     conector,
     facturacion,
     organizacion: null,

@@ -2,7 +2,7 @@
  * Crear la sesión de pago de Stripe.
  *
  * LA IDEA DE FONDO: lo que se cobra y lo que se sirve no pueden separarse. Por
- * eso los cerebros comprados viajan en los metadatos de la sesión y el webhook
+ * eso lo comprado viaja en los metadatos de la sesión y el webhook
  * provisiona a partir de AHÍ, no de lo que diga quien llama después. Si el
  * cliente pudiera decir "he pagado, dame estos cerebros", el pago sería
  * decorativo.
@@ -24,8 +24,13 @@ export type Periodo = "mensual" | "anual";
 export interface PeticionDeCompra {
   plan: Plan;
   periodo: Periodo;
-  /** Slugs de los cerebros que se compran. */
-  cerebros: string[];
+  /**
+   * OBSOLETO. Se acepta y se ignora: la web todavía lo manda y rechazar una
+   * compra por un campo de más sería romper una venta por una formalidad.
+   */
+  cerebros?: string[];
+  /** Qué se compra: 'ventas' hoy. Por defecto 'ventas'. */
+  dominio?: string;
   /** Solo para equipo. Mínimo el configurado (3). */
   asientos?: number;
   email: string;
@@ -54,28 +59,32 @@ function precioDe(plan: Plan, periodo: Periodo): string {
 }
 
 /**
- * Comprueba que los cerebros existan y se puedan servir AHORA.
+ * Comprueba que el dominio tenga algo que servir AHORA.
  *
  * No basta con que existan: un creador cuyo acuerdo ha vencido, o cuya beta ha
  * caducado, no se puede servir — y cobrar por él sería vender algo que no se va
  * a entregar.
  */
-async function validarCerebros(slugs: string[]): Promise<void> {
-  if (slugs.length === 0) {
-    throw new PeticionInvalida("Hay que elegir al menos un cerebro.");
-  }
-
+async function validarDominio(dominio: string): Promise<number> {
   const { data, error } = await supabase.rpc("creadores_servibles");
   if (error) throw new Error(`No se pudo comprobar el catálogo: ${error.message}`);
 
-  const servibles = new Set((data ?? []).map((c: { slug: string }) => c.slug));
-  const noServibles = slugs.filter((s) => !servibles.has(s));
+  const ids = (data ?? []).map((c: { id: string }) => c.id);
+  if (ids.length === 0) throw new PeticionInvalida("Ahora mismo no hay ningún cerebro disponible.");
 
-  if (noServibles.length > 0) {
-    throw new PeticionInvalida(
-      `Estos cerebros no están disponibles: ${noServibles.join(", ")}.`,
-    );
+  const { count } = await supabase
+    .from("creadores")
+    .select("id", { count: "exact", head: true })
+    .eq("dominio", dominio)
+    .in("id", ids);
+
+  // Se cuenta lo SERVIBLE, no lo que existe. Un dominio con creadores cuyo
+  // acuerdo ha caducado no se puede vender: cobrar por algo que no se va a
+  // entregar es peor que no tenerlo.
+  if (!count) {
+    throw new PeticionInvalida(`No hay ningún cerebro disponible en "${dominio}".`);
   }
+  return count;
 }
 
 export async function crearSesionDePago(peticion: PeticionDeCompra): Promise<string> {
@@ -94,16 +103,19 @@ export async function crearSesionDePago(peticion: PeticionDeCompra): Promise<str
     throw new PeticionInvalida(`Periodo desconocido: "${peticion.periodo}".`);
   }
 
-  const cerebros = [...new Set(peticion.cerebros ?? [])];
-  await validarCerebros(cerebros);
-
-  // El individual es de UN cerebro mientras no haya precios por volumen. Si se
-  // permitieran varios se cobraría uno y se servirían tres.
-  if (peticion.plan === "individual" && cerebros.length !== 1) {
-    throw new PeticionInvalida(
-      "El plan individual es de un cerebro. Para varios, hoy hay que suscribirse por separado.",
-    );
-  }
+  // SE COMPRA UN DOMINIO, NO UNA LISTA DE CREADORES.
+  //
+  // Antes el comprador elegía cerebros y el individual era de uno solo. Eso
+  // obligaba a elegir entre nombres de formadores que no conoce, y dejaba fuera
+  // contenido que ya teníamos. Ahora se compra "ventas" y dentro está todo lo
+  // de ventas, incluidos los creadores que entren después — eso lo resuelve la
+  // base en `cerebros_autorizados`, no una lista copiada aquí.
+  //
+  // `cerebros` en la petición se ignora, y se acepta sin protestar: la web
+  // todavía lo manda y rechazar la compra por un campo de más sería romper una
+  // venta por una cuestión de forma.
+  const dominio = (peticion.dominio ?? "ventas").toLowerCase().trim();
+  const cuantos = await validarDominio(dominio);
 
   const minimo = config.stripe.asientosMinimos;
   const asientos = peticion.plan === "equipo" ? (peticion.asientos ?? minimo) : 1;
@@ -130,14 +142,19 @@ export async function crearSesionDePago(peticion: PeticionDeCompra): Promise<str
     metadata: {
       plan: peticion.plan,
       periodo: peticion.periodo,
-      cerebros: cerebros.join(","),
+      dominio,
+      // Cuántos cerebros tenía el dominio al comprar. No se usa para dar
+      // acceso —eso se resuelve en cada consulta— pero deja constancia de qué
+      // se estaba vendiendo el día del cobro, que es lo que hay que poder
+      // enseñar si alguien reclama.
+      cerebros_al_comprar: String(cuantos),
       asientos: String(asientos),
       email,
     },
     subscription_data: {
       metadata: {
         plan: peticion.plan,
-        cerebros: cerebros.join(","),
+        dominio,
         email,
       },
     },
