@@ -208,17 +208,29 @@ export interface FichaRelacionada {
 export async function fichasRelacionadas(
   contexto: ContextoDeAcceso,
   fichaId: number,
+  /**
+   * Los creadores permitidos, si el llamante ya los tiene.
+   *
+   * Resolverlos cuesta TRES viajes a Postgres, y los dos llamantes los acaban
+   * de calcular dos líneas antes. Sin este parámetro, `buscar_tecnica` pasó de
+   * 7 viajes a 12 y `ver_ficha` gastaba 9 para traer una ficha — en un producto
+   * cuya latencia ya está dominada por la red.
+   */
+  permitidosYaResueltos?: CreadorServible[],
 ): Promise<FichaRelacionada[]> {
-  const permitidos = await creadoresDisponibles(contexto);
+  const permitidos = permitidosYaResueltos ?? (await creadoresDisponibles(contexto));
   if (permitidos.length === 0) return [];
 
+  // Se piden TODAS las candidatas y se recorta DESPUÉS del filtro de acceso.
+  // Recortar antes hacía que, si una de las tres primeras había dejado de ser
+  // servible —descartada, o movida de creador por `npm run atribucion`—, se
+  // enseñaran menos sin avisar y las de más abajo no se miraran siquiera.
   const { data, error } = await supabase
     .from("fichas_relacionadas")
     .select("relacionada_id, parecido")
     .eq("ficha_id", fichaId)
     .gte("parecido", PARECIDO_MINIMO)
-    .order("orden")
-    .limit(MAX_RELACIONADAS);
+    .order("orden");
 
   if (error || !data?.length) return [];
 
@@ -230,19 +242,26 @@ export async function fichasRelacionadas(
 
   const parecidoPorId = new Map(data.map((r) => [r.relacionada_id as number, Number(r.parecido)]));
 
-  return (fichas ?? []).map((f) => ({
-    id: f.id as number,
-    insight: f.insight as string,
-    parecido: parecidoPorId.get(f.id as number) ?? 0,
-  }));
+  // Ordenado por parecido: `.in()` no conserva el orden de la lista que se le
+  // pasa, así que sin esto la más parecida no salía necesariamente primera —
+  // y `parecido` se devolvía sin usarse para nada.
+  return (fichas ?? [])
+    .map((f) => ({
+      id: f.id as number,
+      insight: f.insight as string,
+      parecido: parecidoPorId.get(f.id as number) ?? 0,
+    }))
+    .sort((a, b) => b.parecido - a.parecido)
+    .slice(0, MAX_RELACIONADAS);
 }
 
 /** Una ficha concreta, si quien pregunta puede verla. */
 export async function fichaPorId(
   contexto: ContextoDeAcceso,
   id: number,
+  permitidosYaResueltos?: CreadorServible[],
 ): Promise<FichaConCreador | null> {
-  const permitidos = await creadoresDisponibles(contexto);
+  const permitidos = permitidosYaResueltos ?? (await creadoresDisponibles(contexto));
   if (permitidos.length === 0) return null;
 
   const { data, error } = await supabase
@@ -284,10 +303,19 @@ export async function buscarFichas(
     ? permitidos.filter((c) => c.slug === filtros.creador)
     : permitidos;
 
-  if (candidatos.length === 0) return [];
+  const empezo = Date.now();
+
+  // Se registra TAMBIÉN cuando no hay a quién preguntar. Antes este `return`
+  // salía antes del registro, así que justamente la gente que más interesa
+  // —sin suscripción, o pidiendo un creador que no tiene contratado— era
+  // invisible en las métricas. Un cero de consultas puede significar "nadie
+  // pregunta" o "nadie tiene acceso", y son cosas opuestas.
+  if (candidatos.length === 0) {
+    registrar(filtros, [], false, Date.now() - empezo, contexto);
+    return [];
+  }
 
   const ids = candidatos.map((c) => c.id);
-  const empezo = Date.now();
   let degradada = false;
   let fichas: FichaConCreador[] = [];
 

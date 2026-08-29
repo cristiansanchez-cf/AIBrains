@@ -13,12 +13,15 @@
  *    sería añadir una función y no aprender nada — dentro de tres meses
  *    seguiríamos discutiéndolo con las mismas intuiciones.
  *
- * 3. ES LA MITAD `fetch` QUE EXIGE CHATGPT. Sin modo desarrollador, ChatGPT
- *    rechaza un servidor MCP que no tenga `search` y `fetch`. Esta es `fetch`.
+ * 3. ES LA BASE DE LA MITAD `fetch` QUE PIDE CHATGPT — pero OJO, todavía no la
+ *    cumple. ChatGPT exige herramientas llamadas literalmente `search` y
+ *    `fetch`, y estas se llaman `buscar_tecnica` y `ver_ficha`. Hace falta un
+ *    adaptador que las exponga con esos nombres; esto es la lógica que usará,
+ *    no el requisito cumplido. Estaba escrito como si ya lo estuviera.
  */
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { fichaPorId, fichasRelacionadas } from "../db/consultas.js";
+import { fichaPorId, fichasRelacionadas, creadoresDisponibles } from "../db/consultas.js";
 import { formatearFicha } from "./formato.js";
 import { registrarUso } from "../db/uso.js";
 import type { ContextoDeAcceso } from "../tipos.js";
@@ -44,12 +47,22 @@ export function registrarVerFicha(servidor: McpServer, contexto: ContextoDeAcces
             "De dónde sale la petición. 'relacionada' si venía sugerida por otra ficha.",
           ),
       },
+      // readOnlyHint sigue siendo cierto para el USUARIO: no cambia nada de lo
+      // suyo. Escribe una fila de medición, que es contabilidad interna, no un
+      // efecto que le importe al cliente MCP.
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id, origen }) => {
-      const ficha = await fichaPorId(contexto, id);
+      // Se resuelven UNA vez y se reutilizan: cada llamada a
+      // `creadoresDisponibles` son tres viajes a Postgres.
+      const disponibles = await creadoresDisponibles(contexto);
+      const ficha = await fichaPorId(contexto, id, disponibles);
 
       if (!ficha) {
+        // También se registra el fallo. Sin esto nunca se vería un `ver_ficha`
+        // que no encuentra nada, que es la señal de que el modelo se inventa
+        // identificadores o de que una relacionada sugerida ya no es alcanzable.
+        registrarUso("ver_ficha", String(id), `${origen ?? "usuario"}:no-encontrada`, contexto);
         // No se distingue "no existe" de "no tienes acceso", a propósito: decir
         // cuál sería confirmar que existe una ficha de un cerebro no contratado.
         return {
@@ -64,8 +77,10 @@ export function registrarVerFicha(servidor: McpServer, contexto: ContextoDeAcces
 
       registrarUso("ver_ficha", String(id), origen ?? "usuario", contexto);
 
-      const relacionadas = await fichasRelacionadas(contexto, id);
-      const bloques = [formatearFicha(ficha, 1)];
+      const relacionadas = await fichasRelacionadas(contexto, id, disponibles);
+      // Índice 1 porque solo hay una ficha; el número posicional no significa
+      // nada aquí y se pide por id, así que el encabezado lleva el id de verdad.
+      const bloques = [formatearFicha(ficha, 1).replace(/^### 1\. /, `### [${id}] `)];
 
       if (relacionadas.length > 0) {
         bloques.push(

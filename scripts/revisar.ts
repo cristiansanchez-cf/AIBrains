@@ -106,6 +106,17 @@ async function cambiarEstado(id: string, estado: string): Promise<void> {
         `\nAñádelo con:  npm run revisar -- enlace ${data.id} <url>`,
     );
   }
+
+  // Publicar o descartar cambia lo que la vista materializada de relacionadas
+  // puede ver, así que hay que recalcularla o queda mintiendo: una ficha recién
+  // publicada no aparecería como relacionada de nadie, y las descartadas
+  // seguirían sugiriéndose. Es invisible si no se hace — la sección simplemente
+  // sale más corta.
+  const { error: errorRel } = await supabase.rpc("refrescar_relacionadas");
+  if (errorRel) {
+    console.error(`AVISO: no se pudieron refrescar las relacionadas: ${errorRel.message}`);
+    console.error(`Ejecuta 'npm run diagnostico' para ver si quedaron obsoletas.`);
+  }
 }
 
 async function ponerEnlace(id: string, url: string): Promise<void> {

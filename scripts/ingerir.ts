@@ -268,14 +268,12 @@ async function main(): Promise<void> {
     await marcarFuente(fuente.id, "procesada", { hash: huella, fichas: filas.length });
   }
 
-  // Las relacionadas están precalculadas, así que hay que recalcularlas o las
-  // fichas nuevas no aparecerán como relacionadas de nadie ni tendrán las suyas.
-  const { error: errorRel } = await supabase.rpc("refrescar_relacionadas");
-  if (errorRel) {
-    console.error(`AVISO: no se pudieron refrescar las relacionadas: ${errorRel.message}`);
-    console.error(`Hazlo a mano cuando puedas, o estas fichas quedarán sueltas.`);
-  }
-
+  // NO se refrescan las relacionadas aquí, aunque lo pida el cuerpo.
+  //
+  // Estas fichas entran como BORRADOR y la vista materializada solo mira las
+  // publicadas: refrescar ahora no metería ninguna. La primera versión lo hacía
+  // y el comentario afirmaba lo contrario. El refresco va donde de verdad se
+  // publica: `npm run revisar` y `npm run atribucion --aplicar`.
   console.log(`${filas.length} ficha(s) guardadas como BORRADOR.`);
   console.log(`\nNo se sirven hasta revisarlas:\n  npm run revisar`);
 }

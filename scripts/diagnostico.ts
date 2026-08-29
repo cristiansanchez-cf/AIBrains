@@ -451,6 +451,70 @@ async function comprobarSemantica(): Promise<Resultado> {
   };
 }
 
+/**
+ * Que las fichas relacionadas no estén rancias.
+ *
+ * `fichas_relacionadas` es una vista materializada: una foto del corpus del
+ * momento en que se refrescó. Si alguien publica fichas y nadie llama a
+ * `refrescar_relacionadas()`, las nuevas no aparecen como relacionadas de nada
+ * y las viejas siguen sugiriendo lo de antes. No falla: sirve de menos, en
+ * silencio, que es el modo de fallo que más cuesta ver.
+ *
+ * Ya pasó una vez con este mismo mecanismo: el refresco estaba colgado de
+ * `ingerir.ts`, que inserta BORRADORES, mientras la vista solo mira las
+ * publicadas — así que se refrescaba siempre en el momento en que no cambiaba
+ * nada. Esto lo habría cazado el mismo día.
+ */
+async function comprobarRelacionadas(): Promise<Resultado> {
+  const titulo = "Fichas relacionadas al día";
+
+  // La ficha publicada más reciente. Si esa no está en la vista, la vista es
+  // de antes de publicarla y punto: no hace falta contar nada más.
+  const { data: ultima } = await supabase
+    .from("fichas")
+    .select("id, creado_en")
+    .eq("estado", "publicada")
+    .not("embedding", "is", null)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!ultima) return { nivel: "aviso", titulo, detalle: "no hay fichas publicadas con embedding" };
+
+  const { count: suyas } = await supabase
+    .from("fichas_relacionadas")
+    .select("ficha_id", { count: "exact", head: true })
+    .eq("ficha_id", ultima.id);
+
+  // Y el volumen total, con `count` y no trayendo filas: PRIMERA VERSIÓN DE
+  // ESTA COMPROBACIÓN CONTABA MAL. Pedía las filas con `.limit(20000)` y
+  // contaba ficha_id distintos, pero PostgREST corta en 1000 pase lo que pase:
+  // salían 200 fichas cubiertas (1000 filas ÷ 5 por ficha) y el diagnóstico
+  // avisaba de una vista rancia que estaba perfectamente al día. Es el MISMO
+  // tope de 1000 que ya falseó la distribución de parecidos al elegir el
+  // umbral. Regla 11 de docs/reglas-duras.md: con PostgREST, contar es
+  // `count`, nunca `data.length`.
+  const { count: relaciones } = await supabase
+    .from("fichas_relacionadas")
+    .select("ficha_id", { count: "exact", head: true });
+
+  if (!suyas) {
+    return {
+      nivel: "aviso",
+      titulo,
+      detalle:
+        `la ficha ${ultima.id}, la última publicada, no tiene relaciones calculadas. ` +
+        `Falta refrescar: select refrescar_relacionadas();`,
+    };
+  }
+
+  return {
+    nivel: "ok",
+    titulo,
+    detalle: `${relaciones ?? 0} relaciones · la última publicada (${ultima.id}) está dentro`,
+  };
+}
+
 // --- 5. Producción ----------------------------------------------------------
 
 async function comprobarProduccion(): Promise<Resultado> {
@@ -551,6 +615,7 @@ async function main(): Promise<void> {
   await comprobar("Atribución", comprobarAtribucion);
   await comprobar("Embeddings", comprobarEmbeddings);
   await comprobar("Búsqueda semántica", comprobarSemantica);
+  await comprobar("Fichas relacionadas", comprobarRelacionadas);
   await comprobar("Suscripciones", comprobarSuscripciones);
   await comprobar("Producción", comprobarProduccion);
   await comprobar("Versión desplegada", comprobarVersion);

@@ -14,8 +14,17 @@
 | Medida | Suelo | Cómo se comprueba |
 |---|---|---|
 | Recuperación correcta a la primera | **90%** | `npm run evaluar` |
+| Recuperación entre las cinco primeras | **96%** | `npm run evaluar` |
 | Marcadores de "suena a IA" con el filtro puesto | **0** | `npm run voz` |
 | Tests de lógica pura | **todos** | `npm test` |
+
+El de las cinco primeras estaba en `scripts/metricas.ts` desde el principio,
+comprobándose en cada medición y atribuido a este documento — donde no estaba.
+Un suelo inventado en el código y presentado como acordado es justo lo que la
+regla 9 prohíbe. Se apunta aquí con su porqué: el modelo recibe cinco fichas y
+puede elegir entre ellas, así que "está entre las cinco" es lo que decide si la
+respuesta puede ser buena; "sale la primera" es lo que decide si será rápida
+y directa. Son dos cosas distintas y las dos tienen suelo.
 
 Si un cambio baja cualquiera de estos, **no entra** hasta que se hable. Un
 cambio que mejora la latencia y baja la recuperación al 85% no es una mejora: es
@@ -206,4 +215,4 @@ aprendiendo nada.
 Todo lo demás. La estética, la estructura del código, los nombres, qué framework,
 en qué orden se hacen las cosas. Ahí no hace falta pedir permiso a nadie.
 
-Estas diez existen porque todas costaron algo la primera vez.
+Estas once existen porque todas costaron algo la primera vez.

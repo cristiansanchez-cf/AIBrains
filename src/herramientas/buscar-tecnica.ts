@@ -140,7 +140,7 @@ export function registrarBuscarTecnica(
       // origen='relacionada'): de eso depende si el grafo merece la pena.
       const primera = fichas[0];
       if (primera) {
-        const cerca = await fichasRelacionadas(contexto, primera.id);
+        const cerca = await fichasRelacionadas(contexto, primera.id, disponibles);
         if (cerca.length > 0) {
           bloques.splice(
             bloques.length - 1,

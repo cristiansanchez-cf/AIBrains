@@ -1,6 +1,6 @@
 # Qué hay hecho y qué queda
 
-> Lista viva. Se actualiza al cerrar cada cosa. Última revisión: 29/08/2026.
+> Lista viva. Se actualiza al cerrar cada cosa. Última revisión: 30/08/2026.
 
 ---
 
@@ -19,35 +19,31 @@
 | **Condiciones económicas** versionadas por fecha | Renegociar no reescribe el pasado |
 | **API para la web**: catálogo y checkout | `/api/catalogo`, `/api/checkout` |
 | **Medición de uso**: consultas, latencia, degradación, huecos | Recogiendo desde hoy |
-| **Reglas duras** escritas | `docs/reglas-duras.md` |
+| **Reglas duras** escritas | `docs/reglas-duras.md`, 11 reglas |
+| **Bucle de medición cerrado**: se guarda, se compara y falla solo | `npm run metricas`, semanal en CI |
+| **Fichas relacionadas** por parecido real, del mismo creador | `ver_ficha`, con su uso registrado |
 
 ---
 
 ## En curso
 
-**Cerrar el bucle de medición.** Las evaluaciones de calidad (`npm run evaluar`,
-`npm run voz`) dan un número y lo imprimen. Falta guardarlo en `metricas` y que
-corran solas cada semana, para ver la **tendencia** — un 88% aislado no alarma,
-un 90 → 89 → 88 sí.
+**Esperar a que las relacionadas digan algo.** Ya se sirven y ya se registra
+quién tira de ellas, pero hoy el contador está a cero **porque no ha pasado
+tiempo**, no porque nadie las quiera. `npm run metricas` distingue esas dos
+cosas a propósito y avisa si el modelo deja de mandar `origen`, que sería un
+cero mentiroso. La decisión sobre el grafo se toma cuando haya semanas, no
+antes.
+
+*(La versión que iba a relacionar por `etapa`, `familia` y `tags` se descartó
+midiendo: `tags` tiene 5 valores y son segmentos de audiencia —uniría 145
+fichas entre sí—. Se relacionan por el parecido de los embeddings que ya
+estaban guardados, que no cuesta ninguna llamada a OpenAI.)*
 
 ---
 
 ## Siguiente, por orden
 
-### 1. "Relacionadas con esta" — la versión barata del grafo
-
-Las fichas ya tienen `etapa`, `familia`, `objecion` y `tags`. Un "relacionadas
-con esta" sobre esos campos cuesta casi nada.
-
-**Y lo importante es medir si se usa.** La idea del grafo —conectar fichas para
-decir "después de esta objeción suele venir esta otra"— es buena, pero mantener
-aristas es caro. Esto responde a la pregunta *antes* de invertir: si nadie tira
-de las relacionadas, el grafo no habría servido de nada; si tiran mucho,
-justifica construirlo bien.
-
-Hay que registrar el uso, no solo servirlas.
-
-### 2. Que `/health` diga la verdad, y avisar
+### 1. Que `/health` diga la verdad, y avisar
 
 Hoy devuelve `"estado":"ok"` mientras el proceso esté vivo. Si OpenAI falla, la
 búsqueda degrada al respaldo léxico —del 90% al 79%— y `/health` sigue en verde.
@@ -55,7 +51,7 @@ búsqueda degrada al respaldo léxico —del 90% al 79%— y `/health` sigue en 
 Con el registro ya puesto, la señal existe (`degradada`); falta que alguien la
 mire sin que se lo pidan.
 
-### 3. Velocidad, con el dato delante
+### 2. Velocidad, con el dato delante
 
 Medido: 656 ms por búsqueda, de los cuales **435 son viajes de red** y 284 la
 llamada a OpenAI. La búsqueda vectorial en sí son microsegundos.
@@ -65,26 +61,29 @@ calidad**: son deterministas (ver `docs/reglas-duras.md` §2). Pero primero hay
 que medir cuántas consultas se repiten, porque eso decide si la caché sirve del
 30% o del 90%.
 
-### 4. Calidad del contenido (P2)
+### 3. Calidad del contenido (P2)
 
 - `como_suena_mal` por ficha — la aportación principal del informe de uso
 - Medidor de la calidad de la destilación
 - Las 5 fichas que faltan (necesita material de los creadores)
 
-### 5. Ingesta a escala (P3)
+### 4. Ingesta a escala (P3)
 
 PDF, vídeo privado, troceado con reunificación de procedencia. **Se vuelve
 urgente el día que un creador diga que sí y pase 500 vídeos**, no antes.
 
-### 6. Lo que pida la web
+### 5. Lo que pida la web
 
 Estado de suscripción y panel de organización. Requiere decidir cómo autentica
 la web: el MCP usa tokens OAuth y la web tendrá sesiones normales de Supabase, y
 son cosas distintas.
 
-### 7. Adaptador `search`/`fetch` para ChatGPT
+### 6. Adaptador `search`/`fetch` para ChatGPT
 
-Quita dos de las tres pegas que hoy hacen que el producto se vea mal ahí.
+Quita dos de las tres pegas que hoy hacen que el producto se vea mal ahí. `ver_ficha`
+ya hace lo que tendría que hacer `fetch`, pero **no cumple el requisito**:
+ChatGPT exige herramientas llamadas literalmente `search` y `fetch`. Falta el
+adaptador que las exponga con esos nombres, no la lógica.
 
 ---
 
@@ -103,6 +102,11 @@ Quita dos de las tres pegas que hoy hacen que el producto se vea mal ahí.
 - **La política de privacidad tiene que mencionar el registro de consultas.**
   Se guarda lo que un comercial pregunta sobre sus operaciones. Retención: 90
   días, sin automatizar todavía.
+- **La vista de relacionadas es cuadrática en fichas por creador.** Hoy son
+  ~55.000 distancias y se calcula en un momento; con 50.000 fichas de un mismo
+  creador serían ~5×10⁸. El día que un creador pase su catálogo entero hay que
+  hacer `refrescar_relacionadas(creador_id)` incremental. No antes: sería
+  optimizar un problema que todavía no existe.
 - **`account.updated` no tiene destination en Stripe.** No importa hasta que
   firme un creador; mientras, `npm run acuerdo -- comprobar <slug>`.
 - **El camino de escritura de Stripe Connect nunca se ha ejecutado.** Crear la

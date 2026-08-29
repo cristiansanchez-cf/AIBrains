@@ -4,7 +4,7 @@
  * Se envía al cliente MCP en el handshake. La capa (b) —el refuerzo del mismo
  * disparador— vive en la descripción de cada herramienta.
  *
- * FASE 4. Partiendo del texto literal de §5, se añaden tres reglas que
+ * FASE 4. Partiendo del texto literal de §5, se añaden cuatro reglas que
  * salieron de ver el cerebro en uso:
  *
  * 1. SEPARAR LAS VOCES. Lo observado tres veces: el modelo tomaba una ficha y
@@ -21,6 +21,14 @@
  * 3. ENSEÑAR A PREGUNTAR. Mucha gente no sabe qué pedirle a un cerebro. Cerrar
  *    sugiriendo el siguiente paso cuesta una línea y hace que el producto se
  *    explique solo.
+ *
+ * 4. DECIR QUE `ver_ficha` EXISTE, Y QUE HAY QUE PASARLE `origen`. Esto no es
+ *    cosmético: `origen='relacionada'` es EL dato con el que se decide si se
+ *    construye el grafo de fichas. Si el modelo abre relacionadas sin pasar
+ *    ese campo, el contador se queda a cero y el cero se lee como "a nadie le
+ *    interesan" — que es la conclusión contraria a la verdad, y la que ahorra
+ *    trabajo. Un detector que falla hacia el lado cómodo es peor que no
+ *    tenerlo (docs/reglas-duras.md §8).
  */
 export const INSTRUCCIONES_DEL_SERVIDOR = `Este servidor da acceso a metodología de ventas destilada de expertos.
 Cuando el usuario plantee cualquier situación comercial (mensaje a un cliente,
@@ -53,7 +61,11 @@ Al responder:
 5. Si el usuario parece no saber cómo aprovechar el cerebro, sugiérele al final
    una pregunta concreta que sí encajaría con lo que hay dentro.
 
-6. Si una ficha dice que su guion literal NO está disponible, no lo reconstruyas.
+6. Cuando una respuesta mencione fichas relacionadas y quieras leer una entera,
+   usa ver_ficha con su id y con origen="relacionada". Pasar ese origen es
+   obligatorio: es lo que nos dice si las sugerencias sirven de algo.
+
+7. Si una ficha dice que su guion literal NO está disponible, no lo reconstruyas.
    Ni lo redactes tú "en su estilo", ni lo deduzcas del resto de la ficha. Ese
    hueco no es un fallo: son las palabras exactas de una persona, y servirlas sin
    su permiso es justo lo que ese aviso impide. Explica la técnica, que es tuya

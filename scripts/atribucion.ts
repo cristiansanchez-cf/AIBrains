@@ -203,6 +203,15 @@ async function main(): Promise<void> {
     const { error } = await supabase.from("fichas").update(cambio).eq("id", a.ficha.id);
     if (error) throw new Error(`Ficha ${a.ficha.id}: ${error.message}`);
   }
+  // Esto no solo publica: REASIGNA `creador_id`, que es la clave por la que la
+  // vista materializada agrupa las relacionadas. Sin refrescar, una ficha
+  // reasignada seguiría sugiriéndose entre las del creador equivocado — o sea
+  // cruzando la frontera de acceso que la vista existe para respetar.
+  const { error: errorRel } = await supabase.rpc("refrescar_relacionadas");
+  if (errorRel) {
+    console.error(`AVISO: no se pudieron refrescar las relacionadas: ${errorRel.message}`);
+  }
+
   console.log(`\n${acciones.length} ficha(s) actualizadas.`);
 
   if (cuenta("marcar-incierta") > 0) {

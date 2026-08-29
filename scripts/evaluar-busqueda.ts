@@ -100,6 +100,11 @@ async function main(): Promise<void> {
   console.log(`  La ficha correcta sale la primera:  ${enPrimera}/${total}  (${pct(enPrimera)})`);
   console.log(`  La ficha correcta sale entre 5:     ${entreCinco}/${total}  (${pct(entreCinco)})`);
 
+  // Línea-contrato para `npm run metricas`. Ver el porqué en evaluar-voz.ts.
+  console.log(`METRICA recuperacion_1=${((enPrimera / total) * 100).toFixed(1)}`);
+  console.log(`METRICA recuperacion_5=${((entreCinco / total) * 100).toFixed(1)}`);
+  console.log(`METRICA fichas_evaluadas=${total}`);
+
   if (fallos.length > 0) {
     console.log(`\n=== no encontradas (${fallos.length}) ===`);
     for (const f of fallos.slice(0, 12)) {

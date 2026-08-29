@@ -20,23 +20,56 @@ import { supabase } from "../src/db/supabase.js";
 const SUELOS: Record<string, { minimo?: number; maximo?: number; que: string }> = {
   recuperacion_1: { minimo: 90, que: "la ficha correcta sale la primera (%)" },
   recuperacion_5: { minimo: 96, que: "la ficha correcta sale entre las 5 (%)" },
+  // Los tres suelos de arriba están en docs/reglas-duras.md §1. El de
+  // recuperacion_5 se añadió al documento después de que una revisión señalara
+  // que estaba aquí inventado y atribuido a las reglas: la regla 9 dice medir en
+  // vez de opinar, y eso vale también para los suelos.
   voz_marcadores: { maximo: 0, que: "marcadores de 'suena a IA' con el filtro" },
 };
 
 const rapido = process.argv.includes("--rapido");
+/** Con cualquiera de los dos, esto es una lectura y no toca la base. */
+const soloLectura = rapido || process.argv.includes("--seco");
+
+/**
+ * Por debajo de este parecido, el cerebro devolvió "lo menos malo" y no una
+ * respuesta. Es el mismo valor que usa la vista `huecos_de_contenido`; si se
+ * cambia, hay que cambiarlo en los dos sitios — o mejor, mover la cuenta a la
+ * vista y leerla de ahí.
+ */
+const UMBRAL_HUECO = 0.45;
 let problemas = 0;
 
+/**
+ * `--rapido` y `--seco` NO escriben.
+ *
+ * La primera versión guardaba también con `--rapido`, que se ofrecía como
+ * "comprobación rápida sin gastar". Escribía cuatro filas cada vez, y como
+ * `anterior()` compara con la última fila —no con la última semana— ejecutarlo
+ * dos veces seguidas convertía la tendencia en "igual" y borraba justo la señal
+ * por la que existe la tabla.
+ */
 async function guardar(medida: string, valor: number, contexto: object): Promise<void> {
+  if (soloLectura) return;
   const { error } = await supabase.from("metricas").insert({ medida, valor, contexto });
   if (error) console.error(`  (no se pudo guardar ${medida}: ${error.message})`);
 }
 
-/** La medida anterior, para poder hablar de tendencia y no de fotos sueltas. */
+/**
+ * La medida de la semana pasada, no la última fila.
+ *
+ * Comparar con la última fila hacía que dos ejecuciones seguidas dieran "igual"
+ * y borraran la tendencia. Se busca la más reciente de hace MÁS de un día, que
+ * es lo que responde a "¿ha cambiado algo desde la última vez que esto corrió
+ * solo?".
+ */
 async function anterior(medida: string): Promise<number | null> {
+  const ayer = new Date(Date.now() - 86_400_000).toISOString();
   const { data } = await supabase
     .from("metricas")
     .select("valor")
     .eq("medida", medida)
+    .lt("cuando", ayer)
     .order("cuando", { ascending: false })
     .limit(1);
   return data?.[0] ? Number(data[0].valor) : null;
@@ -48,10 +81,10 @@ async function registrar(medida: string, valor: number, contexto: object): Promi
 
   const tendencia =
     previo === null
-      ? "primera medida"
+      ? "sin medida anterior"
       : valor === previo
         ? "igual"
-        : `${valor > previo ? "+" : ""}${(valor - previo).toFixed(1)} desde la anterior`;
+        : `${valor > previo ? "+" : ""}${(valor - previo).toFixed(1)} desde la medida anterior`;
 
   let veredicto = "OK   ";
   if (suelo?.minimo !== undefined && valor < suelo.minimo) {
@@ -72,14 +105,56 @@ async function registrar(medida: string, valor: number, contexto: object): Promi
   await guardar(medida, valor, contexto);
 }
 
-/** Ejecuta un comando y devuelve su salida, sin reventar si falla. */
+/**
+ * Ejecuta un comando y devuelve su salida.
+ *
+ * Con tope de 20 minutos: `evaluar` hace ~400 embeddings y si se cuelga, sin
+ * esto el job de GitHub se queda hasta el límite de 6 horas.
+ */
 function ejecutar(comando: string): string {
   try {
-    return execSync(comando, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return execSync(comando, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 20 * 60_000,
+    });
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string };
     return `${err.stdout ?? ""}${err.stderr ?? ""}`;
   }
+}
+
+/**
+ * Lee una línea-contrato `METRICA nombre=valor`.
+ *
+ * Antes esto era una expresión regular sobre la prosa del informe, y falló dos
+ * veces: `voz_marcadores` leía el PRIMER escenario en vez del total —porque
+ * `match` sin /g devuelve la primera coincidencia y esa frase se imprime una vez
+ * por escenario—, así que un primer escenario limpio guardaba un cero falso que
+ * además pasaba el suelo.
+ */
+function leerMetrica(salida: string, nombre: string): number | null {
+  const m = salida.match(new RegExp(`^METRICA ${nombre}=([\\d.]+)$`, "m"));
+  return m?.[1] ? Number(m[1]) : null;
+}
+
+/** Cuando no se puede leer una medida, se enseña la salida: es lo único que dice por qué. */
+function noSePudoLeer(medida: string, comando: string, salida: string): void {
+  console.log(`FALLA ${medida.padEnd(18)} no se pudo leer la salida de '${comando}'`);
+  console.log(`       Sin esto el histórico miente por omisión. Últimas líneas:`);
+  for (const l of salida.trim().split("\n").slice(-8)) console.log(`       | ${l}`);
+  problemas++;
+}
+
+/**
+ * Percentil por el método discreto, el mismo que usa `percentile_disc` en la
+ * vista `salud_de_la_busqueda`. Antes era `ms[Math.floor(n * 0.95)]`, que con
+ * pocas muestras devuelve el MÁXIMO —con n=14 daba el índice 13— y además no
+ * coincidía con lo que calculaba la vista: dos definiciones de la misma medida.
+ */
+function percentil(ordenados: number[], p: number): number {
+  const i = Math.ceil(p * ordenados.length) - 1;
+  return ordenados[Math.max(0, Math.min(i, ordenados.length - 1))] ?? 0;
 }
 
 async function main(): Promise<void> {
@@ -104,27 +179,23 @@ async function main(): Promise<void> {
     // Búsqueda. El coste son 400 embeddings: céntimos, pero no gratis, así que
     // esto es semanal y no por cada cambio.
     const salida = ejecutar("npm run evaluar --silent");
-    const p1 = salida.match(/sale la primera:\s+\d+\/\d+\s+\(([\d.]+)%\)/);
-    const p5 = salida.match(/sale entre 5:\s+\d+\/\d+\s+\(([\d.]+)%\)/);
+    const p1 = leerMetrica(salida, "recuperacion_1");
+    const p5 = leerMetrica(salida, "recuperacion_5");
 
-    if (p1?.[1] && p5?.[1]) {
-      await registrar("recuperacion_1", Number(p1[1]), contexto);
-      await registrar("recuperacion_5", Number(p5[1]), contexto);
+    if (p1 !== null && p5 !== null) {
+      const evaluadas = leerMetrica(salida, "fichas_evaluadas");
+      await registrar("recuperacion_1", p1, { ...contexto, evaluadas });
+      await registrar("recuperacion_5", p5, { ...contexto, evaluadas });
     } else {
-      // Que no se pueda leer la salida ES un problema: significa que la medida
-      // dejó de existir sin que nadie lo notara, y a partir de ahí el histórico
-      // miente por omisión.
-      console.log("FALLA recuperacion       no se pudo leer la salida de 'npm run evaluar'");
-      problemas++;
+      noSePudoLeer("recuperacion", "npm run evaluar", salida);
     }
 
     const voz = ejecutar("npm run voz --silent");
-    const conFiltro = voz.match(/con filtro:\s+(\d+) marcador/);
-    if (conFiltro?.[1]) {
-      await registrar("voz_marcadores", Number(conFiltro[1]), contexto);
+    const marcadores = leerMetrica(voz, "voz_marcadores");
+    if (marcadores !== null) {
+      await registrar("voz_marcadores", marcadores, contexto);
     } else {
-      console.log("FALLA voz_marcadores     no se pudo leer la salida de 'npm run voz'");
-      problemas++;
+      noSePudoLeer("voz_marcadores", "npm run voz", voz);
     }
   } else {
     console.log("  (--rapido: saltadas las evaluaciones que llaman a OpenAI y Anthropic)");
@@ -144,13 +215,37 @@ async function main(): Promise<void> {
     console.log("  Sin consultas todavía. Nada que medir — no es un problema.");
   } else {
     const degradadas = uso!.filter((c) => c.degradada).length;
-    const huecos = uso!.filter((c) => Number(c.similitud_max ?? 0) < 0.45).length;
-    const ms = uso!.map((c) => Number(c.ms ?? 0)).sort((a, b) => a - b);
+
+    // Los huecos se cuentan SOLO sobre las no degradadas. En el camino léxico
+    // `similitud_max` es nulo, y tratarlo como cero hacía que una caída de
+    // OpenAI se leyera como "el contenido no cubre lo que preguntan" — que
+    // lleva a la decisión contraria: añadir fichas en vez de mirar la API.
+    const conSimilitud = uso!.filter((c) => !c.degradada && c.similitud_max !== null);
+    const huecos = conSimilitud.filter((c) => Number(c.similitud_max) < UMBRAL_HUECO).length;
+
+    // Sin los nulos: convertirlos en cero hundía la media y falseaba el p95.
+    const ms = uso!
+      .map((c) => c.ms)
+      .filter((v): v is number => typeof v === "number")
+      .sort((a, b) => a - b);
 
     await registrar("consultas_7d", n, contexto);
     await registrar("degradadas_pct", Math.round((degradadas / n) * 100), contexto);
-    await registrar("huecos_pct", Math.round((huecos / n) * 100), contexto);
-    await registrar("latencia_p95_ms", ms[Math.floor(n * 0.95)] ?? 0, contexto);
+    if (conSimilitud.length > 0) {
+      await registrar(
+        "huecos_pct",
+        Math.round((huecos / conSimilitud.length) * 100),
+        { ...contexto, sobre: conSimilitud.length },
+      );
+    }
+    if (ms.length > 0) {
+      await registrar("latencia_p95_ms", percentil(ms, 0.95), { ...contexto, sobre: ms.length });
+      // Con pocas muestras un p95 no es un p95: es "el segundo peor", y un
+      // atípico lo domina. Decirlo evita sacar conclusiones de ruido.
+      if (ms.length < 30) {
+        console.log(`       (solo ${ms.length} muestras: el p95 aún no es representativo)`);
+      }
+    }
 
     // Degradar significa servir al 79% en vez de al 90%. No es un aviso de
     // disponibilidad: es que alguien recibió una respuesta peor.
@@ -158,6 +253,46 @@ async function main(): Promise<void> {
       console.log(`\n  ${degradadas} de ${n} consultas se sirvieron DEGRADADAS (respaldo léxico).`);
       problemas++;
     }
+  }
+
+  // --- La pregunta del grafo ----------------------------------------------
+  // Toda la función `ver_ficha` existe para responder a esto, y hasta ahora
+  // este informe no lo miraba: se recogía el dato y no se leía nunca.
+  console.log(`\n=== ¿se tira de las fichas relacionadas? ===\n`);
+
+  const { data: usos } = await supabase
+    .from("usos_de_herramienta")
+    .select("origen")
+    .eq("herramienta", "ver_ficha")
+    .gte("cuando", desde);
+
+  const vistas = usos?.length ?? 0;
+  const desdeRelacionada = usos?.filter((u) => u.origen === "relacionada").length ?? 0;
+  // Un `origen` nulo es el modelo abriendo una ficha sin decir de dónde salía.
+  const sinOrigen = usos?.filter((u) => !u.origen).length ?? 0;
+
+  await registrar("ver_ficha_7d", vistas, contexto);
+  await registrar("relacionadas_7d", desdeRelacionada, { ...contexto, de: vistas });
+
+  if (vistas === 0) {
+    console.log("  Nadie ha abierto ninguna ficha por id todavía.");
+    console.log("  OJO: eso NO es 'las relacionadas no interesan'. Es que aún");
+    console.log("  no hay dato. La decisión del grafo sigue sin poder tomarse.");
+  } else if (desdeRelacionada === 0 && sinOrigen > 0) {
+    // Este es el fallo de la regla 8: el detector deja de detectar y su cero
+    // se parece exactamente al cero que significa "no se usan".
+    console.log(`  ${vistas} fichas abiertas, pero NINGUNA declara su origen.`);
+    console.log("  El contador no está midiendo: el modelo no pasa `origen`.");
+    console.log("  Hay que reforzar la instrucción antes de creerse el cero.");
+    problemas++;
+  } else {
+    const pct = Math.round((desdeRelacionada / vistas) * 100);
+    console.log(`  ${desdeRelacionada} de ${vistas} aperturas vienen de una relacionada (${pct}%).`);
+    console.log(
+      pct >= 20
+        ? "  Se usan. Eso empieza a justificar construir el grafo de verdad."
+        : "  Se usan poco. Con más semanas así, el grafo no sale a cuenta.",
+    );
   }
 
   const { data: topHuecos } = await supabase

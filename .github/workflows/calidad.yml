@@ -15,6 +15,16 @@ on:
     - cron: "0 7 * * 1"
   workflow_dispatch: {}
 
+# El token de Actions es de SOLO LECTURA por defecto en este repositorio
+# (comprobado: default_workflow_permissions = read). Sin declarar esto, `gh issue
+# create` daba 403 y la capa de aviso entera no funcionaba: el único síntoma
+# habría sido una X en un workflow programado de un repo privado, que es como no
+# avisar. Lo encontró una revisión independiente; nunca se había probado la rama
+# de alarma porque la única ejecución salió verde.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   medir:
     runs-on: ubuntu-latest
@@ -40,6 +50,16 @@ jobs:
           npm run metricas 2>&1 | tee salida.txt
           echo "codigo=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
+          # Lo que va a la issue se recorta: el informe incluye el top de
+          # `huecos_de_contenido`, o sea PREGUNTAS LITERALES de comerciales sobre
+          # sus operaciones. La migración que crea esa tabla las etiqueta como
+          # dato sensible con borrado a los 90 días, y las issues de GitHub no
+          # caducan. Se publica solo el bloque de medidas.
+          sed -n '/=== calidad/,/=== lo que se pregunta/p' salida.txt \
+            | sed '/=== lo que se pregunta/d' > publicable.txt
+          echo "" >> publicable.txt
+          echo "(El detalle de consultas no se publica aquí: es dato sensible con retención de 90 días. Míralo con: npm run metricas)" >> publicable.txt
+
       - name: Avisar si algo bajó del suelo
         if: steps.medir.outputs.codigo != '0'
         env:
@@ -50,13 +70,13 @@ jobs:
           abierta=$(gh issue list --label calidad --state open --limit 1 --json number --jq '.[0].number // empty')
 
           if [ -n "$abierta" ]; then
-            gh issue comment "$abierta" --body "$(printf 'Sigue fuera de los suelos el %s.\n\n```\n%s\n```' "$(date -u +%F)" "$(cat salida.txt)")"
+            gh issue comment "$abierta" --body "$(printf 'Sigue fuera de los suelos el %s.\n\n```\n%s\n```' "$(date -u +%F)" "$(cat publicable.txt)")"
           else
             gh label create calidad --color B60205 --description "Medidas fuera de los suelos de reglas-duras.md" 2>/dev/null || true
             gh issue create \
               --label calidad \
               --title "Calidad por debajo del suelo — $(date -u +%F)" \
-              --body "$(printf 'Alguna medida ha bajado del suelo de `docs/reglas-duras.md` §1.\n\n```\n%s\n```\n\nQué mirar: qué se desplegó desde la última medición buena, y `salud_de_la_busqueda` en la base.' "$(cat salida.txt)")"
+              --body "$(printf 'Alguna medida ha bajado del suelo de `docs/reglas-duras.md` §1.\n\n```\n%s\n```\n\nQué mirar: qué se desplegó desde la última medición buena, y `salud_de_la_busqueda` en la base.' "$(cat publicable.txt)")"
           fi
 
       - name: Cerrar la issue si todo volvió a su sitio

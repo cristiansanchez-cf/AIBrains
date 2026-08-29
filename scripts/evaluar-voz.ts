@@ -231,6 +231,15 @@ async function main(): Promise<void> {
   console.log(`  sin filtro: ${totales.sin} marcador(es)`);
   console.log(`  con filtro: ${totales.con} marcador(es)`);
 
+  // Línea-contrato para `npm run metricas`. Leer prosa con expresiones
+  // regulares ya falló dos veces en este repo: el evaluador de búsqueda dio 0%
+  // sin error, y esta misma medida se leía del PRIMER escenario en vez del
+  // total —porque `match` sin /g devuelve la primera coincidencia y "con
+  // filtro:" se imprime una vez por escenario—. Una línea con formato fijo y
+  // un prefijo que no aparece en ningún otro sitio no tiene ese problema.
+  console.log(`METRICA voz_marcadores=${totales.con}`);
+  console.log(`METRICA voz_marcadores_sin_filtro=${totales.sin}`);
+
   if (porFallo.size > 0) {
     console.log(`\n=== por fallo del informe ===`);
     for (const [fallo, v] of [...porFallo.entries()].sort((a, b) => b[1].sin - a[1].sin)) {
