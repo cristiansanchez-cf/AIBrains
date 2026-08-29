@@ -1,0 +1,75 @@
+# Capa 0 del sistema autónomo (docs/sistema-autonomo.md): medir la calidad sola.
+#
+# POR QUÉ SEMANAL Y NO DIARIO. `npm run metricas` ejecuta las evaluaciones
+# completas: ~400 embeddings de OpenAI y una docena de llamadas a Claude. Son
+# céntimos, pero no cero, y la calidad no cambia de un día para otro. Lo que sí
+# se mide continuamente es el uso real, que ya se registra en cada consulta.
+#
+# POR QUÉ AQUÍ Y NO EN EL SERVIDOR. Si el servidor está caído, el vigilante que
+# vive dentro también lo está.
+name: calidad
+
+on:
+  schedule:
+    # Lunes a las 07:00 UTC. Que el resultado esté antes de empezar la semana.
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+
+      - name: Medir y guardar
+        id: medir
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # La salida se guarda para poder meterla en la issue: un aviso que
+          # solo dice "algo falla" obliga a ir a buscarlo, y entonces no se va.
+          npm run metricas 2>&1 | tee salida.txt
+          echo "codigo=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Avisar si algo bajó del suelo
+        if: steps.medir.outputs.codigo != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Una sola issue abierta a la vez. Sin esto, ocho semanas rotas son
+          # ocho issues idénticas y nadie abre ninguna.
+          abierta=$(gh issue list --label calidad --state open --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ -n "$abierta" ]; then
+            gh issue comment "$abierta" --body "$(printf 'Sigue fuera de los suelos el %s.\n\n```\n%s\n```' "$(date -u +%F)" "$(cat salida.txt)")"
+          else
+            gh label create calidad --color B60205 --description "Medidas fuera de los suelos de reglas-duras.md" 2>/dev/null || true
+            gh issue create \
+              --label calidad \
+              --title "Calidad por debajo del suelo — $(date -u +%F)" \
+              --body "$(printf 'Alguna medida ha bajado del suelo de `docs/reglas-duras.md` §1.\n\n```\n%s\n```\n\nQué mirar: qué se desplegó desde la última medición buena, y `salud_de_la_busqueda` en la base.' "$(cat salida.txt)")"
+          fi
+
+      - name: Cerrar la issue si todo volvió a su sitio
+        if: steps.medir.outputs.codigo == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Que se cierre sola evita el otro fallo típico: una issue vieja
+          # abierta de algo ya arreglado, que enseña a ignorar la etiqueta.
+          for n in $(gh issue list --label calidad --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Todas las medidas dentro de los suelos el $(date -u +%F)."
+          done
+
+      - name: Fallar si hubo problema
+        if: steps.medir.outputs.codigo != '0'
+        run: exit 1

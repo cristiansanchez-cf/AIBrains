@@ -1,0 +1,24 @@
+# Lo que corre en cada push: rápido, gratis y sin secretos.
+#
+# Solo lógica pura — los tests no tocan red ni base de datos (vitest.config.ts
+# explica por qué). Tardan 200 ms, así que no hay excusa para saltárselos.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
