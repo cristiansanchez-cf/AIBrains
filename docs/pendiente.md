@@ -89,12 +89,34 @@ adaptador que las exponga con esos nombres, no la lógica.
 
 ## Deuda conocida, dicha en voz alta
 
-- **Ninguna ficha tiene marca de tiempo.** Cero de 126 candidatas con enlace y
-  confianza alta. La promesa del producto dice "el enlace al minuto exacto" y
-  eso **hoy no es cierto**: hay enlace al vídeo, no al minuto. O se rebaja la
-  promesa a "el vídeo del que sale", o se rellenan los `fuente_timestamp` —que
-  es trabajo manual, como los 89 enlaces. Descubierto buscando fichas reales
-  para el mockup de la web.
+- **Ninguna ficha tiene marca de tiempo, y el arreglo está en el otro repo.**
+  Cero de 126 candidatas. La promesa "el enlace al minuto exacto" **hoy no es
+  cierta**; lo que se puede decir es "el vídeo del que sale".
+
+  **No es un objetivo obligatorio ni puede serlo**: hay material que no será
+  público, en TikTok el minuto no significa nada, y una ficha sin minuto es una
+  ficha correcta. Pero en un podcast de dos horas —que es de donde sale el mejor
+  material— mandar al principio es mandar a buscar, así que en las
+  destilaciones futuras se coge **cuando se pueda**.
+
+  La tubería ya está entera y probada (30/08/2026): si la transcripción lleva
+  marcas, el destilador devuelve `momento` y la ficha se guarda con su
+  `fuente_timestamp`; si no las lleva, `null`, y un `momento` inventado se tira
+  aunque el modelo lo mande. Probado con las dos transcripciones: con marcas
+  acertó el 14:20, sin marcas devolvió null en todas.
+
+  **Lo que falta es de una línea y está en InternalApps.** Comprobado llamando
+  al endpoint: devuelve `transcription, duration_s, platform, source,
+  chunk_count, engine` y ningún desplazamiento. Pero el motor es `supadata`
+  —el camino de YouTube, o sea el 100% de lo ingerido— y Supadata SÍ devuelve
+  los subtítulos troceados con su `offset` en milisegundos: se está pidiendo el
+  texto plano y tirando las marcas por el camino. Hay que reenviarlas como
+  `segments: [{offset, text}]`; este repo ya las lee con ese nombre y con dos
+  alternativas más, así que el día que lleguen no hay que tocar nada aquí.
+
+  *(Y con eso, rellenar las fichas viejas dejaría de ser trabajo manual: se
+  puede buscar el `script` guardado dentro de la transcripción con marcas y
+  sacar el segundo sin preguntarle a ningún modelo.)*
 
 - **Políticas RLS para el rol `authenticated`.** Hoy el servidor usa la clave
   secreta y salta RLS, así que no cambia nada — pero es la siguiente puerta

@@ -89,18 +89,11 @@ const multiple = (p: any): string[] =>
   (p?.multi_select ?? []).map((o: any) => o.name);
 
 /** Extrae el segundo del enlace si lo lleva (`?t=412`, `#t=1m30s`, …). */
-export function segundoDeLaUrl(url: string | null): number | null {
-  if (!url) return null;
-
-  const directo = url.match(/[?&#](?:t|start)=(\d+)/);
-  if (directo?.[1]) return Number(directo[1]);
-
-  const humano = url.match(/[?&#](?:t|start)=(?:(\d+)m)?(?:(\d+)s)?/);
-  if (humano && (humano[1] || humano[2])) {
-    return Number(humano[1] ?? 0) * 60 + Number(humano[2] ?? 0);
-  }
-  return null;
-}
+// El segundo de un enlace lo lee `ingesta/marcas.ts`. Aquí había una tercera
+// copia de la misma función: esta entendía `t=1m30s` y las de `ingerir.ts` y
+// `revisar.ts` no, así que el mismo enlace daba minuto o no según por dónde
+// entrara. Ninguna de las tres entendía la hora.
+export { segundoDeLaUrl } from "../ingesta/marcas.js";
 
 // --- Lectura del cuerpo -----------------------------------------------------
 

@@ -12,6 +12,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
+import { traeMarcas } from "./marcas.js";
 
 const MODELO = "claude-opus-5";
 
@@ -44,6 +45,14 @@ export interface FichaDestilada {
   objecion: string[];
   tags: string[];
   confianza: string;
+  /**
+   * Segundo del vídeo donde empieza esto, si la transcripción traía marcas.
+   *
+   * `null` es lo normal y es correcto: la mayoría de transcripciones llegan
+   * sin marcas. Ver `src/ingesta/marcas.ts` para por qué esto no puede ser
+   * obligatorio.
+   */
+  momento: number | null;
 }
 
 // Los valores vienen de la base de Notion: se mantienen para que las fichas
@@ -97,11 +106,21 @@ const ESQUEMA = {
           objecion: { type: "array", items: { type: "string", enum: [...OBJECIONES] }, description: "Vacío si no aborda una objeción concreta." },
           tags: { type: "array", items: { type: "string" }, description: "Etiquetas libres: B2B, SaaS, Alto ticket…" },
           confianza: { type: "string", enum: ["Alta", "Media", "Baja"], description: "Cómo de sólido y probado parece el consejo." },
+          momento: {
+            type: ["integer", "null"],
+            description:
+              "Segundos desde el principio del vídeo donde EMPIEZA a explicarse esto, copiado de la marca [m:ss] más cercana de la transcripción. null si la transcripción no lleva marcas. No lo calcules ni lo estimes.",
+          },
         },
         required: [
           "insight", "tecnica", "script", "por_que_funciona", "cuando_usarlo",
           "no_aplicar_cuando", "verificar_antes",
           "como_aplicarlo", "etapa", "familia", "area", "objecion", "tags", "confianza",
+          // `momento` es obligatorio en el esquema y anulable en el tipo: con
+          // structured outputs, un campo no requerido simplemente no aparece, y
+          // "no aparece" y "no lo sé" se confunden. Obligando a escribir `null`
+          // el modelo tiene que decidir explícitamente que no lo sabe.
+          "momento",
         ],
         additionalProperties: false,
       },
@@ -135,7 +154,13 @@ Reglas que no se negocian:
 
    Rellénalos cuando el creador marque el límite él mismo —"ojo, esto no lo hagas si todavía no te han dicho el presupuesto", "antes de esto asegúrate de que hablas con quien decide"—, que es más frecuente de lo que parece y hoy se está perdiendo: acaba diluido dentro de "como_aplicarlo" en vez de poder frenar la ficha.
 
-   La diferencia entre los dos: "no_aplicar_cuando" descarta la ficha, "verificar_antes" solo obliga a comprobar algo primero.`;
+   La diferencia entre los dos: "no_aplicar_cuando" descarta la ficha, "verificar_antes" solo obliga a comprobar algo primero.
+
+7. "momento" SOLO si la transcripción lleva marcas de tiempo tipo [12:34] delante de las frases.
+
+   Si las lleva: copia el número de la marca que hay justo donde EMPIEZA a explicarse la técnica —no donde acaba, no donde se resume después— convertido a segundos. [6:52] son 412.
+
+   Si no las lleva: null en todas. No lo estimes por la posición en el texto, no lo repartas proporcionalmente, no lo deduzcas de la duración. Este campo se convierte en un enlace que el usuario va a pulsar para comprobar que el creador dijo eso; si lleva a otro sitio, hemos roto lo único que demuestra que la ficha es de verdad. Un null es correcto y frecuente. Un minuto equivocado no tiene arreglo.`;
 
 /**
  * Destila una transcripción.
@@ -200,5 +225,15 @@ export async function destilar(
     .join("");
 
   const { fichas } = JSON.parse(texto) as { fichas: FichaDestilada[] };
-  return fichas;
+
+  // Si la transcripción NO traía marcas, cualquier `momento` que venga está
+  // inventado: se tira aquí sin preguntar. La instrucción 7 ya lo dice, pero
+  // una instrucción es una petición y esto es una verja — y el precio de
+  // equivocarse es un enlace que lleva a donde no se dice lo que la ficha
+  // afirma. Regla 5 de docs/reglas-duras.md.
+  const habiaMarcas = traeMarcas(transcripcion);
+  return fichas.map((f) => ({
+    ...f,
+    momento: habiaMarcas && typeof f.momento === "number" && f.momento >= 0 ? f.momento : null,
+  }));
 }

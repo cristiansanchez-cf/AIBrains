@@ -20,6 +20,7 @@ import { destilar, hayDestilador } from "../src/ingesta/destilar.js";
 import { generarEmbeddings, textoParaEmbedding, hayEmbeddings } from "../src/db/embeddings.js";
 import { buscarFuente, registrarFuente, marcarFuente } from "../src/ingesta/fuentes.js";
 import { transcribir, admitida } from "../src/ingesta/transcribir.js";
+import { segundoDeLaUrl } from "../src/ingesta/marcas.js";
 
 function argumento(nombre: string): string | undefined {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -27,13 +28,6 @@ function argumento(nombre: string): string | undefined {
 }
 
 const soloLectura = process.argv.includes("--seco");
-
-/** Extrae el segundo de un enlace con marca de tiempo (`?t=412`). */
-function segundoDeLaUrl(url: string | undefined): number | null {
-  if (!url) return null;
-  const m = url.match(/[?&#](?:t|start)=(\d+)/);
-  return m?.[1] ? Number(m[1]) : null;
-}
 
 /**
  * De dónde sale la transcripción, por orden: archivo, entrada estándar y, si
@@ -235,7 +229,10 @@ async function main(): Promise<void> {
     confianza: f.confianza,
     canal: canal ?? null,
     fuente_url: url ?? null,
-    fuente_timestamp: segundoDeLaUrl(url),
+    // El minuto de la propia ficha manda sobre el del enlace: el enlace apunta
+    // al vídeo entero y la ficha a donde se dice esa técnica. Si no hay ninguno
+    // de los dos, null — y una ficha sin minuto es una ficha correcta.
+    fuente_timestamp: f.momento ?? segundoDeLaUrl(url),
     // pgvector espera el literal '[1,2,3]', no un array de JS.
     embedding: JSON.stringify(vectores[i]),
     estado: "borrador",

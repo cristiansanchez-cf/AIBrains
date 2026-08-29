@@ -20,13 +20,20 @@
  * INTERNALAPPS_API_KEY y este cliente la enviará.
  */
 import { config } from "../config.js";
+import { conMarcas } from "./marcas.js";
 
 export interface Transcripcion {
+  /**
+   * El texto. Si el servicio mandó segmentos, viene ya con marcas `[m:ss]`
+   * intercaladas, que es lo que permite al destilador señalar el minuto.
+   */
   texto: string;
   duracionS: number | null;
   plataforma: string | null;
   /** "supadata" (subtítulos) o "whisper" (audio transcrito). */
   motor: string | null;
+  /** Si el texto lleva marcas de tiempo utilizables. */
+  conMarcas: boolean;
 }
 
 export class TranscripcionFallida extends Error {
@@ -129,6 +136,22 @@ export async function transcribir(url: string): Promise<Transcripcion> {
     duration_s?: number;
     platform?: string;
     engine?: string;
+    /**
+     * MARCAS DE TIEMPO: hoy el servicio NO manda esto, y por eso ninguna ficha
+     * tiene minuto exacto. Se lee igualmente, con los tres nombres plausibles,
+     * para que el día que InternalApps las reenvíe esto funcione sin tocar
+     * nada aquí.
+     *
+     * Comprobado el 30/08/2026 llamando al endpoint: devuelve
+     * `transcription, duration_s, platform, source, chunk_count, engine`.
+     * Con `engine: "supadata"`, que es el camino de YouTube y el 100% de lo
+     * ingerido hasta hoy — y Supadata SÍ devuelve los subtítulos troceados con
+     * su `offset`. O sea que el dato existe aguas arriba y se está tirando por
+     * el camino. El arreglo es de una línea, pero en el otro repo.
+     */
+    segments?: Array<{ offset?: number; start?: number; text?: string; content?: string }>;
+    chunks?: Array<{ offset?: number; start?: number; text?: string; content?: string }>;
+    content?: Array<{ offset?: number; start?: number; text?: string; content?: string }>;
   };
 
   if (!datos.transcription?.trim()) {
@@ -138,10 +161,23 @@ export async function transcribir(url: string): Promise<Transcripcion> {
     );
   }
 
+  const crudos = datos.segments ?? datos.chunks ?? datos.content;
+  const segmentos = (crudos ?? [])
+    .map((s) => ({
+      // Supadata da el desplazamiento en MILISEGUNDOS (`offset`); Whisper lo da
+      // en segundos (`start`). Confundirlos pondría el minuto 412 en el 6:52:00.
+      desde: s.offset !== undefined ? Math.round(s.offset / 1000) : (s.start ?? 0),
+      texto: (s.text ?? s.content ?? "").trim(),
+    }))
+    .filter((s) => s.texto);
+
+  const texto = segmentos.length > 0 ? conMarcas(segmentos) : datos.transcription.trim();
+
   return {
-    texto: datos.transcription.trim(),
-    duracionS: datos.duration_s ?? null,
+    texto,
+    duracionS: datos.duration_s || null,
     plataforma: datos.platform ?? null,
     motor: datos.engine ?? null,
+    conMarcas: segmentos.length > 0,
   };
 }

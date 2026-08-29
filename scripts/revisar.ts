@@ -15,17 +15,13 @@
  * el modelo: es lo que dice si el prompt de destilación necesita ajuste.
  */
 import { supabase } from "../src/db/supabase.js";
+import { segundoDeLaUrl } from "../src/ingesta/marcas.js";
 
 const COLUMNAS = `
   id, insight, tecnica, script, por_que_funciona, cuando_usarlo, como_aplicarlo,
   etapa, familia, area, objecion, tags, confianza, canal, fuente_url, estado,
   creadores ( slug, nombre )
 `;
-
-function segundoDeLaUrl(url: string): number | null {
-  const m = url.match(/[?&#](?:t|start)=(\d+)/);
-  return m?.[1] ? Number(m[1]) : null;
-}
 
 async function listar(): Promise<void> {
   const { data, error } = await supabase
