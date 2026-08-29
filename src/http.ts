@@ -19,7 +19,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { paginaDeConsentimiento } from "./auth/consentimiento.js";
 import { esRutaDeScript, scriptDeConsentimiento } from "./auth/script-consentimiento.js";
-import { crearServidor } from "./servidor.js";
+import { crearServidor, type Perfil } from "./servidor.js";
 import { config } from "./config.js";
 import { estadoDeSalud, ultimoEstadoConocido } from "./salud.js";
 import {
@@ -33,6 +33,18 @@ import { procesarWebhook, FirmaInvalida, hayWebhook } from "./pagos/webhook.js";
 import type { ContextoDeAcceso } from "./tipos.js";
 
 const RUTA_MCP = "/mcp";
+
+/**
+ * La misma cosa con los nombres que exige ChatGPT.
+ *
+ * Ruta aparte y no herramientas añadidas a /mcp: ver la cabecera de
+ * `herramientas/chatgpt.ts`. En resumen, para que Claude no tenga que elegir
+ * entre un `search` genérico y el bueno.
+ */
+const RUTA_MCP_CHATGPT = "/mcp/chatgpt";
+
+/** Las dos puertas MCP, para no repetir la lista al comprobar rutas. */
+const RUTAS_MCP = [RUTA_MCP, RUTA_MCP_CHATGPT];
 const PREFIJO_METADATOS = "/.well-known/oauth-protected-resource";
 
 /**
@@ -41,7 +53,7 @@ const PREFIJO_METADATOS = "/.well-known/oauth-protected-resource";
  * Tiene que ser 401 con `WWW-Authenticate`: Claude ignora esa cabecera en un
  * 200, y sin ella no sabe dónde está el servidor de autorización.
  */
-function exigirAutenticacion(res: ServerResponse, motivo?: string): void {
+function exigirAutenticacion(res: ServerResponse, motivo?: string, rutaMcp?: string): void {
   const cuerpo = JSON.stringify({
     jsonrpc: "2.0",
     error: { code: -32001, message: motivo ?? "Autenticación requerida" },
@@ -50,18 +62,23 @@ function exigirAutenticacion(res: ServerResponse, motivo?: string): void {
   res.writeHead(401, {
     "content-type": "application/json",
     "content-length": Buffer.byteLength(cuerpo),
-    "www-authenticate": cabeceraWwwAuthenticate(motivo),
+    "www-authenticate": cabeceraWwwAuthenticate(motivo, rutaMcp),
   });
   res.end(cuerpo);
 }
 
-async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function manejarMcp(
+  req: IncomingMessage,
+  res: ServerResponse,
+  perfil: Perfil = "completo",
+): Promise<void> {
+  const rutaDeEsteMcp = perfil === "chatgpt" ? RUTA_MCP_CHATGPT : RUTA_MCP;
   let contexto: ContextoDeAcceso = { tipo: "sin-auth" };
 
   if (config.auth.activada) {
     const token = tokenDeCabecera(req.headers.authorization);
     if (!token) {
-      exigirAutenticacion(res);
+      exigirAutenticacion(res, undefined, rutaDeEsteMcp);
       return;
     }
     try {
@@ -76,6 +93,7 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
       exigirAutenticacion(
         res,
         error instanceof TokenInvalido ? error.message : "Token no verificable",
+        rutaDeEsteMcp,
       );
       return;
     }
@@ -83,7 +101,7 @@ async function manejarMcp(req: IncomingMessage, res: ServerResponse): Promise<vo
 
   // Servidor y transporte por petición: sin estado compartido entre llamadas.
   // Es lo que garantiza que el contexto de un usuario no llegue a otro.
-  const servidor = crearServidor(contexto);
+  const servidor = crearServidor(contexto, perfil);
   const comprobarProcedencia =
     config.http.hostsPermitidos.length > 0 ||
     config.http.origenesPermitidos.length > 0;
@@ -261,6 +279,23 @@ function responderJson(res: ServerResponse, codigo: number, cuerpo: unknown): vo
   res.end(texto);
 }
 
+/**
+ * Qué endpoint MCP está describiendo una consulta de metadatos.
+ *
+ * El cliente pide `/.well-known/oauth-protected-resource/mcp/chatgpt` para
+ * preguntar por `/mcp/chatgpt`. Se traduce solo para las rutas MCP conocidas:
+ * cualquier otro sufijo devuelve la de siempre, para que nadie pueda hacer que
+ * este documento declare como recurso una URL que nos inventen.
+ */
+function recursoDeLaConsulta(ruta: string): string | undefined {
+  const sufijo = ruta.slice(PREFIJO_METADATOS.length);
+  const candidata = sufijo.startsWith("/") ? sufijo : `/${sufijo}`;
+  if (!RUTAS_MCP.includes(candidata)) return undefined;
+
+  const base = new URL(config.http.urlPublica);
+  return `${base.origin}${candidata}`;
+}
+
 const http = createServer((req, res) => {
   const ruta = (req.url ?? "/").split("?")[0];
 
@@ -334,7 +369,7 @@ const http = createServer((req, res) => {
       responderJson(res, 404, { error: "Este servidor no usa autenticación." });
       return;
     }
-    responderJson(res, 200, documentoDeRecursoProtegido());
+    responderJson(res, 200, documentoDeRecursoProtegido(recursoDeLaConsulta(ruta)));
     return;
   }
 
@@ -416,14 +451,14 @@ const http = createServer((req, res) => {
     return;
   }
 
-  if (ruta !== RUTA_MCP) {
+  if (!ruta || !RUTAS_MCP.includes(ruta)) {
     responderJson(res, 404, {
-      error: `Ruta no encontrada. El endpoint MCP es ${RUTA_MCP}.`,
+      error: `Ruta no encontrada. El endpoint MCP es ${RUTA_MCP} (o ${RUTA_MCP_CHATGPT} para ChatGPT).`,
     });
     return;
   }
 
-  manejarMcp(req, res).catch((error: unknown) => {
+  manejarMcp(req, res, ruta === RUTA_MCP_CHATGPT ? "chatgpt" : "completo").catch((error: unknown) => {
     console.error("[cerebro] error atendiendo la petición:", error);
     if (!res.headersSent) {
       responderJson(res, 500, {

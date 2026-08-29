@@ -116,17 +116,29 @@ alguien que acaba de pagar.
 
 **Qué tiene que decir la guía**
 
-La URL del conector es `https://cerebro.cofundo.io/mcp`, la misma para todos.
+**Hay dos URLs, y esto cambió el 30/08/2026.** No es un detalle: poner la que
+no toca hace que el conector no aparezca o que ChatGPT lo rechace.
 
-Y **las dos trampas de ChatGPT dichas en pantalla**, o el usuario creerá que
-está roto:
+| Cliente | URL |
+|---|---|
+| Claude (y cualquier cliente MCP) | `https://cerebro.cofundo.io/mcp` |
+| ChatGPT | `https://cerebro.cofundo.io/mcp/chatgpt` |
 
-1. Hace falta activar el **modo desarrollador** (Ajustes → Aplicaciones →
-   Ajustes avanzados) y **plan de pago**. Sin eso ChatGPT rechaza el conector.
-2. **Deep Research no lo verá** aunque lo actives, porque solo usa dos
-   herramientas concretas. En chat normal sí funciona.
+*Por qué dos:* ChatGPT no mira lo que hace una herramienta, mira cómo se llama:
+exige dos llamadas literalmente `search` y `fetch`. La segunda URL sirve el
+mismo cerebro con esos nombres. No se pusieron en la primera para que Claude no
+tenga que elegir entre un `search` genérico y el bueno — perdería el filtro de
+voz y las reglas de atribución.
 
 En Claude no hay trampas: añadir conector y listo.
+
+**La trampa que queda en ChatGPT, dicha en pantalla:** puede seguir haciendo
+falta el **modo desarrollador** (Ajustes → Aplicaciones → Ajustes avanzados) y
+**plan de pago** según el tipo de cuenta. Con la URL de ChatGPT el conector ya
+cumple el requisito de nombres, así que **esto habría que volver a comprobarlo
+con una cuenta real antes de escribirlo como definitivo** — yo he verificado
+que el servidor sirve `search` y `fetch` correctamente, no cómo se comporta la
+interfaz de ChatGPT ante ellos.
 
 **Qué pasa cuando va mal:** el usuario llega a `/pago/listo` sin haber pagado
 (enlace compartido, vuelta atrás). No pasa nada malo: es una guía. No la

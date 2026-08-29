@@ -112,12 +112,23 @@ function normalizarPasos(valor: unknown): string[] {
  * el hueco se ve, no se disimula.
  */
 function enlaceFuente(ficha: FichaConCreador): string {
-  if (!ficha.fuente_url) {
-    const perfil = ficha.creadores?.perfil_url;
-    return perfil
-      ? `${perfil} — _perfil del creador; no tenemos el vídeo exacto de esta ficha_`
-      : "_(sin enlace al original — ficha incompleta)_";
-  }
+  const url = urlDeLaFuente(ficha);
+  if (!url) return "_(sin enlace al original — ficha incompleta)_";
+  return ficha.fuente_url
+    ? url
+    : `${url} — _perfil del creador; no tenemos el vídeo exacto de esta ficha_`;
+}
+
+/**
+ * La URL a secas, sin la explicación de al lado.
+ *
+ * La necesita el adaptador de ChatGPT, que tiene que poner un enlace en un
+ * campo `url` de JSON y no puede meterle prosa en cursiva. Misma cadena de
+ * respaldo —vídeo con minuto, vídeo, perfil— y el mismo `null` final cuando no
+ * hay nada, para que el hueco se siga viendo en vez de disimularse.
+ */
+export function urlDeLaFuente(ficha: FichaConCreador): string | null {
+  if (!ficha.fuente_url) return ficha.creadores?.perfil_url ?? null;
 
   const segundo = ficha.fuente_timestamp;
   if (segundo == null) return ficha.fuente_url;

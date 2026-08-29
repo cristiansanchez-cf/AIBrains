@@ -7,7 +7,7 @@
  * cada cambio.
  */
 import { describe, expect, it } from "vitest";
-import { formatearFicha } from "../src/herramientas/formato.js";
+import { formatearFicha, urlDeLaFuente } from "../src/herramientas/formato.js";
 import type { FichaConCreador } from "../src/tipos.js";
 
 function ficha(cambios: Partial<FichaConCreador> = {}): FichaConCreador {
@@ -156,5 +156,49 @@ describe("condiciones de uso", () => {
     const t = formatearFicha(ficha(), 1);
     expect(t).not.toContain("NO aplicar cuando");
     expect(t).not.toContain("Verificar antes");
+  });
+});
+
+/**
+ * La URL a secas, que es lo que ChatGPT pone en el campo `url` de cada
+ * resultado y por tanto lo que la gente pulsa para comprobar la técnica.
+ *
+ * Si esto se equivoca, el enlace lleva a donde no se dice lo que la ficha
+ * afirma, y eso destruye justo lo que el enlace venía a demostrar.
+ */
+describe("la URL de la fuente, sin la prosa de al lado", () => {
+  it("con minuto, el minuto va pegado", () => {
+    expect(urlDeLaFuente(ficha({ fuente_timestamp: 412 }))).toBe(
+      "https://www.tiktok.com/@x/video/1?t=412",
+    );
+  });
+
+  it("respeta una URL que ya trae parámetros", () => {
+    const u = urlDeLaFuente(
+      ficha({ fuente_url: "https://www.youtube.com/watch?v=abc", fuente_timestamp: 90 }),
+    );
+    expect(u).toBe("https://www.youtube.com/watch?v=abc&t=90");
+  });
+
+  it("sin minuto, el vídeo tal cual", () => {
+    expect(urlDeLaFuente(ficha())).toBe("https://www.tiktok.com/@x/video/1");
+  });
+
+  it("sin vídeo, el perfil del creador", () => {
+    const u = urlDeLaFuente(
+      ficha({
+        fuente_url: null,
+        creadores: { slug: "x", nombre: "X", perfil_url: "https://tiktok.com/@x" },
+      }),
+    );
+    expect(u).toBe("https://tiktok.com/@x");
+  });
+
+  it("sin nada, null — el hueco se ve, no se rellena con algo cualquiera", () => {
+    // Devolver la home de TikTok, o nuestra propia web, sería peor: parecería
+    // una cita y no lo sería.
+    expect(
+      urlDeLaFuente(ficha({ fuente_url: null, creadores: { slug: "x", nombre: "X", perfil_url: null } })),
+    ).toBeNull();
   });
 });

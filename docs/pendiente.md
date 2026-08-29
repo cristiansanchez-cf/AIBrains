@@ -23,6 +23,7 @@
 | **Bucle de medición cerrado**: se guarda, se compara y falla solo | `npm run metricas`, semanal en CI |
 | **Fichas relacionadas** por parecido real, del mismo creador | `ver_ficha`, con su uso registrado |
 | **`/salud` dice la verdad y avisa solo** | Issue automática cada hora, se cierra sola |
+| **Conector de ChatGPT** con `search` y `fetch` | En `/mcp/chatgpt`, sin tocar lo que ve Claude |
 
 ---
 
@@ -83,12 +84,18 @@ Estado de suscripción y panel de organización. Requiere decidir cómo autentic
 la web: el MCP usa tokens OAuth y la web tendrá sesiones normales de Supabase, y
 son cosas distintas.
 
-### 5. Adaptador `search`/`fetch` para ChatGPT
+### 5. Comprobar el conector de ChatGPT con una cuenta de verdad
 
-Quita dos de las tres pegas que hoy hacen que el producto se vea mal ahí. `ver_ficha`
-ya hace lo que tendría que hacer `fetch`, pero **no cumple el requisito**:
-ChatGPT exige herramientas llamadas literalmente `search` y `fetch`. Falta el
-adaptador que las exponga con esos nombres, no la lógica.
+El adaptador está hecho: `https://cerebro.cofundo.io/mcp/chatgpt` sirve el mismo
+cerebro con las dos herramientas que ChatGPT exige por nombre, `search` y
+`fetch`. Probado que responden con la forma correcta, que el acceso pasa por las
+mismas verjas, que un id inventado no distingue "no existe" de "no tienes
+acceso", y que el documento OAuth declara el recurso correcto para cada ruta.
+
+**Lo que NO está comprobado y necesita a Cristian:** cómo se comporta la
+interfaz de ChatGPT ante esto. Si con esta URL deja de hacer falta el modo
+desarrollador, y si Deep Research lo ve. Eso solo se sabe conectándolo desde una
+cuenta real. Hasta entonces, `docs/consignas-web.md` no lo promete.
 
 ---
 
