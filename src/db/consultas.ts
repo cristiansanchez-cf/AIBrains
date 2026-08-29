@@ -313,9 +313,12 @@ export async function buscarFichas(
   // dos. Es la mejora de latencia más grande disponible hoy, y no toca la
   // calidad: se calcula exactamente lo mismo.
   //
-  // `void` en el catch para que un fallo de OpenAI no llegue como rechazo sin
-  // capturar mientras se resuelven los permisos; el error se vuelve a mirar
+  // El fallo se captura AQUÍ, en el propio `.then`, y se guarda en vez de
+  // lanzarse: si el rechazo saliera mientras se están resolviendo los permisos,
+  // sería un rechazo sin capturar y tumbaría el proceso. Se vuelve a mirar
   // abajo, donde ya se puede degradar con criterio.
+  const empezo = Date.now();
+
   const embedding = hayEmbeddings()
     ? generarEmbeddings([filtros.situacion]).then(
         (v) => ({ vector: v[0] ?? null, error: null as unknown }),
@@ -329,8 +332,6 @@ export async function buscarFichas(
   const candidatos = filtros.creador
     ? permitidos.filter((c) => c.slug === filtros.creador)
     : permitidos;
-
-  const empezo = Date.now();
 
   // Se registra TAMBIÉN cuando no hay a quién preguntar. Antes este `return`
   // salía antes del registro, así que justamente la gente que más interesa

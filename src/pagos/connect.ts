@@ -59,7 +59,8 @@ export interface EstadoDeConexion {
  * Idempotente: si ya existe, la devuelve. Crear dos cuentas para el mismo
  * creador dejaría dinero en una de ellas sin que nadie sepa en cuál.
  */
-export async function cuentaDelCreador(
+/** Interna: la usa `conectar()` de este mismo fichero. */
+async function cuentaDelCreador(
   slug: string,
   email?: string,
 ): Promise<string> {

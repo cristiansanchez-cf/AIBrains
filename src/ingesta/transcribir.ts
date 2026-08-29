@@ -45,10 +45,6 @@ export class TranscripcionFallida extends Error {
   }
 }
 
-export function hayTranscriptor(): boolean {
-  return Boolean(config.internalApps.url);
-}
-
 /** Plataformas que el servicio admite. Comprobarlo aquí ahorra un viaje. */
 const HOSTS = [
   "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",

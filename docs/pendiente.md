@@ -47,6 +47,11 @@ estaban guardados, que no cuesta ninguna llamada a OpenAI.)*
 
 ### 1. Velocidad — media hecha, y la otra media bloqueada por falta de datos
 
+*(Ojo al comparar con números viejos: hasta el 30/08/2026 el cronómetro de
+`consultas.ms` arrancaba DESPUÉS de resolver los permisos, así que la latencia
+registrada era menor que la real. Ahora mide desde el principio, o sea que un
+número más alto que los de antes puede ser el mismo tiempo mejor medido.)*
+
 **Hecho:** solapar lo que no depende entre sí. El embedding de la pregunta se
 pide a la vez que los permisos, y los dos RPC de permisos van juntos. Medido con
 las mismas consultas y la misma red, tres pasadas: **527 ms → 384 ms de
