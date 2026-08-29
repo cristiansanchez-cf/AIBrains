@@ -133,17 +133,20 @@ export async function transcribir(url: string): Promise<Transcripcion> {
     platform?: string;
     engine?: string;
     /**
-     * MARCAS DE TIEMPO: hoy el servicio NO manda esto, y por eso ninguna ficha
-     * tiene minuto exacto. Se lee igualmente, con los tres nombres plausibles,
-     * para que el día que InternalApps las reenvíe esto funcione sin tocar
-     * nada aquí.
+     * MARCAS DE TIEMPO.
      *
-     * Comprobado el 30/08/2026 llamando al endpoint: devuelve
-     * `transcription, duration_s, platform, source, chunk_count, engine`.
-     * Con `engine: "supadata"`, que es el camino de YouTube y el 100% de lo
-     * ingerido hasta hoy — y Supadata SÍ devuelve los subtítulos troceados con
-     * su `offset`. O sea que el dato existe aguas arriba y se está tirando por
-     * el camino. El arreglo es de una línea, pero en el otro repo.
+     * EL CONTRATO, y conviene ser exacto porque equivocarse aquí no da error:
+     * `offset` viene en SEGUNDOS. InternalApps hace la conversión desde los
+     * milisegundos de Supadata antes de mandarlo
+     * (cristianalbertosanchez00-afk/InternalApps#5), justamente para que no
+     * haya dos sitios donde acordarse. Dividir otra vez entre mil dejaría
+     * todas las fichas en el segundo 0 con enlaces que parecen buenos.
+     *
+     * Comprobado el 30/08/2026 llamando al endpoint: hoy devuelve
+     * `transcription, duration_s, platform, source, chunk_count, engine` y
+     * ningún desplazamiento, así que esto está inerte hasta que ese cambio se
+     * mezcle. Se leen tres nombres posibles para no depender de cuál acabe
+     * usándose.
      */
     segments?: Array<{ offset?: number; start?: number; text?: string; content?: string }>;
     chunks?: Array<{ offset?: number; start?: number; text?: string; content?: string }>;
@@ -160,9 +163,9 @@ export async function transcribir(url: string): Promise<Transcripcion> {
   const crudos = datos.segments ?? datos.chunks ?? datos.content;
   const segmentos = (crudos ?? [])
     .map((s) => ({
-      // Supadata da el desplazamiento en MILISEGUNDOS (`offset`); Whisper lo da
-      // en segundos (`start`). Confundirlos pondría el minuto 412 en el 6:52:00.
-      desde: s.offset !== undefined ? Math.round(s.offset / 1000) : (s.start ?? 0),
+      // Segundos, los dos. Ver el contrato arriba: la conversión desde los
+      // milisegundos de Supadata se hace en el otro lado.
+      desde: s.offset ?? s.start ?? 0,
       texto: (s.text ?? s.content ?? "").trim(),
     }))
     .filter((s) => s.texto);
