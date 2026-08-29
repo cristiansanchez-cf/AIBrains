@@ -28,6 +28,13 @@ export default defineConfig({
     env: {
       SUPABASE_URL: "https://tests.invalid",
       SUPABASE_SECRET_KEY: "sb_secret_de_mentira_para_tests",
+      // Stripe no se llama nunca en los tests -el cliente esta sustituido por
+      // un doble- pero `procesarWebhook` se niega a empezar sin el secreto del
+      // webhook, y con razon: verificar la firma es lo que impide que
+      // cualquiera invente un pago. La comprobacion vale, asi que lo que hay
+      // que dar es un valor falso, no quitarla.
+      STRIPE_SECRET_KEY: "sk_de_mentira_para_tests",
+      STRIPE_WEBHOOK_SECRET: "whsec_de_mentira_para_tests",
     },
   },
 });
