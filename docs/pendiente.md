@@ -4,6 +4,15 @@
 
 ---
 
+## En marcha ahora mismo
+
+**Las acciones del panel**, por una sesión que trabaja desde el móvil. `GET
+/api/mi` ya está hecho y desplegado; faltan pasar a anual, subir y bajar
+asientos, ceder un asiento y dar de alta o de baja a alguien. Todas tocan
+Stripe. Contexto completo en `docs/handoff.md`.
+
+---
+
 ## Cuando vuelvas: dos cosas que necesitan tus manos
 
 **1. Conectar ChatGPT a la URL nueva y decirme qué pasa.**
