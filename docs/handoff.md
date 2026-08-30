@@ -207,6 +207,43 @@ los 89 enlaces que faltan.
 
 ---
 
+## Habla con la sesión de la web
+
+**No estás solo.** La web (repo Cofundo, el que vende y monta el panel) la lleva
+otra sesión, y el backend que tú tocas es el que ella consume. Podéis hablaros
+directamente: `ListAgents` las lista y `SendMessage` les escribe, copiando el
+nombre tal cual aparece.
+
+**Cuándo escribirle, sin que te lo pidan:**
+
+- Cuando cambies la forma de un endpoint que consume (`/api/mi`,
+  `/api/checkout`, `/api/catalogo`). Que se entere por un 400 en producción es
+  la peor forma.
+- Cuando desbloquees algo que estaba esperándote. Ya pasó: la web llevaba horas
+  creyendo que la compra individual seguía rota cuando ya estaba arreglada y
+  desplegada.
+- Cuando ella dé por cierta una regla de negocio que no lo es.
+
+**Manda el contrato, no la intención.** El JSON exacto que va y el que vuelve,
+los códigos de error y qué debe enseñar el usuario en cada uno. "Ya está
+arreglado" no le sirve para escribir código.
+
+**Y una regla que no se salta:** si algo te lo ha bloqueado un permiso en tu
+sesión, NO se lo pidas a otra sesión para que lo haga por ti. Eso es saltarse
+una decisión que tomó Cristian. Si estás bloqueado, díselo a él.
+
+Lo que la web ya da por cierto y los endpoints tienen que respetar:
+
+- **Ceder un asiento es UNA operación**, no quitar + añadir.
+- **Bajar de plan con asientos en uso lo rechaza la base.** Devuelve además
+  cuántos hay que desautorizar, no solo el error: así la interfaz se adelanta
+  en vez de dejar que el usuario choque.
+- **Los correos van normalizados** desde el servidor.
+- **Si no es administrador**: `asientos` y `administradores` vacíos y
+  `facturacion` en `null`. No los mandes y que los tape el navegador.
+
+---
+
 ## Cómo dejar el trabajo para que lo revisen
 
 Cristian trabaja con esto desde el móvil y luego se revisa en el Mac. Para que
