@@ -230,20 +230,29 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
           .is("revocado_en", null)
       : { data: null };
 
+    // Se resuelve ANTES del objeto porque `puede.pasar_a_anual` depende de ella.
+    // Quien no administra no recibe bloque de facturación y tampoco se le
+    // pregunta a Stripe: son datos suyos que no tienen por qué salir.
+    const facturacion = esAdmin
+      ? await facturacionDeStripe((org?.stripe_subscription_id as string | null) ?? null)
+      : null;
+
     return {
       email: correo,
       plan: "equipo",
       activa: true,
       puede: {
-        // Cambiar de periodo es tocar la factura: solo quien administra.
-        pasar_a_anual: esAdmin,
+        // Cambiar de periodo es tocar la factura: solo quien administra. Y solo
+        // si de verdad está en mensual, igual que en el caso individual — antes
+        // aquí ponía `esAdmin` a secas y un administrador YA anual veía un botón
+        // de "pasar a anual" que no podía hacer nada. Si Stripe no contestó, no
+        // se ofrece: mejor un botón de menos que uno que falla.
+        pasar_a_anual: esAdmin && facturacion?.periodo === "mensual" && !facturacion.cancelada,
         gestionar_asientos: esAdmin,
       },
       cerebros: await cerebrosDe(userId, correo),
       conector,
-      facturacion: esAdmin
-        ? await facturacionDeStripe((org?.stripe_subscription_id as string | null) ?? null)
-        : null,
+      facturacion,
       organizacion: {
         id: orgId,
         nombre: (org?.nombre as string) ?? "",

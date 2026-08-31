@@ -1,10 +1,58 @@
 # Fichas sin enlace al original
 
-Estas fichas no tienen `fuente_url` y **no se puede deducir**: su
-transcripción no nombra el vídeo y no se solapa con ninguna que sí lo
-tenga. Hay que buscarlas a mano.
+> **Actualizado el 30/08/2026 y el problema es mucho más pequeño de lo que
+> parecía.** Antes decía "93 búsquedas a mano". Son unos **9 vídeos**.
 
-Pista: busca el fragmento entre comillas, literal, en YouTube o Spotify.
+Estas fichas no tienen `fuente_url`. No se puede deducir desde nuestros datos:
+se comprobaron las dos vías obvias —misma página de Notion y mismo título que
+otra ficha que sí tenga enlace— y **las dos dan cero**. La transcripción tampoco
+nombra el vídeo.
+
+## Lo que sí se sabe, y convierte esto en una tarde de trabajo
+
+Los 93 tienen un patrón perfecto:
+
+- **Los 93 se crearon el mismo día: 28/06/2026.** Un solo lote de la importación
+  de Notion, sin `origen_ingesta`, donde la columna de URL venía vacía.
+- **Los 93 dicen `canal: YouTube`**, y ese campo **es de fiar**: en las 301
+  fichas que sí tienen enlace, el canal coincide con el sitio real el 100% de
+  las veces (Podcast↔Spotify 141, YouTube 21, TikTok 4). No es un valor por
+  defecto.
+- **91 son de Alfonso y Cristian**, 2 de Manuel Trejo.
+- **Los 93 conservan su transcripción**, así que se puede buscar la frase
+  literal.
+
+**Y aquí está lo que lo cambia todo:** las fichas de YouTube de Alfonso y
+Cristian que SÍ tienen enlace son 21, y salen de **solo 2 vídeos** — once fichas
+por vídeo. Si la densidad se parece, las 91 que faltan salen de **unos 9
+vídeos**.
+
+O sea que no son 91 búsquedas: son ~9 vídeos que encontrar, y cada uno resuelve
+una decena de fichas de golpe.
+
+## Cómo buscarlos
+
+**Trabaja por vídeo, no por ficha.** Coge una frase entre comillas, encuéntrala,
+y luego mira cuáles de las otras 90 salen del mismo vídeo.
+
+Los dos vídeos que ya conocemos dicen dónde mirar:
+
+- `https://www.youtube.com/@AlfonsoyChristian` — su propio canal.
+- `https://www.youtube.com/@AdriàSolàPastor` — **uno de los dos vídeos es de
+  otro canal**, donde aparecen como invitados. Así que el material está repartido
+  entre su canal y podcasts ajenos, y buscar solo en el suyo se deja la mitad.
+
+Cuando encuentres el enlace, ponlo en la columna URL de Notion y vuelve a
+ejecutar `npm run migrar`.
+
+## Por qué merece la pena
+
+Son el 29% de lo que se sirve. Y no es un problema de recuento: es el trozo del
+corpus donde **no se puede cumplir la promesa del producto**, que es "puedes ir
+a comprobarlo tú mismo". Recuperarlos vale más que cualquier ficha nueva.
+
+Cuando se recuperen, avisar a la web: es cambiar `CIFRAS.conOrigen` en
+`lib/site.ts` de su repositorio.
 
 Cuando encuentres el enlace, ponlo en la columna URL de Notion y vuelve a
 ejecutar `npm run migrar`.

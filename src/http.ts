@@ -24,6 +24,13 @@ import { config } from "./config.js";
 import { estadoDeSalud, ultimoEstadoConocido } from "./salud.js";
 import { panelDelUsuario } from "./api/mi.js";
 import {
+  ejecutarAccion,
+  AccionInvalida,
+  NoAutorizado,
+  AsientosEnUso,
+  type Peticion as PeticionDeAccion,
+} from "./api/acciones.js";
+import {
   cabeceraWwwAuthenticate,
   documentoDeRecursoProtegido,
 } from "./auth/metadatos.js";
@@ -109,6 +116,71 @@ async function manejarMi(req: IncomingMessage, res: ServerResponse): Promise<voi
 
   const panel = await panelDelUsuario(usuario.userId, usuario.email ?? "");
   responderJson(res, 200, panel, corsOrigen(req));
+}
+
+/**
+ * Las acciones del panel. Mismo token que `/api/mi` y misma verja.
+ *
+ * Los codigos importan y no son decorativos: la web pinta cosas distintas con
+ * cada uno. 403 es "tu no", 400 es "asi no", y 409 es "ahora no, y aqui tienes
+ * lo que necesitas para arreglarlo" — ese ultimo lleva los asientos en uso para
+ * que la interfaz proponga a quien dar de baja en vez de dejar al usuario
+ * delante de la lista entera.
+ *
+ * Un fallo interno NO se explica: su mensaje puede llevar detalles de
+ * configuracion, igual que en el checkout.
+ */
+async function manejarAcciones(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const origen = corsOrigen(req);
+  const token = tokenDeCabecera(req.headers.authorization);
+  if (!token) {
+    responderJson(res, 401, { error: "Hace falta iniciar sesión." }, origen);
+    return;
+  }
+
+  let usuario;
+  try {
+    usuario = await verificarSesion(token);
+  } catch (error) {
+    responderJson(
+      res,
+      401,
+      { error: error instanceof TokenInvalido ? error.message : "Sesión no válida." },
+      origen,
+    );
+    return;
+  }
+
+  let peticion: unknown;
+  try {
+    peticion = JSON.parse((await leerCuerpo(req)).toString("utf8"));
+  } catch {
+    responderJson(res, 400, { error: "Cuerpo JSON inválido." }, origen);
+    return;
+  }
+
+  try {
+    const resultado = await ejecutarAccion(
+      usuario.userId,
+      usuario.email ?? "",
+      peticion as PeticionDeAccion,
+    );
+    responderJson(res, 200, resultado, origen);
+  } catch (error) {
+    if (error instanceof AsientosEnUso) {
+      responderJson(res, 409, { error: error.message, ...error.detalle }, origen);
+      return;
+    }
+    if (error instanceof NoAutorizado) {
+      responderJson(res, 403, { error: error.message }, origen);
+      return;
+    }
+    if (error instanceof AccionInvalida) {
+      responderJson(res, 400, { error: error.message }, origen);
+      return;
+    }
+    throw error;
+  }
 }
 
 async function manejarMcp(
@@ -471,6 +543,31 @@ const http = createServer((req, res) => {
     manejarMi(req, res).catch((error: unknown) => {
       console.error("[cerebro] /api/mi:", error);
       responderJson(res, 500, { error: "No se pudo leer la cuenta." });
+    });
+    return;
+  }
+
+  // Las acciones del panel. Ruta aparte de /api/mi para que leer la cuenta
+  // siga siendo un GET cacheable y sin efectos, y cambiarla un POST.
+  if (ruta === "/api/mi/acciones") {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": corsOrigen(req),
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": "content-type, authorization",
+        "access-control-max-age": "86400",
+        vary: "origin",
+      });
+      res.end();
+      return;
+    }
+    if (req.method !== "POST") {
+      responderJson(res, 405, { error: "Solo POST." });
+      return;
+    }
+    manejarAcciones(req, res).catch((error: unknown) => {
+      console.error("[cerebro] /api/mi/acciones:", error);
+      responderJson(res, 500, { error: "No se pudo aplicar el cambio." }, corsOrigen(req));
     });
     return;
   }
