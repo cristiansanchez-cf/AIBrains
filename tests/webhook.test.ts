@@ -42,14 +42,24 @@ vi.mock("../src/db/supabase.js", () => ({
 
 // Stripe solo se usa aquí para verificar la firma; se sustituye por un doble
 // que devuelve el evento tal cual, que es lo que haría con una firma buena.
-const EVENTO = {
+let EVENTO: Record<string, unknown> = {
   id: "evt_1",
   type: "customer.subscription.deleted",
   data: { object: { id: "sub_1", object: "subscription" } },
 };
+
+/** Los correos se espían, no se envían. */
+const correos: Array<{ tipo: string; para: string }> = [];
+vi.mock("../src/correo/enviar.js", () => ({
+  enviar: async (c: { tipo: string; para: string }) => {
+    correos.push(c);
+    return true;
+  },
+}));
 vi.mock("stripe", () => ({
   default: class {
     webhooks = { constructEvent: () => EVENTO };
+    customers = { retrieve: async () => ({ id: "cus_1", email: "quien@paga.com" }) };
   },
 }));
 
@@ -57,7 +67,25 @@ const { procesarWebhook } = await import("../src/pagos/webhook.js");
 
 beforeEach(() => {
   cambios = [];
+  correos.length = 0;
+  EVENTO = {
+    id: "evt_1",
+    type: "customer.subscription.deleted",
+    data: { object: { id: "sub_1", object: "subscription" } },
+  };
 });
+
+/** Una suscripción tal y como la manda Stripe, con su línea y su fin de periodo. */
+function suscripcion(cancelada: boolean) {
+  return {
+    id: "sub_1",
+    object: "subscription",
+    status: "active",
+    customer: "cus_1",
+    cancel_at_period_end: cancelada,
+    items: { data: [{ quantity: 5, current_period_end: 1790000000 }] },
+  };
+}
 
 describe("baja de una suscripción", () => {
   it("apaga las TRES tablas donde puede vivir un acceso", async () => {
@@ -97,5 +125,73 @@ describe("baja de una suscripción", () => {
     for (const c of acceso) {
       expect(c.filtro).toEqual(["stripe_subscription_id", "sub_1"]);
     }
+  });
+});
+
+describe("avisar de que una suscripción queda cancelada", () => {
+  it("avisa cuando ACABA de cancelarse, con la fecha hasta la que hay acceso", async () => {
+    // Sin este correo, quien cancela cree que ha perdido el acceso ese mismo
+    // día y deja de usar un mes que ya ha pagado.
+    EVENTO = {
+      id: "evt_2",
+      type: "customer.subscription.updated",
+      data: {
+        object: suscripcion(true),
+        previous_attributes: { cancel_at_period_end: false },
+      },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    // El envío no se espera a propósito; se le da un turno al bucle de eventos.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(correos.map((c) => c.tipo)).toEqual(["cancelacion"]);
+    expect(correos[0]?.para).toBe("quien@paga.com");
+  });
+
+  it("NO avisa en un cambio de plan que no cancela nada", async () => {
+    // El caso que rompe esto: `customer.subscription.updated` salta en CADA
+    // cambio. Sin mirar `previous_attributes`, alguien que sube de asientos
+    // recibiría "tu suscripción queda cancelada".
+    EVENTO = {
+      id: "evt_3",
+      type: "customer.subscription.updated",
+      data: { object: suscripcion(false), previous_attributes: { quantity: 3 } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(correos).toHaveLength(0);
+  });
+
+  it("NO vuelve a avisar si ya estaba cancelada de antes", async () => {
+    // Una suscripción ya cancelada que recibe otro cambio cualquiera. Sigue
+    // teniendo `cancel_at_period_end: true`, pero no acaba de cancelarse.
+    EVENTO = {
+      id: "evt_4",
+      type: "customer.subscription.updated",
+      data: { object: suscripcion(true), previous_attributes: { quantity: 3 } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(correos).toHaveLength(0);
+  });
+
+  it("un cambio de plan apaga las dos tablas de suscripción, no solo una", async () => {
+    EVENTO = {
+      id: "evt_5",
+      type: "customer.subscription.updated",
+      data: { object: { ...suscripcion(false), status: "past_due" }, previous_attributes: {} },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    const tocadas = cambios
+      .filter((c) => c.filtro?.[0] === "stripe_subscription_id")
+      .map((c) => c.tabla);
+    expect(tocadas).toContain("suscripciones");
+    expect(tocadas).toContain("suscripciones_dominio");
   });
 });

@@ -22,6 +22,8 @@
 import Stripe from "stripe";
 import { config } from "../config.js";
 import { supabase } from "../db/supabase.js";
+import { enviar } from "../correo/enviar.js";
+import { compraConfirmada, suscripcionCancelada } from "../correo/plantillas.js";
 import { normalizarEmail } from "../email.js";
 
 export class FirmaInvalida extends Error {}
@@ -99,7 +101,11 @@ async function despachar(evento: Stripe.Event): Promise<void> {
     case "customer.subscription.deleted":
       return cortarAcceso(evento.data.object);
     case "customer.subscription.updated":
-      return sincronizarSuscripcion(evento.data.object);
+      // El EVENTO entero, no solo el objeto: hace falta `previous_attributes`
+      // para saber qué cambió. Sin eso, el aviso de cancelación se mandaría en
+      // cada actualización de la suscripción — incluidas las que no cancelan
+      // nada— y el cliente recibiría "queda cancelada" al subir de plan.
+      return sincronizarSuscripcion(evento);
     case "invoice.payment_failed":
       return marcarImpago(evento.data.object);
     case "account.updated":
@@ -130,11 +136,15 @@ async function provisionar(sesion: Stripe.Checkout.Session): Promise<void> {
     throw new Error(`Sesión ${sesion.id}: ni dominio ni cerebros en los metadatos.`);
   }
 
+  const asientos = Number(meta["asientos"] ?? 0);
   if (plan === "equipo") {
-    await provisionarEquipo(sesion, email, dominio, cerebrosViejos, Number(meta["asientos"] ?? 0));
+    await provisionarEquipo(sesion, email, dominio, cerebrosViejos, asientos);
   } else {
     await provisionarIndividual(sesion, email, dominio, cerebrosViejos);
   }
+
+  // Después de dar el acceso, nunca antes: el correo dice "ya lo tienes".
+  avisarDeLaCompra(email, plan === "equipo", asientos);
 }
 
 /** Traduce slugs a identificadores, fallando si alguno no existe. */
@@ -278,6 +288,59 @@ async function provisionarEquipo(
   console.error(`[stripe] alta equipo: ${email}, ${asientos} asiento(s), org ${oid}`);
 }
 
+/**
+ * El correo de quien acaba de comprar.
+ *
+ * Sin `await` y después de dar el acceso: si el correo falla, la persona tiene
+ * lo que ha pagado igual. Y el fallo se anota, para que la alarma lo vea.
+ */
+function avisarDeLaCompra(email: string, esEquipo: boolean, asientos: number): void {
+  const plantilla = compraConfirmada(email, esEquipo, asientos);
+  void enviar({ para: email, tipo: "compra", ...plantilla }).then((ok) => {
+    if (!ok) {
+      console.error(
+        `[stripe] AVISO: ${email} ha pagado y tiene acceso, pero NO se le pudo ` +
+          `mandar las instrucciones. No sabe cómo conectarlo.`,
+      );
+    }
+  });
+}
+
+/**
+ * "Cancelada, tienes acceso hasta el X".
+ *
+ * El correo se manda a la dirección que Stripe tiene del cliente, no a la
+ * nuestra: es la que usó para pagar, y en una organización puede no coincidir
+ * con la del administrador.
+ *
+ * La fecha sale de la línea de la suscripción, que es donde vive
+ * `current_period_end` en la API actual. Si no se puede leer, el correo se
+ * manda igual sin fecha concreta — decir "hasta el final del periodo pagado" es
+ * peor que decir el día, pero mucho mejor que no avisar.
+ */
+async function avisarDeCancelacion(sub: Stripe.Subscription): Promise<void> {
+  try {
+    const stripe = new Stripe(config.stripe.secretKey);
+    const cliente = await stripe.customers.retrieve(sub.customer as string);
+    const email = "deleted" in cliente ? null : cliente.email;
+    if (!email) {
+      console.error(`[stripe] cancelación de ${sub.id} sin correo de cliente: no se avisa`);
+      return;
+    }
+
+    const fin = sub.items.data[0]?.current_period_end;
+    const plantilla = suscripcionCancelada(
+      email,
+      fin ? new Date(fin * 1000).toISOString() : null,
+    );
+    await enviar({ para: email, tipo: "cancelacion", ...plantilla });
+  } catch (error) {
+    // Un correo no puede tumbar el webhook: si esto lanzara, Stripe reintentaría
+    // el evento y volveríamos a procesar una cancelación ya procesada.
+    console.error("[stripe] no se pudo avisar de la cancelación:", error);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Bajas y cambios
 // ---------------------------------------------------------------------------
@@ -331,14 +394,23 @@ async function cortarAcceso(sub: Stripe.Subscription): Promise<void> {
  * guarda el error: significa que hay que desautorizar gente antes, y elegir
  * nosotros a quién cortarle el acceso sería peor.
  */
-async function sincronizarSuscripcion(sub: Stripe.Subscription): Promise<void> {
+async function sincronizarSuscripcion(evento: Stripe.Event): Promise<void> {
+  const sub = evento.data.object as Stripe.Subscription;
   const activa = sub.status === "active" || sub.status === "trialing";
   const cantidad = sub.items.data[0]?.quantity;
 
-  await supabase
-    .from("suscripciones")
-    .update({ activa })
-    .eq("stripe_subscription_id", sub.id);
+  // LAS DOS TABLAS, igual que en la baja. Una suscripción nueva vive en
+  // `suscripciones_dominio` y una vieja en `suscripciones`; tocar solo una deja
+  // la otra diciendo lo contrario.
+  for (const tabla of ["suscripciones", "suscripciones_dominio"] as const) {
+    await supabase.from(tabla).update({ activa }).eq("stripe_subscription_id", sub.id);
+  }
+
+  // ¿Acaba de cancelarse a fin de periodo? Solo se avisa en la TRANSICIÓN.
+  const antes = evento.data.previous_attributes as { cancel_at_period_end?: boolean } | undefined;
+  if (sub.cancel_at_period_end && antes && antes.cancel_at_period_end === false) {
+    void avisarDeCancelacion(sub);
+  }
 
   const cambios: Record<string, unknown> = {
     estado_pago: activa ? "activa" : sub.status === "past_due" ? "impagada" : "cancelada",

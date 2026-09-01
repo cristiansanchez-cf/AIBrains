@@ -48,17 +48,13 @@ y el cliente OAuth `prueba-compatibilidad-cli (borrar)` desde el panel de Supaba
 
 ## En marcha
 
-**Los correos.** Resend configurado y funcionando, con aviso de cuota y alarma
-cuando un envío no se entrega. Hecho el que faltaba de verdad —**te han dado un
-asiento**—, y quedan tres:
+**Los correos.** Hechos tres: **te han dado un asiento**, **gracias por
+comprar** (con las instrucciones, sin duplicar el recibo de Stripe) y
+**cancelada, tienes acceso hasta el X**. Queda uno:
 
-1. **Gracias por comprar**, con las instrucciones. Hoy quien paga recibe el
-   recibo de Stripe y ninguna indicación de qué hacer.
-2. **Cancelada, tienes acceso hasta el X.** Sale de un evento que ya
-   escuchamos, es gratis, y sin él quien cancela deja de usar el producto un mes
-   antes de tiempo.
-3. **Se renueva pronto**, y **solo para las anuales**. En mensual es un
-   recordatorio mensual de que se podría cancelar.
+- **Se renueva pronto**, y **solo para las anuales** — en mensual sería un
+  recordatorio mensual de que se podría cancelar. Necesita suscribirse al evento
+  `invoice.upcoming`, que hoy no escuchamos.
 
 El HTML definitivo lo escribe la web; este lado los envía.
 
