@@ -1,6 +1,6 @@
 # Qué hay hecho y qué queda
 
-> Lista viva. Se actualiza al cerrar cada cosa. Última revisión: 30/08/2026.
+> Lista viva. Se actualiza al cerrar cada cosa. Última revisión: 01/09/2026.
 
 ---
 
@@ -13,22 +13,58 @@ Stripe. Contexto completo en `docs/handoff.md`.
 
 ---
 
-## Cuando vuelvas: dos cosas que necesitan tus manos
+## Lo que necesita tus manos
 
-**1. Conectar ChatGPT a la URL nueva y decirme qué pasa.**
-`https://cerebro.cofundo.io/mcp/chatgpt` — no la de siempre. Quiero saber si
-sigue pidiendo modo desarrollador y si Deep Research lo ve. Es lo único de todo
-esto que no puedo comprobar yo, y de ello depende qué prometemos en la web.
+**1. Los ~9 vídeos que recuperan el 29% del corpus.** Lo más valioso de la lista.
+93 fichas servibles no tienen enlace de origen, y sin enlace no se puede cumplir
+la promesa del producto. No son 93 búsquedas: salen de unos 9 vídeos. Método en
+`docs/fichas-sin-enlace.md`.
 
-**2. Confirmar el empaquetado.** La web vende "elige tu cerebro" y hay dos
-creadores; la propuesta es vender UN producto —Cerebro de Ventas— con todo lo de
-ventas dentro. Toca el checkout y el reparto de dinero, por eso no lo he
-cambiado por mi cuenta. Razonado en `docs/consignas-web-2.md` §2 y §3.
+**2. Conectar ChatGPT a `https://cerebro.cofundo.io/mcp/chatgpt`** y decir si
+pide modo desarrollador y si Deep Research lo ve. Es lo único que no puedo
+comprobar yo.
 
-*(Hechas el 30/08/2026: las dos migraciones de vistas —comprobado desde fuera
-que la clave pública recibe `permission denied` en las cuatro— y el cambio de
-InternalApps, que resultó que sí podía hacer yo: está en el PR
-cristianalbertosanchez00-afk/InternalApps#5, solo hay que mezclarlo.)*
+**3. Confirmar la facturación inmediata.** Pasar a anual y cambiar asientos usan
+`always_invoice`: cobran en el acto. Está desplegado pero la web no debe enseñar
+esos botones hasta que se confirme.
+
+**4. Decidir el periodo de gracia ante un impago.** Hoy, al primer fallo de
+cobro, el acceso se corta en la siguiente consulta. Stripe sigue reintentando
+varios días, pero el cliente ya no entra: **una tarjeta caducada deja fuera a un
+equipo entero de golpe**. Lo normal es cortar al final de la ventana de
+reintentos, no al principio.
+
+**5. Mezclar el PR de InternalApps** (`cristianalbertosanchez00-afk/InternalApps#5`).
+Con eso el minuto exacto empieza a funcionar solo en las fichas nuevas.
+
+**6. Dos DPA:** OpenAI (el único que recibe el texto de las consultas) y
+Railway. Los otros cuatro ya están en vigor. Rutas en el traspaso a la web.
+
+**7. Limpieza cuando sobren:** la organización de pruebas
+(`delete from public.organizaciones where nombre = 'Empresa de Pruebas (borrar cuando sobre)'`)
+y el cliente OAuth `prueba-compatibilidad-cli (borrar)` desde el panel de Supabase.
+
+---
+
+## En marcha
+
+**Los correos.** Resend configurado y funcionando, con aviso de cuota y alarma
+cuando un envío no se entrega. Hecho el que faltaba de verdad —**te han dado un
+asiento**—, y quedan tres:
+
+1. **Gracias por comprar**, con las instrucciones. Hoy quien paga recibe el
+   recibo de Stripe y ninguna indicación de qué hacer.
+2. **Cancelada, tienes acceso hasta el X.** Sale de un evento que ya
+   escuchamos, es gratis, y sin él quien cancela deja de usar el producto un mes
+   antes de tiempo.
+3. **Se renueva pronto**, y **solo para las anuales**. En mensual es un
+   recordatorio mensual de que se podría cancelar.
+
+El HTML definitivo lo escribe la web; este lado los envía.
+
+**Y una acción que no existe:** `alta_admin` / `baja_admin`. Hoy el único
+administrador que se crea es el comprador, en el webhook. Para tener un segundo
+hay que meter la fila a mano en la base.
 
 ---
 
@@ -52,6 +88,9 @@ cristianalbertosanchez00-afk/InternalApps#5, solo hay que mezclarlo.)*
 | **Fichas relacionadas** por parecido real, del mismo creador | `ver_ficha`, con su uso registrado |
 | **`/salud` dice la verdad y avisa solo** | Issue automática cada hora, se cierra sola |
 | **Conector de ChatGPT** con `search` y `fetch` | En `/mcp/chatgpt`, sin tocar lo que ve Claude |
+| **Un producto, no un catálogo**: se compra un dominio entero | Un creador nuevo lo tienen todos ese mismo día |
+| **Panel del usuario**: lectura y acciones | `GET /api/mi` · `POST /api/mi/acciones` |
+| **Correos** con proveedor, cuota vigilada y alarma de no entregados | `npm run correo -- fallidos` · `-- reintentar` |
 
 ---
 
