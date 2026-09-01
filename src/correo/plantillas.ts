@@ -230,3 +230,57 @@ leemos.`;
     ),
   };
 }
+
+/**
+ * "Se renueva pronto", y SOLO para las anuales.
+ *
+ * ES UNA DECISIÓN DE PRODUCTO, no una limitación técnica. A quien paga una vez
+ * al año, avisarle una semana antes es respetuoso y evita la reclamación de
+ * "me habéis cobrado sin avisar" — nadie recuerda en septiembre lo que
+ * contrató en octubre. A quien paga cada mes, ese mismo correo es **un
+ * recordatorio mensual de que podría cancelar**: doce oportunidades al año de
+ * pensárselo, a cambio de nada. Un cargo pequeño y recurrente no sorprende a
+ * nadie.
+ *
+ * DICE EL IMPORTE, y viene de Stripe. Es el dato por el que se abre este
+ * correo, y calcularlo por nuestra cuenta sería inventarse la cifra que el
+ * cliente va a comparar con su extracto.
+ *
+ * Y NO INTENTA VENDER NADA. Un aviso de cobro con una promoción dentro es un
+ * correo comercial disfrazado, y eso cambia lo que legalmente se puede mandar
+ * sin consentimiento.
+ */
+export function renovacionProxima(
+  cuandoISO: string,
+  importeCentimos: number | null,
+  moneda: string | null,
+): Plantilla {
+  const fecha = comoFecha(cuandoISO);
+  const importe =
+    importeCentimos != null && moneda
+      ? new Intl.NumberFormat("es-ES", { style: "currency", currency: moneda.toUpperCase() }).format(
+          importeCentimos / 100,
+        )
+      : null;
+
+  const linea = importe
+    ? `El ${fecha} se renueva tu suscripción anual al Cerebro de Ventas, y se cobrarán ${importe}.`
+    : `El ${fecha} se renueva tu suscripción anual al Cerebro de Ventas.`;
+
+  return {
+    asunto: `Tu suscripción se renueva el ${fecha}`,
+    texto: `${linea}
+
+No tienes que hacer nada: se cobra en la tarjeta que ya tienes puesta y el
+acceso sigue sin interrupción.
+
+Si prefieres no renovar, puedes cancelar desde tu cuenta antes de esa fecha y
+seguirás teniendo acceso hasta el último día del periodo que ya pagaste.`,
+    html: envolver(
+      `Tu suscripción se renueva el ${fecha}`,
+      `<p style="margin:0 0 20px">${linea}</p>
+<p style="margin:0 0 20px">No tienes que hacer nada: se cobra en la tarjeta que ya tienes puesta y el acceso sigue sin interrupción.</p>
+<p style="margin:0;font-size:14px;color:#6b6560">Si prefieres no renovar, puedes cancelar desde tu cuenta antes de esa fecha y seguirás teniendo acceso hasta el último día del periodo que ya pagaste.</p>`,
+    ),
+  };
+}

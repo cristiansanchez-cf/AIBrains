@@ -48,15 +48,19 @@ y el cliente OAuth `prueba-compatibilidad-cli (borrar)` desde el panel de Supaba
 
 ## En marcha
 
-**Los correos.** Hechos tres: **te han dado un asiento**, **gracias por
-comprar** (con las instrucciones, sin duplicar el recibo de Stripe) y
-**cancelada, tienes acceso hasta el X**. Queda uno:
-
-- **Se renueva pronto**, y **solo para las anuales** — en mensual sería un
-  recordatorio mensual de que se podría cancelar. Necesita suscribirse al evento
-  `invoice.upcoming`, que hoy no escuchamos.
-
+**Los correos del ciclo de cobro están completos:** te han dado un asiento,
+gracias por comprar, cancelada con su fecha, y se renueva pronto (solo anuales).
 El HTML definitivo lo escribe la web; este lado los envía.
+
+**Falta configurar una cosa en el panel de Stripe:** que el webhook reciba
+`invoice.upcoming`, y cuántos días antes se emite. El código ya lo escucha; si
+Stripe no lo manda, el aviso de renovación no sale y nada falla — que es
+exactamente el tipo de silencio que hay que comprobar cuando se venda el primer
+anual.
+
+**Y una decisión tomada, para que no se vuelva a discutir:** *no hay periodo de
+gracia ante un impago*. Al primer fallo de cobro el acceso se corta. Decidido
+por Cristian el 01/09/2026.
 
 **Y una acción que no existe:** `alta_admin` / `baja_admin`. Hoy el único
 administrador que se crea es el comprador, en el webhook. Para tener un segundo

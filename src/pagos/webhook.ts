@@ -23,7 +23,11 @@ import Stripe from "stripe";
 import { config } from "../config.js";
 import { supabase } from "../db/supabase.js";
 import { enviar } from "../correo/enviar.js";
-import { compraConfirmada, suscripcionCancelada } from "../correo/plantillas.js";
+import {
+  compraConfirmada,
+  suscripcionCancelada,
+  renovacionProxima,
+} from "../correo/plantillas.js";
 import { normalizarEmail } from "../email.js";
 
 export class FirmaInvalida extends Error {}
@@ -34,6 +38,10 @@ const INTERESANTES = new Set([
   "customer.subscription.updated",
   "customer.subscription.deleted",
   "invoice.payment_failed",
+  // Llega unos días antes de cada renovación. Solo se usa para avisar de las
+  // ANUALES; ver `avisarDeRenovacion`. Cuántos días antes se configura en el
+  // panel de Stripe, no aquí.
+  "invoice.upcoming",
   "account.updated",
 ]);
 
@@ -108,6 +116,8 @@ async function despachar(evento: Stripe.Event): Promise<void> {
       return sincronizarSuscripcion(evento);
     case "invoice.payment_failed":
       return marcarImpago(evento.data.object);
+    case "invoice.upcoming":
+      return avisarDeRenovacion(evento.data.object);
     case "account.updated":
       return sincronizarCreador(evento.data.object);
     default:
@@ -338,6 +348,61 @@ async function avisarDeCancelacion(sub: Stripe.Subscription): Promise<void> {
     // Un correo no puede tumbar el webhook: si esto lanzara, Stripe reintentaría
     // el evento y volveríamos a procesar una cancelación ya procesada.
     console.error("[stripe] no se pudo avisar de la cancelación:", error);
+  }
+}
+
+/**
+ * Aviso de renovación próxima. **Solo anuales.**
+ *
+ * Tres razones para NO mandarlo, y las tres se comprueban aquí:
+ *
+ * 1. **No es anual.** En mensual el aviso es un recordatorio de que se podría
+ *    cancelar, doce veces al año. Decisión de producto, ver la plantilla.
+ * 2. **Ya está cancelada a fin de periodo.** No se renueva nada, y decirle a
+ *    alguien que canceló que se le va a cobrar es la peor forma de terminar.
+ * 3. **No hay fecha de cobro.** Sin ella el correo no dice nada útil.
+ *
+ * `invoice.upcoming` es una PREVISUALIZACIÓN: la factura todavía no existe y no
+ * tiene identificador propio. La idempotencia la da el id del evento, que es
+ * el mismo mecanismo que el resto.
+ */
+async function avisarDeRenovacion(factura: Stripe.Invoice): Promise<void> {
+  const cuando = factura.next_payment_attempt;
+  const subId = (factura as unknown as { subscription?: string }).subscription;
+  if (!cuando || !subId) return;
+
+  try {
+    const stripe = new Stripe(config.stripe.secretKey);
+    const sub = await stripe.subscriptions.retrieve(subId);
+
+    // Si ya está cancelada a fin de periodo, no hay renovación que anunciar.
+    if (sub.cancel_at_period_end) return;
+
+    // EL PERIODO SE LEE DE LA SUSCRIPCIÓN, no de la línea de la factura.
+    // Primero lo saqué de `factura.lines`, y esa forma cambió entre versiones
+    // de la API —`price` pasó a `pricing`—, así que la comprobación se quedaba
+    // en `undefined` y el correo no se habría enviado NUNCA sin que nada
+    // fallara. Aquí se lee igual que en el panel y en el cambio a anual, que
+    // son caminos ya probados.
+    if (sub.items.data[0]?.price.recurring?.interval !== "year") return;
+
+    const cliente = await stripe.customers.retrieve(factura.customer as string);
+    const email = "deleted" in cliente ? null : cliente.email;
+    if (!email) {
+      console.error(`[stripe] renovación de ${factura.customer} sin correo: no se avisa`);
+      return;
+    }
+
+    const plantilla = renovacionProxima(
+      new Date(cuando * 1000).toISOString(),
+      factura.amount_due ?? null,
+      factura.currency ?? null,
+    );
+    await enviar({ para: email, tipo: "renovacion", ...plantilla });
+  } catch (error) {
+    // Un correo no puede tumbar el webhook: si lanzara, Stripe reintentaría el
+    // evento y volveríamos a avisar de una renovación ya avisada.
+    console.error("[stripe] no se pudo avisar de la renovación:", error);
   }
 }
 

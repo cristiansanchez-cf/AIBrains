@@ -56,10 +56,13 @@ vi.mock("../src/correo/enviar.js", () => ({
     return true;
   },
 }));
+/** Lo que devuelve `subscriptions.retrieve` en cada caso. */
+let SUSCRIPCION: Record<string, unknown> = {};
 vi.mock("stripe", () => ({
   default: class {
     webhooks = { constructEvent: () => EVENTO };
     customers = { retrieve: async () => ({ id: "cus_1", email: "quien@paga.com" }) };
+    subscriptions = { retrieve: async () => SUSCRIPCION };
   },
 }));
 
@@ -76,6 +79,27 @@ beforeEach(() => {
 });
 
 /** Una suscripción tal y como la manda Stripe, con su línea y su fin de periodo. */
+/** Una suscripción con su periodo, para el doble de Stripe. */
+function suscripcionDe(intervalo: "month" | "year", cancelada = false) {
+  return {
+    id: "sub_1",
+    cancel_at_period_end: cancelada,
+    items: { data: [{ price: { recurring: { interval: intervalo } } }] },
+  };
+}
+
+/** Una factura previa tal y como llega en `invoice.upcoming`. */
+function facturaPrevia() {
+  return {
+    object: "invoice",
+    customer: "cus_1",
+    subscription: "sub_1",
+    next_payment_attempt: 1790000000,
+    amount_due: 10000,
+    currency: "eur",
+  };
+}
+
 function suscripcion(cancelada: boolean) {
   return {
     id: "sub_1",
@@ -193,5 +217,47 @@ describe("avisar de que una suscripción queda cancelada", () => {
       .map((c) => c.tabla);
     expect(tocadas).toContain("suscripciones");
     expect(tocadas).toContain("suscripciones_dominio");
+  });
+});
+
+describe("aviso de renovación", () => {
+  it("avisa de una ANUAL", async () => {
+    SUSCRIPCION = suscripcionDe("year");
+    EVENTO = { id: "evt_r1", type: "invoice.upcoming", data: { object: facturaPrevia() } };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos.map((c) => c.tipo)).toEqual(["renovacion"]);
+  });
+
+  it("NO avisa de una mensual", async () => {
+    // Es la decisión de producto: en mensual sería un recordatorio mensual de
+    // que se podría cancelar. Doce oportunidades al año a cambio de nada.
+    SUSCRIPCION = suscripcionDe("month");
+    EVENTO = { id: "evt_r2", type: "invoice.upcoming", data: { object: facturaPrevia() } };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos).toHaveLength(0);
+  });
+
+  it("NO avisa si ya está cancelada a fin de periodo", async () => {
+    // Decirle a quien acaba de cancelar que se le va a cobrar es la peor forma
+    // posible de terminar una relación.
+    SUSCRIPCION = suscripcionDe("year", true);
+    EVENTO = { id: "evt_r3", type: "invoice.upcoming", data: { object: facturaPrevia() } };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos).toHaveLength(0);
+  });
+
+  it("NO avisa si no hay fecha de cobro", async () => {
+    SUSCRIPCION = suscripcionDe("year");
+    EVENTO = {
+      id: "evt_r4",
+      type: "invoice.upcoming",
+      data: { object: { ...facturaPrevia(), next_payment_attempt: null } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos).toHaveLength(0);
   });
 });
