@@ -35,6 +35,17 @@ export default defineConfig({
       // que dar es un valor falso, no quitarla.
       STRIPE_SECRET_KEY: "sk_de_mentira_para_tests",
       STRIPE_WEBHOOK_SECRET: "whsec_de_mentira_para_tests",
+      // RESEND_API_KEY se queda VACÍA, y es lo contrario que las de arriba.
+      //
+      // A las demás se les da un valor falso para que el módulo arranque. Aquí
+      // no: `enviar()` comprueba que haya clave y, si no la hay, no llama a
+      // nadie. Con una clave falsa SÍ llamaría a Resend desde los tests. Y con
+      // la de verdad —si alguien la tiene exportada en su terminal— mandaría
+      // correos reales al ejecutar `npm test`.
+      //
+      // Ponerla vacía aquí gana a las dos: no depende de qué tenga cada uno en
+      // su entorno.
+      RESEND_API_KEY: "",
     },
   },
 });

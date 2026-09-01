@@ -56,6 +56,15 @@ vi.mock("stripe", () => ({
   },
 }));
 
+/** Los correos se espían, no se envían. */
+const correosEnviados: Array<{ para: string; tipo: string; asunto: string }> = [];
+vi.mock("../src/correo/enviar.js", () => ({
+  enviar: async (c: { para: string; tipo: string; asunto: string }) => {
+    correosEnviados.push(c);
+    return true;
+  },
+}));
+
 /** El panel decide la verja, así que se controla desde aquí. */
 let panel: Record<string, unknown>;
 vi.mock("../src/api/mi.js", () => ({
@@ -86,6 +95,7 @@ const ADMIN = {
 
 beforeEach(() => {
   llamadas = [];
+  correosEnviados.length = 0;
   respuesta = { data: [{ id: 1 }], error: null };
   asientosVivos = 3;
   panel = structuredClone(ADMIN);
@@ -230,5 +240,44 @@ describe("bajar de plan", () => {
     await expect(
       ejecutarAccion("u1", "jefa@empresa.com", { accion: "cambiar_asientos", asientos: 1 } as never),
     ).rejects.toBeInstanceOf(AccionInvalida);
+  });
+});
+
+describe("avisar a quien recibe un asiento", () => {
+  it("dar de alta a alguien le manda el correo con SU dirección", async () => {
+    // Sin esto, esa persona tiene acceso y no se entera: el equipo de cinco se
+    // queda en un asiento usado y cuatro que no saben que existe.
+    await ejecutarAccion("u1", "jefa@empresa.com", {
+      accion: "alta_asiento",
+      email: "nueva@empresa.com",
+    } as never);
+
+    expect(correosEnviados).toHaveLength(1);
+    expect(correosEnviados[0]?.para).toBe("nueva@empresa.com");
+    expect(correosEnviados[0]?.tipo).toBe("asiento");
+  });
+
+  it("ceder también avisa, y a quien lo RECIBE", async () => {
+    // Quien recibe un asiento cedido está en la misma situación que un alta.
+    // Y el aviso va al nuevo, no al que lo suelta.
+    await ejecutarAccion("u1", "jefa@empresa.com", {
+      accion: "ceder_asiento",
+      de: "antigua@empresa.com",
+      a: "nueva@empresa.com",
+    } as never);
+
+    expect(correosEnviados.map((c) => c.para)).toEqual(["nueva@empresa.com"]);
+  });
+
+  it("si el alta falla, NO se manda ningún correo", async () => {
+    // Avisar a alguien de un acceso que no tiene es peor que no avisar.
+    respuesta = { data: null, error: { message: "lo que sea", code: "23505" } };
+    await expect(
+      ejecutarAccion("u1", "jefa@empresa.com", {
+        accion: "alta_asiento",
+        email: "nueva@empresa.com",
+      } as never),
+    ).rejects.toThrow();
+    expect(correosEnviados).toHaveLength(0);
   });
 });

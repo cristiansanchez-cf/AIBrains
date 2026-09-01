@@ -29,6 +29,8 @@ import { supabase } from "../db/supabase.js";
 import { config } from "../config.js";
 import { normalizarEmail, pareceEmail } from "../email.js";
 import { panelDelUsuario, type Panel } from "./mi.js";
+import { enviar } from "../correo/enviar.js";
+import { asientoConcedido } from "../correo/plantillas.js";
 
 /** Petición mal formada o que no tiene sentido en este estado. Responde 400. */
 export class AccionInvalida extends Error {}
@@ -403,6 +405,10 @@ async function cederAsiento(panel: Panel, de: unknown, a: unknown): Promise<stri
     throw new AccionInvalida(`${anterior} no ocupa ningún asiento vivo en esta cuenta.`);
   }
 
+  // Quien recibe el asiento cedido está en la MISMA situación que un alta: tiene
+  // acceso y no lo sabe. Se le avisa igual.
+  avisarDelAsiento(nuevo, org.nombre);
+
   return `El asiento de ${anterior} pasa a ${nuevo}.`;
 }
 
@@ -452,7 +458,32 @@ async function altaDeAsiento(panel: Panel, email: unknown): Promise<string> {
     throw new Error(`No se pudo dar el alta: ${error.message}`);
   }
 
+  // El correo va DESPUÉS de dar el asiento y sin esperar a que salga: si Resend
+  // tiene un mal minuto, esa persona tiene su acceso igual. Que no reciba el
+  // aviso es un problema; que no reciba el acceso porque el proveedor de correo
+  // falló, es otro mucho mayor.
+  avisarDelAsiento(correo, org.nombre);
+
   return `${correo} tiene asiento. Puede conectarse con ese correo.`;
+}
+
+/**
+ * Avisa a quien acaba de recibir un asiento.
+ *
+ * SIN `await` a propósito, igual que el registro de consultas. Y con el fallo
+ * anotado, porque un correo que no sale en silencio es peor que uno que falla
+ * a gritos: el administrador cree que su comercial ya lo sabe.
+ */
+function avisarDelAsiento(para: string, organizacion: string): void {
+  const plantilla = asientoConcedido(para, organizacion);
+  void enviar({ para, tipo: "asiento", ...plantilla }).then((ok) => {
+    if (!ok) {
+      console.error(
+        `[cerebro] AVISO: ${para} tiene asiento en "${organizacion}" pero NO se le ` +
+          `pudo avisar. Esa persona tiene acceso y no lo sabe.`,
+      );
+    }
+  });
 }
 
 /**
