@@ -168,7 +168,7 @@ async function main(): Promise<void> {
     // operaciones guardado para siempre en la otra. La retención declarada son
     // 90 días; una retención que solo se cumple en la mitad de los sitios no
     // es una retención.
-    for (const tabla of ["consultas", "usos_de_herramienta"] as const) {
+    for (const tabla of ["consultas", "usos_de_herramienta", "correos_enviados"] as const) {
       const { count, error } = await supabase
         .from(tabla)
         .delete({ count: "exact" })

@@ -42,10 +42,18 @@ function esHoy(): string {
  * consultas. Perder una fila de contabilidad no cuesta nada; perder el correo
  * porque la contabilidad falló, sí.
  */
-function anotar(tipo: string, ok: boolean, error?: string): void {
+function anotar(tipo: string, ok: boolean, para?: string, error?: string): void {
   void supabase
     .from("correos_enviados")
-    .insert({ tipo, ok, error: error?.slice(0, 300) ?? null })
+    .insert({
+      tipo,
+      ok,
+      error: error?.slice(0, 300) ?? null,
+      // El destinatario SOLO cuando falla, y es lo que convierte "algo fue mal"
+      // en "reenviar a esta persona". En los envíos correctos queda nulo: para
+      // contar no hace falta y sería tener los correos de la gente repetidos.
+      destinatario: ok ? null : (para ?? null),
+    })
     .then(({ error: e }) => {
       if (e) console.error("[correo] no se pudo anotar el envío:", e.message);
     });
@@ -79,8 +87,12 @@ function vigilarElDia(): void {
  */
 export async function enviar(correo: Correo): Promise<boolean> {
   if (!config.correo.apiKey) {
-    // No es un error: en desarrollo no hay clave y no se quiere enviar nada.
-    console.error(`[correo] sin RESEND_API_KEY, no se envía "${correo.asunto}"`);
+    // En desarrollo es lo normal y no se quiere enviar nada. En PRODUCCIÓN es
+    // una avería silenciosa —nadie recibe nada y nada falla— así que ahí se
+    // anota como fallo para que la alarma lo vea. La diferencia la marca tener
+    // base de datos de verdad delante, no una variable más que recordar.
+    console.error(`[correo] sin RESEND_API_KEY, NO se envía "${correo.asunto}" a ${correo.para}`);
+    anotar(correo.tipo, false, correo.para, "sin RESEND_API_KEY configurada");
     return false;
   }
 
@@ -107,7 +119,7 @@ export async function enviar(correo: Correo): Promise<boolean> {
       const cuerpo = (await res.json().catch(() => ({}))) as { message?: string };
       const motivo = cuerpo.message ?? `HTTP ${res.status}`;
       console.error(`[correo] no se pudo enviar "${correo.asunto}": ${motivo}`);
-      anotar(correo.tipo, false, motivo);
+      anotar(correo.tipo, false, correo.para, motivo);
       return false;
     }
 
@@ -116,7 +128,7 @@ export async function enviar(correo: Correo): Promise<boolean> {
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e);
     console.error(`[correo] fallo de red enviando "${correo.asunto}": ${motivo}`);
-    anotar(correo.tipo, false, motivo);
+    anotar(correo.tipo, false, correo.para, motivo);
     return false;
   }
 }

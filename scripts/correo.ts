@@ -15,8 +15,98 @@ import { config } from "../src/config.js";
 
 const [, , orden, destinatario] = process.argv;
 
+// --- Los que no llegaron ----------------------------------------------------
+//
+// El aviso de /salud dice que hay fallos; esto dice a QUIÉN y por qué, que es
+// lo único con lo que se puede hacer algo.
+if (orden === "fallidos" || orden === "reintentar") {
+  const { supabase } = await import("../src/db/supabase.js");
+  const { data, error } = await supabase
+    .from("correos_enviados")
+    .select("id, cuando, tipo, destinatario, error")
+    .eq("ok", false)
+    .is("reintentado_en", null)
+    .order("cuando", { ascending: false });
+
+  if (error) {
+    console.log(`No se pudo leer: ${error.message}`);
+    process.exit(1);
+  }
+  if (!data?.length) {
+    console.log("Ninguno pendiente: todo lo que se ha intentado enviar salió.");
+    process.exit(0);
+  }
+
+  console.log(`${data.length} correo(s) que NO llegaron y nadie ha reenviado:\n`);
+  for (const c of data) {
+    console.log(`  [${c.id}] ${String(c.cuando).slice(0, 16)} · ${c.tipo} · ${c.destinatario ?? "(sin destinatario anotado)"}`);
+    console.log(`         ${String(c.error ?? "").slice(0, 90)}`);
+  }
+
+  if (orden === "fallidos") {
+    console.log(`\nPara reenviarlos: npm run correo -- reintentar`);
+    process.exit(0);
+  }
+
+  // --- Reintentar -----------------------------------------------------------
+  //
+  // Se REGENERA el correo, no se guarda una copia. Guardar el cuerpo de cada
+  // envío sería duplicar datos personales para el caso raro de que falle; y
+  // regenerarlo además manda la versión ACTUAL de la plantilla, no la de hace
+  // dos semanas.
+  const { enviar } = await import("../src/correo/enviar.js");
+  const { asientoConcedido } = await import("../src/correo/plantillas.js");
+
+  console.log(`\nReintentando…\n`);
+  for (const c of data) {
+    const para = c.destinatario as string | null;
+    if (!para) {
+      console.log(`  [${c.id}] sin destinatario anotado, no se puede reenviar`);
+      continue;
+    }
+    if (c.tipo !== "asiento") {
+      console.log(`  [${c.id}] tipo "${c.tipo}" todavía no se sabe regenerar`);
+      continue;
+    }
+
+    // La organización no se guarda en el registro, así que se busca por el
+    // asiento vivo de esa persona. Si ya no lo tiene, NO se reenvía: avisar de
+    // un acceso que ya no existe es peor que no avisar.
+    const { data: asiento } = await supabase
+      .from("organizacion_asientos")
+      .select("organizacion_id")
+      .eq("email", para)
+      .is("revocado_en", null)
+      .maybeSingle();
+
+    if (!asiento) {
+      console.log(`  [${c.id}] ${para} ya no ocupa ningún asiento: no se reenvía`);
+      await supabase.from("correos_enviados").update({ reintentado_en: new Date().toISOString() }).eq("id", c.id);
+      continue;
+    }
+
+    const { data: org } = await supabase
+      .from("organizaciones")
+      .select("nombre")
+      .eq("id", asiento.organizacion_id as string)
+      .maybeSingle();
+
+    const ok = await enviar({ para, tipo: "asiento", ...asientoConcedido(para, (org?.nombre as string) ?? "tu equipo") });
+    if (ok) {
+      await supabase.from("correos_enviados").update({ reintentado_en: new Date().toISOString() }).eq("id", c.id);
+      console.log(`  [${c.id}] ${para} — enviado`);
+    } else {
+      console.log(`  [${c.id}] ${para} — vuelve a fallar, mira el motivo arriba`);
+    }
+  }
+  process.exit(0);
+}
+
 if (orden !== "prueba" || !destinatario) {
-  console.log("Uso: npm run correo -- prueba tu@correo.com");
+  console.log("Uso:");
+  console.log("  npm run correo -- prueba tu@correo.com   comprobar la configuración");
+  console.log("  npm run correo -- fallidos               los que no llegaron");
+  console.log("  npm run correo -- reintentar             reenviarlos");
   process.exit(1);
 }
 

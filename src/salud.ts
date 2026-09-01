@@ -188,6 +188,45 @@ async function sonda(): Promise<Comprobacion> {
       };
 }
 
+/**
+ * ¿Se ha quedado alguien sin recibir un correo?
+ *
+ * Es la avería más silenciosa que tenemos: nadie se queja de un correo que no
+ * le llegó porque no sabe que existía. Un comercial al que dan de alta y no
+ * recibe el aviso no reclama — simplemente no usa el producto, y su empresa se
+ * da de baja al mes siguiente sin saber por qué.
+ *
+ * SIN NÚMEROS, igual que el resto de este fichero: este endpoint es público y
+ * cuántos correos mandamos es información de negocio. Se dice que hay fallos
+ * pendientes, no cuántos ni a quién.
+ *
+ * "Pendiente" = falló y nadie lo ha reenviado (`reintentado_en` nulo). Así el
+ * aviso se apaga solo al arreglarlo, en vez de quedarse encendido para siempre
+ * por un fallo de hace un mes — que es como se acaba ignorando una alarma.
+ */
+async function comprobarCorreo(): Promise<Comprobacion> {
+  const desde = new Date(Date.now() - 7 * 86_400_000).toISOString();
+
+  const { count, error } = await supabase
+    .from("correos_enviados")
+    .select("id", { count: "exact", head: true })
+    .eq("ok", false)
+    .is("reintentado_en", null)
+    .gte("cuando", desde);
+
+  if (error) {
+    return { nombre: "correo", estado: "ok", detalle: `no se pudo comprobar: ${error.message.slice(0, 50)}` };
+  }
+
+  return count && count > 0
+    ? {
+        nombre: "correo",
+        estado: "degradado",
+        detalle: "hay avisos que no se pudieron entregar y siguen sin reenviar (npm run correo -- fallidos)",
+      }
+    : { nombre: "correo", estado: "ok", detalle: "todo lo enviado salió" };
+}
+
 /** El estado real, recalculado como mucho una vez por minuto. */
 export async function estadoDeSalud(): Promise<Salud> {
   if (cache && Date.now() - cache.cuando < VIGENCIA_MS) {
@@ -196,7 +235,12 @@ export async function estadoDeSalud(): Promise<Salud> {
 
   // En paralelo: son independientes, y `/salud` lo puede estar mirando una
   // alarma con poca paciencia.
-  const comprobaciones = await Promise.all([comprobarBase(), comprobarBusqueda(), sonda()]);
+  const comprobaciones = await Promise.all([
+    comprobarBase(),
+    comprobarBusqueda(),
+    sonda(),
+    comprobarCorreo(),
+  ]);
 
   const salud: Salud = {
     estado: peor(comprobaciones.map((c) => c.estado)),
