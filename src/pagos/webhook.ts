@@ -27,6 +27,7 @@ import {
   compraConfirmada,
   suscripcionCancelada,
   renovacionProxima,
+  cobroFallido,
 } from "../correo/plantillas.js";
 import { normalizarEmail } from "../email.js";
 
@@ -520,6 +521,45 @@ async function marcarImpago(factura: Stripe.Invoice): Promise<void> {
     .eq("stripe_subscription_id", sub);
 
   console.error(`[stripe] impago: ${sub}`);
+
+  await avisarDelImpago(factura, sub);
+}
+
+/**
+ * Avisa de que el cobro falló y el acceso está cortado.
+ *
+ * LOS RECORDATORIOS SALEN SOLOS. Stripe reintenta el cobro varias veces a lo
+ * largo de unas semanas y emite `invoice.payment_failed` en cada intento, así
+ * que no hay que programar nada: cada reintento fallido es un recordatorio. Por
+ * eso el correo no numera avisos — cada uno tiene que valerse por sí mismo.
+ *
+ * EL ENLACE ES LA PÁGINA DE LA FACTURA DE STRIPE, no un portal de cliente. Esa
+ * página existe para exactamente esto: pagar la factura pendiente. Un portal
+ * genérico obliga a buscar dónde se arregla, y cada paso de más es gente que lo
+ * deja para mañana.
+ */
+async function avisarDelImpago(factura: Stripe.Invoice, subId: string): Promise<void> {
+  try {
+    const stripe = new Stripe(config.stripe.secretKey);
+    const cliente = await stripe.customers.retrieve(factura.customer as string);
+    const email = "deleted" in cliente ? null : cliente.email;
+    if (!email) {
+      console.error(`[stripe] impago de ${subId} sin correo de cliente: no se avisa`);
+      return;
+    }
+
+    // Si la suscripción tiene más de un asiento, es de equipo: el texto cambia
+    // porque quien se queda fuera no es solo quien paga.
+    const sub = await stripe.subscriptions.retrieve(subId);
+    const esEquipo = (sub.items.data[0]?.quantity ?? 1) > 1;
+
+    const plantilla = cobroFallido(esEquipo, factura.hosted_invoice_url ?? null);
+    await enviar({ para: email, tipo: "impago", ...plantilla });
+  } catch (error) {
+    // Un correo no puede tumbar el webhook: si lanzara, Stripe reintentaría el
+    // evento y volveríamos a procesar un impago ya procesado.
+    console.error("[stripe] no se pudo avisar del impago:", error);
+  }
 }
 
 /** El creador ha avanzado en su verificación de Connect. */

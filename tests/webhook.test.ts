@@ -261,3 +261,51 @@ describe("aviso de renovación", () => {
     expect(correos).toHaveLength(0);
   });
 });
+
+describe("aviso de cobro fallido", () => {
+  function facturaFallida(conUrl = true) {
+    return {
+      object: "invoice",
+      customer: "cus_1",
+      subscription: "sub_1",
+      ...(conUrl && { hosted_invoice_url: "https://invoice.stripe.com/i/abc" }),
+    };
+  }
+
+  it("avisa, y con el enlace para pagar la factura pendiente", async () => {
+    // Sin este correo el cliente ve que el producto dejó de funcionar y no sabe
+    // por qué. Llama igual, pero enfadado y sin contexto.
+    SUSCRIPCION = suscripcionDe("month");
+    EVENTO = { id: "evt_i1", type: "invoice.payment_failed", data: { object: facturaFallida() } };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos.map((c) => c.tipo)).toEqual(["impago"]);
+  });
+
+  it("corta el acceso ANTES de avisar, en las tres tablas", async () => {
+    // El orden importa: primero se corta, después se cuenta. Si el correo
+    // fallara, el acceso ya está cortado igual.
+    SUSCRIPCION = suscripcionDe("month");
+    EVENTO = { id: "evt_i2", type: "invoice.payment_failed", data: { object: facturaFallida() } };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    const tocadas = cambios
+      .filter((c) => c.filtro?.[0] === "stripe_subscription_id")
+      .map((c) => c.tabla);
+    expect(tocadas).toContain("suscripciones");
+    expect(tocadas).toContain("suscripciones_dominio");
+    expect(tocadas).toContain("organizaciones");
+  });
+
+  it("sin suscripción no hace nada: no es una cuota", async () => {
+    EVENTO = {
+      id: "evt_i3",
+      type: "invoice.payment_failed",
+      data: { object: { object: "invoice", customer: "cus_1" } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos).toHaveLength(0);
+    expect(cambios.filter((c) => c.filtro?.[0] === "stripe_subscription_id")).toHaveLength(0);
+  });
+});

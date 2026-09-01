@@ -59,8 +59,16 @@ exactamente el tipo de silencio que hay que comprobar cuando se venda el primer
 anual.
 
 **Y una decisión tomada, para que no se vuelva a discutir:** *no hay periodo de
-gracia ante un impago*. Al primer fallo de cobro el acceso se corta. Decidido
-por Cristian el 01/09/2026.
+gracia ante un impago*. Al primer fallo de cobro el acceso se corta, y en equipo
+para todos a la vez. Decidido por Cristian el 01/09/2026, **ya publicado en los
+términos de la web**, y con recordatorios por correo en cada reintento de Stripe.
+Si algún día se añadiera margen, ese texto hay que cambiarlo a la vez.
+
+**Pendiente de decidir sobre ese correo:** en un plan de equipo lo recibe quien
+paga. Los miembros se quedan sin acceso y no reciben nada, así que ven que el
+producto dejó de funcionar sin saber por qué — el mismo problema que este correo
+viene a resolver, trasladado a otras personas. Escribirles expondría a la
+plantilla que su empresa no ha pagado. No sale por defecto: hay que decidirlo.
 
 **Y una acción que no existe:** `alta_admin` / `baja_admin`. Hoy el único
 administrador que se crea es el comprador, en el webhook. Para tener un segundo

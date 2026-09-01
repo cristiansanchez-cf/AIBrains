@@ -284,3 +284,56 @@ seguirás teniendo acceso hasta el último día del periodo que ya pagaste.`,
     ),
   };
 }
+
+/**
+ * El cobro ha fallado y el acceso está cortado.
+ *
+ * EL MENSAJE NO ES "NOS DEBES DINERO", es **"esto se arregla en un minuto y lo
+ * recuperas al momento"**. Y es verdad: basta con actualizar la tarjeta. Un
+ * correo de impago que suena a reclamación de deuda se ignora; uno que suena a
+ * "se te ha caducado la tarjeta, aquí lo arreglas" se abre y se resuelve.
+ *
+ * NO PROMETE UN PLAZO QUE NO EXISTE. Nada de "tienes X días": no los hay, ya
+ * está cortado. Decirlo tal cual es lo honesto y además es lo que más empuja a
+ * pagar — un plazo inventado invita a dejarlo para mañana.
+ *
+ * SE REPITE SOLO. Stripe reintenta el cobro varias veces a lo largo de unas
+ * semanas y emite este evento en cada intento, así que los recordatorios que
+ * pidió Cristian salen sin programar nada. Por eso el texto no dice "primer
+ * aviso" ni numera nada: cada uno tiene que sostenerse por sí mismo.
+ */
+export function cobroFallido(esEquipo: boolean, urlDePago: string | null): Plantilla {
+  const quien = esEquipo
+    ? "El acceso de tu equipo al Cerebro de Ventas está cortado."
+    : "Tu acceso al Cerebro de Ventas está cortado.";
+
+  const arreglo = urlDePago
+    ? `Se arregla en un minuto y lo recuperas al momento:\n  ${urlDePago}`
+    : `Se arregla actualizando el método de pago desde tu cuenta, y lo recuperas al momento.`;
+
+  return {
+    asunto: "No hemos podido cobrar tu suscripción",
+    texto: `No hemos podido cobrar la última cuota.
+
+${quien} No está suspendido "próximamente": no funciona ahora mismo.
+
+Casi siempre es una tarjeta caducada o un límite del banco.
+
+${arreglo}
+
+En cuanto el cobro salga, el acceso vuelve solo. No hay que avisarnos ni hacer
+nada más.`,
+    html: envolver(
+      "No hemos podido cobrar tu suscripción",
+      `<p style="margin:0 0 16px"><strong>${quien}</strong> No está suspendido «próximamente»: no funciona ahora mismo.</p>
+<p style="margin:0 0 20px">Casi siempre es una tarjeta caducada o un límite del banco.</p>
+${
+  urlDePago
+    ? `<p style="margin:0 0 24px"><a href="${urlDePago}" style="display:inline-block;padding:12px 20px;background:#1a1a1a;color:#fff;border-radius:8px;text-decoration:none">Actualizar el pago</a></p>
+<p style="margin:0 0 24px;font-size:13px;color:#6b6560">Se arregla en un minuto y lo recuperas al momento.</p>`
+    : `<p style="margin:0 0 24px">Se arregla actualizando el método de pago desde tu cuenta, y lo recuperas al momento.</p>`
+}
+<p style="margin:0;font-size:14px;color:#6b6560">En cuanto el cobro salga, el acceso vuelve solo. No hay que avisarnos ni hacer nada más.</p>`,
+    ),
+  };
+}
