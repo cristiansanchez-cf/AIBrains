@@ -36,7 +36,9 @@ que necesita es la URL del conector y cómo pegarla.
 | Te han dado un asiento | **nadie** | Ver arriba. El agujero real |
 | Te han quitado el asiento | nadie | Menor, pero se agradece |
 | Pago fallido | **Stripe** | Que lo siga haciendo él: sabe cuándo reintenta |
-| Suscripción cancelada | Stripe | Suficiente |
+| Suscripción cancelada | Stripe | Falta el nuestro: "tienes acceso hasta el X" |
+| Se renueva pronto | nadie | Solo tiene sentido en las anuales |
+| Te han hecho administrador | nadie | **La acción ni siquiera existe** |
 
 ---
 
@@ -56,11 +58,84 @@ Eso es configuración en el panel de Supabase más DNS, no código de este repo.
 
 ---
 
+## Los del ciclo de vida de la suscripción
+
+**La factura ya la manda Stripe.** No la dupliquemos: él tiene el importe, el
+IVA y el número de factura, y dos correos con cifras distintas es cuestión de
+tiempo. Lo único que hay que hacer es comprobar que el envío de recibos está
+activado en el panel de Stripe.
+
+**"Tu suscripción se renueva pronto": SOLO para las anuales.** Y esto es una
+decisión de producto, no una limitación técnica.
+
+A quien paga 100 € una vez al año, avisarle una semana antes es respetuoso y
+evita la reclamación de "me habéis cobrado sin avisar". A quien paga 10 € al
+mes, ese mismo correo es **un recordatorio mensual de que podría cancelar**:
+doce oportunidades al año de pensárselo, a cambio de nada. El cargo pequeño y
+recurrente no sorprende a nadie.
+
+Sale del evento `invoice.upcoming` de Stripe, que llega unos días antes. **Hoy
+no lo escuchamos**: hay que suscribirse a él en el webhook.
+
+**"Tu acceso termina el día X" tras cancelar: son dos correos distintos.**
+
+1. **Al cancelar, en el acto.** "Cancelada. Sigues teniendo acceso hasta el 30
+   de septiembre." Sale de `customer.subscription.updated` con
+   `cancel_at_period_end` a true, que ya escuchamos. Es gratis y es el que más
+   falta: sin él, quien cancela cree que ha perdido el acceso ese día y deja de
+   usarlo un mes antes de tiempo.
+2. **Tres días antes de que termine.** Ese sí es el momento de reactivar, y
+   necesita un trabajo programado que mire qué suscripciones acaban — no hay
+   ningún evento de Stripe para "faltan tres días". Va en `.github/workflows/`,
+   donde ya viven `calidad.yml` y `salud.yml`.
+
+---
+
+## "Te han hecho administrador": el correo es lo de menos
+
+**Esa acción no existe.** Ni en el panel, ni en un script, ni en ninguna parte:
+el único administrador que se crea es el comprador, en el webhook. Hoy, para
+que una empresa tenga un segundo administrador, hay que meter la fila a mano en
+la base.
+
+O sea que antes del correo hay que construir `alta_admin` y `baja_admin` en
+`POST /api/mi/acciones`. Y cuando se haga, con dos cuidados que la tabla ya
+anticipa:
+
+- **Administrar y ocupar asiento son cosas distintas** (por eso son dos tablas).
+  Nombrar administrador a alguien NO le da acceso al cerebro, y el correo tiene
+  que decirlo o esa persona intentará conectarse y no podrá.
+- **Nadie puede quedarse sin administradores.** Quitarse a uno mismo siendo el
+  último deja una cuenta que nadie puede gestionar. Eso lo tiene que rechazar la
+  base, no acordarse el código.
+
+---
+
 ## La decisión que lo desbloquea todo: un proveedor
 
 Hace falta uno, y **el mismo sirve para las dos cosas**: como SMTP de Supabase
 para los correos de acceso, y como API para los que enviemos nosotros. No hay
 que elegir dos.
+
+**Recomendación: Resend.** Cristian pidió una y esta es la razón, no una lista
+de opciones:
+
+- Hace de **SMTP de Supabase** sin fricción, que es la mitad del problema.
+- La autenticación del dominio son tres registros DNS y una pantalla.
+- El plan gratuito (3.000 correos al mes) sobra durante mucho tiempo, y no hay
+  que pasar por un proceso de aprobación para empezar a enviar.
+
+Las alternativas, dichas para no volver sobre esto: **Postmark** entrega algo
+mejor y cuesta más, y sería la elección si el correo fuera crítico para el
+negocio —no lo es todavía—. **Amazon SES** es el más barato a escala y el más
+lento de arrancar: hay que salir de su modo de pruebas pidiéndolo. Ninguno de
+los dos compensa hoy.
+
+**Envía desde un subdominio, no desde `cofundo.io` a secas.** Algo como
+`correo.cofundo.io`. Si un día un correo transaccional acaba marcado como spam,
+la reputación que se estropea es la del subdominio y no la del dominio con el
+que escribes a los clientes y a los formadores. Separarlo después es doloroso;
+hacerlo desde el principio no cuesta nada.
 
 Sea cual sea, hay que **autenticar el dominio** (SPF, DKIM, DMARC en el DNS de
 cofundo.io) o todo acaba en spam. Es trabajo de Cristian y es la parte que más
