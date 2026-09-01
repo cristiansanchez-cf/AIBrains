@@ -211,6 +211,12 @@ async function provisionarIndividual(
 ): Promise<void> {
   const userId = await usuarioDe(email);
 
+  // La fecha en que aceptó empezar ya, si lo hizo. Se guarda la FECHA y no un
+  // booleano: un `true` dice que alguien aceptó alguna vez; una fecha dice
+  // cuándo, y es lo que hace falta si algún día hay que demostrarlo.
+  const aceptoEn =
+    sesion.metadata?.["acepta_inicio_inmediato"] === "si" ? new Date().toISOString() : null;
+
   if (dominio) {
     const { error } = await supabase.from("suscripciones_dominio").upsert(
       {
@@ -220,6 +226,7 @@ async function provisionarIndividual(
         expira_en: null,
         stripe_subscription_id: sesion.subscription as string,
         stripe_customer_id: sesion.customer as string,
+        acepto_inicio_inmediato_en: aceptoEn,
       },
       { onConflict: "user_id,dominio" },
     );

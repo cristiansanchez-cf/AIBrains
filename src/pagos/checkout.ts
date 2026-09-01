@@ -31,6 +31,13 @@ export interface PeticionDeCompra {
   cerebros?: string[];
   /** Qué se compra: 'ventas' hoy. Por defecto 'ventas'. */
   dominio?: string;
+  /**
+   * El comprador ha marcado que quiere empezar ya, renunciando al desistimiento.
+   *
+   * Solo aplica al plan individual: en equipo compra una empresa y ese derecho
+   * no le corresponde. La web lo manda solo en ese caso.
+   */
+  acepta_inicio_inmediato?: boolean;
   /** Solo para equipo. Mínimo el configurado (3). */
   asientos?: number;
   email: string;
@@ -150,6 +157,10 @@ export async function crearSesionDePago(peticion: PeticionDeCompra): Promise<str
       cerebros_al_comprar: String(cuantos),
       asientos: String(asientos),
       email,
+      // VIAJA EN LOS METADATOS Y NO EN NUESTRA BASE porque aquí lo firma
+      // Stripe: queda fijado antes de cobrar y el cliente no puede cambiarlo
+      // después. Es lo que convierte la aceptación en algo demostrable.
+      ...(peticion.acepta_inicio_inmediato === true && { acepta_inicio_inmediato: "si" }),
     },
     subscription_data: {
       metadata: {
