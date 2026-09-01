@@ -93,6 +93,34 @@ export const config = {
     timeoutMs: Number(process.env.INTERNALAPPS_TIMEOUT_MS ?? 20 * 60 * 1000),
   },
 
+  correo: {
+    /**
+     * Clave de Resend (`re_...`). Se crea en resend.com > API Keys.
+     *
+     * ES LA MISMA que se pega en el SMTP de Supabase para los correos de
+     * acceso, pero ahí va como CONTRASEÑA, con usuario `resend` y servidor
+     * `smtp.resend.com`. Un solo secreto, dos usos: aquí para los correos que
+     * enviamos nosotros, allí para los que envía Supabase.
+     *
+     * Sin ella no se envía nada y no se cae nada: un correo que falla no puede
+     * tumbar una compra. Ver docs/correos.md.
+     */
+    apiKey: process.env.RESEND_API_KEY ?? "",
+    /**
+     * De dónde salen los correos.
+     *
+     * Subdominio a propósito: si un transaccional acaba marcado como spam, la
+     * reputación que se estropea es la de `correo.cofundo.io` y no la del
+     * dominio con el que se escribe a los formadores para cerrar los acuerdos.
+     * El dominio tiene que estar verificado en Resend antes de que esto
+     * funcione — con uno sin verificar solo se puede enviar al correo de la
+     * propia cuenta.
+     */
+    remitente: process.env.CORREO_REMITENTE ?? "Cofundo <hola@correo.cofundo.io>",
+    /** A dónde apunta el tutorial que va dentro de los correos. */
+    urlTutorial: process.env.CORREO_URL_TUTORIAL ?? "https://cofundo.io/tutorial",
+  },
+
   stripe: {
     /**
      * dashboard.stripe.com > Desarrolladores > Claves API. Empieza por sk_.

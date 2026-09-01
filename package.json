@@ -38,7 +38,8 @@
     "prueba:equipos": "tsx scripts/prueba-equipos.ts",
     "acuerdo": "tsx scripts/acuerdo.ts",
     "stripe": "tsx scripts/stripe-comprobar.ts",
-    "metricas": "tsx scripts/metricas.ts"
+    "metricas": "tsx scripts/metricas.ts",
+    "correo": "tsx scripts/correo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
