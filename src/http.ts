@@ -203,6 +203,7 @@ async function manejarMcp(
         tipo: "usuario",
         userId: usuario.userId,
         email: usuario.email,
+        clientId: usuario.clientId,
       };
       console.error(`[cerebro] petición autenticada — usuario ${usuario.userId}`);
     } catch (error) {

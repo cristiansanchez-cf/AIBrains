@@ -418,6 +418,7 @@ function registrar(
       degradada,
       ms,
       user_id: contexto.tipo === "usuario" ? contexto.userId : null,
+    client_id: contexto.tipo === "usuario" ? (contexto.clientId ?? null) : null,
     })
     .then(({ error }) => {
       if (error) console.error("[cerebro] no se pudo registrar la consulta:", error.message);

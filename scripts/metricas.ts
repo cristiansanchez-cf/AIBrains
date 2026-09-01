@@ -295,6 +295,48 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Cuentas compartidas --------------------------------------------------
+  // El plan individual es de una persona, pero el acceso es un inicio de
+  // sesión: nada impide comprar uno y repartirlo. Esto NO bloquea a nadie —
+  // solo enseña la distribución para poder decidir un tope con datos en vez de
+  // inventarlo. Echar por error a quien paga es peor que el fraude que se evita.
+  console.log(`\n=== ¿hay cuentas compartidas? ===\n`);
+
+  const { data: porCliente, error: errorUsos } = await supabase
+    .from("consultas")
+    .select("user_id, client_id")
+    .not("user_id", "is", null)
+    .gte("cuando", desde);
+
+  if (errorUsos) {
+    console.log(`  (no se pudo leer: ${errorUsos.message.slice(0, 60)})`);
+  } else if (!porCliente?.length) {
+    console.log("  Sin consultas de personas: nada que mirar todavía.");
+  } else {
+    const porUsuario = new Map<string, Set<string>>();
+    for (const u of porCliente) {
+      const id = u.user_id as string;
+      if (!porUsuario.has(id)) porUsuario.set(id, new Set());
+      if (u.client_id) porUsuario.get(id)!.add(u.client_id as string);
+    }
+
+    const cuentas = [...porUsuario.values()].map((c) => c.size).sort((a, b) => b - a);
+    const maximo = cuentas[0] ?? 0;
+    console.log(`  ${porUsuario.size} cuenta(s) activa(s) · la que más usa ${maximo} cliente(s) distinto(s)`);
+    console.log(`  reparto: ${cuentas.join(", ")}`);
+    console.log(`  (una persona normal tiene 1-4: portátil, móvil, ChatGPT, y uno más por reinstalación)`);
+
+    await registrar("clientes_max_por_cuenta", maximo, contexto);
+
+    // Cinco es el número a partir del cual merece la pena MIRARLO, no
+    // bloquearlo: por encima ya no se explica con dispositivos de una persona.
+    if (maximo >= 5) {
+      console.log(`\n  Alguna cuenta usa ${maximo} clientes distintos en 30 días.`);
+      console.log(`  Puede ser una persona con muchos dispositivos o una cuenta`);
+      console.log(`  individual repartida por un equipo. Mirarlo antes de decidir nada.`);
+    }
+  }
+
   // --- Cuota de correo -----------------------------------------------------
   // El aviso que pidió Cristian: enterarse CON TIEMPO de que hay que subir de
   // plan, en vez de descubrirlo porque un cliente no recibió su acceso.

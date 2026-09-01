@@ -119,6 +119,17 @@ export type ContextoDeAcceso =
       /** `sub` del token OAuth = `auth.users.id`. */
       userId: string;
       email?: string | undefined;
+      /**
+       * Qué instalación de Claude o ChatGPT está preguntando.
+       *
+       * Cada cliente MCP se registra por su cuenta en nuestro servidor OAuth y
+       * recibe el suyo. Dos personas compartiendo una cuenta llegan con el
+       * mismo `userId` y distinto `clientId`: es la única señal que distingue
+       * "una persona con varios dispositivos" de "una cuenta repartida".
+       *
+       * NO decide nada sobre el acceso. Solo se registra para poder mirarlo.
+       */
+      clientId?: string | undefined;
     }
   | {
       /**
