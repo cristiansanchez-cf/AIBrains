@@ -15,6 +15,7 @@
  */
 import { execSync } from "node:child_process";
 import { supabase } from "../src/db/supabase.js";
+import { config } from "../src/config.js";
 
 /** Los suelos de docs/reglas-duras.md §1. Cambiarlos es cambiar el contrato. */
 const SUELOS: Record<string, { minimo?: number; maximo?: number; que: string }> = {
@@ -281,6 +282,62 @@ async function main(): Promise<void> {
     // disponibilidad: es que alguien recibió una respuesta peor.
     if (degradadas > 0) {
       console.log(`\n  ${degradadas} de ${n} consultas se sirvieron DEGRADADAS (respaldo léxico).`);
+      problemas++;
+    }
+  }
+
+  // --- Cuota de correo -----------------------------------------------------
+  // El aviso que pidió Cristian: enterarse CON TIEMPO de que hay que subir de
+  // plan, en vez de descubrirlo porque un cliente no recibió su acceso.
+  console.log(`\n=== correo: cuánto llevamos de la cuota ===\n`);
+
+  const mes = new Date();
+  mes.setUTCDate(1);
+  mes.setUTCHours(0, 0, 0, 0);
+
+  const { data: correos, error: errorCorreos } = await supabase
+    .from("correos_enviados")
+    .select("cuando, tipo, ok")
+    .gte("cuando", mes.toISOString());
+
+  if (errorCorreos) {
+    // La tabla puede no existir todavía. No es un fallo de calidad.
+    console.log(`  (no se pudo leer: ${errorCorreos.message.slice(0, 70)})`);
+  } else {
+    const enviados = correos?.length ?? 0;
+    const fallidos = correos?.filter((c) => !c.ok).length ?? 0;
+    const limite = config.correo.limiteMensual;
+
+    // Por día, para ver si algún día se acercó al tope diario, que es el que
+    // sorprende: un equipo de cincuenta dado de alta de golpe son cincuenta.
+    const porDia = new Map<string, number>();
+    for (const c of correos ?? []) {
+      const d = String(c.cuando).slice(0, 10);
+      porDia.set(d, (porDia.get(d) ?? 0) + 1);
+    }
+    const peorDia = [...porDia.entries()].sort((a, b) => b[1] - a[1])[0];
+
+    console.log(`  ${enviados} enviados este mes de ${limite} del plan (${Math.round((enviados / limite) * 100)}%)`);
+    if (peorDia) console.log(`  el día de más: ${peorDia[1]} el ${peorDia[0]}, y el tope diario es ${config.correo.limiteDiario}`);
+    if (fallidos > 0) console.log(`  ${fallidos} no se pudieron enviar`);
+    console.log(`  OJO: esto NO cuenta los correos de acceso, que manda Supabase`);
+    console.log(`  por la misma cuota. El total real es MAYOR. La cifra buena está`);
+    console.log(`  en el panel de Resend.`);
+
+    await registrar("correos_mes", enviados, { ...contexto, limite });
+    if (peorDia) await registrar("correos_peor_dia", peorDia[1], { ...contexto, limite: config.correo.limiteDiario });
+
+    // Al 70% se avisa, no al 100%: la gracia es tener tiempo de subir de plan
+    // antes de que un cliente se quede sin recibir su acceso. Y como lo que
+    // contamos es el mínimo, el margen que queda es menor de lo que parece.
+    if (enviados > limite * 0.7) {
+      console.log(`\n  HAY QUE SUBIR DE PLAN EN RESEND. Vas por el ${Math.round((enviados / limite) * 100)}%`);
+      console.log(`  de lo que contamos, y lo real es más. Cuando lo subas, cambia`);
+      console.log(`  CORREO_LIMITE_MENSUAL y CORREO_LIMITE_DIARIO en Railway.`);
+      problemas++;
+    }
+    if (peorDia && peorDia[1] > config.correo.limiteDiario * 0.7) {
+      console.log(`\n  Algún día se acercó al tope DIARIO (${peorDia[1]} de ${config.correo.limiteDiario}).`);
       problemas++;
     }
   }

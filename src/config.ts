@@ -119,6 +119,18 @@ export const config = {
     remitente: process.env.CORREO_REMITENTE ?? "Cofundo <hola@correo.cofundo.io>",
     /** A dónde apunta el tutorial que va dentro de los correos. */
     urlTutorial: process.env.CORREO_URL_TUTORIAL ?? "https://cofundo.io/tutorial",
+    /**
+     * Los topes del plan contratado en Resend. Por defecto, los del gratuito.
+     *
+     * El día que se suba de plan, se cambian estos dos números y el aviso deja
+     * de saltar. Están aquí y no escritos en el código para que subir de plan
+     * sea cambiar una variable y no buscar un 3000 por los ficheros.
+     *
+     * El DIARIO es el que muerde primero: dar de alta un equipo de cincuenta
+     * de golpe son cincuenta correos en un minuto.
+     */
+    limiteMensual: Number(process.env.CORREO_LIMITE_MENSUAL ?? 3000),
+    limiteDiario: Number(process.env.CORREO_LIMITE_DIARIO ?? 100),
   },
 
   stripe: {
