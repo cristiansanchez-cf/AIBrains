@@ -24,6 +24,7 @@
     "suscripciones": "tsx scripts/suscribir.ts",
     "migrar": "tsx scripts/migrar-notion.ts",
     "reindexar": "tsx scripts/reindexar.ts",
+    "purgar-transcripciones": "tsx scripts/purgar-transcripciones.ts",
     "diagnostico": "tsx scripts/diagnostico.ts",
     "evaluar": "tsx scripts/evaluar-busqueda.ts",
     "enlaces": "tsx scripts/completar-enlaces.ts",

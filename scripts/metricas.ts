@@ -3,7 +3,7 @@
  *
  *   npm run metricas             # mide, guarda y compara con la anterior
  *   npm run metricas -- --rapido # se salta las evaluaciones que cuestan dinero
- *   npm run metricas -- --limpiar # borra el registro de más de 90 días
+ *   npm run metricas -- --limpiar # borra el registro pasada la retención
  *
  * POR QUÉ GUARDAR Y NO SOLO IMPRIMIR. `npm run evaluar` y `npm run voz` dan un
  * número y lo escupen por pantalla. Un número aislado no dice nada: un 88% no
@@ -158,9 +158,18 @@ function percentil(ordenados: number[], p: number): number {
   return ordenados[Math.max(0, Math.min(i, ordenados.length - 1))] ?? 0;
 }
 
+/**
+ * Cuánto se guarda el registro de consultas, en días.
+ *
+ * Está aquí arriba y con nombre para que sea un dato y no un número perdido en
+ * medio de una función. Cambiarlo obliga a cambiar también la política de
+ * privacidad de la web, que declara el mismo plazo.
+ */
+const DIAS_DE_RETENCION = 30;
+
 async function main(): Promise<void> {
   if (process.argv.includes("--limpiar")) {
-    const limite = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    const limite = new Date(Date.now() - DIAS_DE_RETENCION * 86_400_000).toISOString();
 
     // LAS DOS TABLAS, no solo `consultas`. `usos_de_herramienta` guarda el
     // texto de la consulta cuando entra por el `search` de ChatGPT, así que
@@ -176,7 +185,7 @@ async function main(): Promise<void> {
       console.log(
         error
           ? `  ${tabla}: NO se pudo borrar — ${error.message}`
-          : `  ${tabla}: ${count ?? 0} fila(s) de más de 90 días borradas`,
+          : `  ${tabla}: ${count ?? 0} fila(s) de más de ${DIAS_DE_RETENCION} días borradas`,
       );
     }
     return;

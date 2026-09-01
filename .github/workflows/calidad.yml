@@ -53,19 +53,19 @@ jobs:
           # Lo que va a la issue se recorta: el informe incluye el top de
           # `huecos_de_contenido`, o sea PREGUNTAS LITERALES de comerciales sobre
           # sus operaciones. La migración que crea esa tabla las etiqueta como
-          # dato sensible con borrado a los 90 días, y las issues de GitHub no
+          # dato sensible con borrado a los 30 días, y las issues de GitHub no
           # caducan. Se publica solo el bloque de medidas.
           sed -n '/=== calidad/,/=== lo que se pregunta/p' salida.txt \
             | sed '/=== lo que se pregunta/d' > publicable.txt
           echo "" >> publicable.txt
-          echo "(El detalle de consultas no se publica aquí: es dato sensible con retención de 90 días. Míralo con: npm run metricas)" >> publicable.txt
+          echo "(El detalle de consultas no se publica aquí: es dato sensible con retención de 30 días. Míralo con: npm run metricas)" >> publicable.txt
 
-      # La retención de 90 días estaba declarada en la migración y en la
+      # La retención estaba declarada en la migración y en la
       # política, y no la ejecutaba nadie: "se borra a los 90 días" era una
       # intención, no un hecho. Va después de medir para que el informe vea la
       # semana entera, y sin `continue-on-error` porque una retención que falla
       # en silencio es exactamente lo que había antes.
-      - name: Borrar el registro de más de 90 días
+      - name: Borrar el registro pasada la retención
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
