@@ -140,6 +140,16 @@ export async function crearSesionDePago(peticion: PeticionDeCompra): Promise<str
     // Stripe calcula el IVA según el país del comprador. Sin esto, los precios
     // "IVA incluido" serían solo una etiqueta.
     automatic_tax: { enabled: true },
+    // Campo de código de descuento en la pantalla de pago.
+    //
+    // Puesto para poder probar sin bajar el precio del catálogo: bajarlo haría
+    // que cualquiera que comprase en ese rato pagase de menos, y el riesgo real
+    // no es el descuento, es olvidarse de volver a subirlo. Un cupón caduca o
+    // se agota; un precio mal puesto se queda.
+    //
+    // Y se queda después de las pruebas: hace falta igualmente para descuentos
+    // de lanzamiento y para códigos de creador.
+    allow_promotion_codes: true,
     // Para que una empresa pueda meter su NIF y aplicar inversión del sujeto
     // pasivo cuando corresponda.
     tax_id_collection: { enabled: true },

@@ -55,7 +55,7 @@ if (orden === "fallidos" || orden === "reintentar") {
   // regenerarlo además manda la versión ACTUAL de la plantilla, no la de hace
   // dos semanas.
   const { enviar } = await import("../src/correo/enviar.js");
-  const { asientoConcedido } = await import("../src/correo/plantillas.js");
+  const { asientoConcedido, compraConfirmada } = await import("../src/correo/plantillas.js");
 
   console.log(`\nReintentando…\n`);
   for (const c of data) {
@@ -64,6 +64,39 @@ if (orden === "fallidos" || orden === "reintentar") {
       console.log(`  [${c.id}] sin destinatario anotado, no se puede reenviar`);
       continue;
     }
+    // --- Compra: se regenera mirando si esa persona tiene organización -------
+    if (c.tipo === "compra") {
+      const { data: asientoSuyo } = await supabase
+        .from("organizacion_asientos")
+        .select("organizacion_id")
+        .eq("email", para)
+        .is("revocado_en", null)
+        .maybeSingle();
+
+      let asientos = 1;
+      if (asientoSuyo) {
+        const { data: org } = await supabase
+          .from("organizaciones")
+          .select("asientos")
+          .eq("id", asientoSuyo.organizacion_id as string)
+          .maybeSingle();
+        asientos = (org?.asientos as number) ?? 1;
+      }
+
+      const ok = await enviar({
+        para,
+        tipo: "compra",
+        ...compraConfirmada(para, Boolean(asientoSuyo), asientos),
+      });
+      if (ok) {
+        await supabase.from("correos_enviados").update({ reintentado_en: new Date().toISOString() }).eq("id", c.id);
+        console.log(`  [${c.id}] ${para} — enviado`);
+      } else {
+        console.log(`  [${c.id}] ${para} — vuelve a fallar, mira el motivo arriba`);
+      }
+      continue;
+    }
+
     if (c.tipo !== "asiento") {
       console.log(`  [${c.id}] tipo "${c.tipo}" todavía no se sabe regenerar`);
       continue;
