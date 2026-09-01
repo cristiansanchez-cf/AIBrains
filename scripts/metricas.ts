@@ -296,15 +296,26 @@ async function main(): Promise<void> {
   }
 
   // --- Cuentas compartidas --------------------------------------------------
-  // El plan individual es de una persona, pero el acceso es un inicio de
-  // sesión: nada impide comprar uno y repartirlo. Esto NO bloquea a nadie —
-  // solo enseña la distribución para poder decidir un tope con datos en vez de
-  // inventarlo. Echar por error a quien paga es peor que el fraude que se evita.
+  //
+  // NO SE CUENTAN LOS CLIENTES ACUMULADOS, y esa fue la primera versión y era
+  // mala señal. Vendemos que funciona en Claude, en ChatGPT y en Gemini: una
+  // sola persona con portátil y sobremesa puede tener SEIS registros de cliente
+  // siendo perfectamente legítima, y es justo quien mejor está usando el
+  // producto. Cortar por ese número castigaría al mejor cliente.
+  //
+  // Lo que sí distingue es la CONCURRENCIA. Seis clientes a lo largo de meses
+  // es una persona ordenada; seis en la misma hora son seis personas. Un
+  // individual repartido por un equipo se delata solo, porque todos trabajan a
+  // la vez.
+  //
+  // Esto NO bloquea a nadie. Enseña la distribución para poder elegir un número
+  // con datos en vez de inventarlo — y el número tiene que ser generoso: echar
+  // por error a quien paga es mucho peor que el fraude que se evita.
   console.log(`\n=== ¿hay cuentas compartidas? ===\n`);
 
   const { data: porCliente, error: errorUsos } = await supabase
     .from("consultas")
-    .select("user_id, client_id")
+    .select("user_id, client_id, cuando")
     .not("user_id", "is", null)
     .gte("cuando", desde);
 
@@ -313,27 +324,45 @@ async function main(): Promise<void> {
   } else if (!porCliente?.length) {
     console.log("  Sin consultas de personas: nada que mirar todavía.");
   } else {
-    const porUsuario = new Map<string, Set<string>>();
-    for (const u of porCliente) {
-      const id = u.user_id as string;
-      if (!porUsuario.has(id)) porUsuario.set(id, new Set());
-      if (u.client_id) porUsuario.get(id)!.add(u.client_id as string);
-    }
+    /** Clientes distintos por usuario y por ventana (hora o día). */
+    const ventana = (corte: number): Map<string, number> => {
+      const cubos = new Map<string, Set<string>>();
+      for (const c of porCliente) {
+        if (!c.client_id) continue;
+        const clave = `${c.user_id as string}|${String(c.cuando).slice(0, corte)}`;
+        if (!cubos.has(clave)) cubos.set(clave, new Set());
+        cubos.get(clave)!.add(c.client_id as string);
+      }
+      const max = new Map<string, number>();
+      for (const [clave, clientes] of cubos) {
+        const usuario = clave.split("|")[0]!;
+        max.set(usuario, Math.max(max.get(usuario) ?? 0, clientes.size));
+      }
+      return max;
+    };
 
-    const cuentas = [...porUsuario.values()].map((c) => c.size).sort((a, b) => b - a);
-    const maximo = cuentas[0] ?? 0;
-    console.log(`  ${porUsuario.size} cuenta(s) activa(s) · la que más usa ${maximo} cliente(s) distinto(s)`);
-    console.log(`  reparto: ${cuentas.join(", ")}`);
-    console.log(`  (una persona normal tiene 1-4: portátil, móvil, ChatGPT, y uno más por reinstalación)`);
+    // 13 caracteres del ISO = "2026-09-01T14" → la hora. 10 = el día.
+    const porHora = ventana(13);
+    const porDia = ventana(10);
 
-    await registrar("clientes_max_por_cuenta", maximo, contexto);
+    const peorHora = Math.max(0, ...porHora.values());
+    const peorDia = Math.max(0, ...porDia.values());
+    const cuentas = new Set(porCliente.map((c) => c.user_id as string)).size;
 
-    // Cinco es el número a partir del cual merece la pena MIRARLO, no
-    // bloquearlo: por encima ya no se explica con dispositivos de una persona.
-    if (maximo >= 5) {
-      console.log(`\n  Alguna cuenta usa ${maximo} clientes distintos en 30 días.`);
-      console.log(`  Puede ser una persona con muchos dispositivos o una cuenta`);
-      console.log(`  individual repartida por un equipo. Mirarlo antes de decidir nada.`);
+    console.log(`  ${cuentas} cuenta(s) con actividad`);
+    console.log(`  clientes distintos a la vez, como máximo: ${peorHora} en una hora · ${peorDia} en un día`);
+    console.log(`  (una persona: 1-2 en la misma hora. Un equipo compartiendo cuenta: tantos como personas)`);
+
+    await registrar("clientes_misma_hora", peorHora, contexto);
+    await registrar("clientes_mismo_dia", peorDia, contexto);
+
+    // Cuatro EN LA MISMA HORA ya no se explica con los dispositivos de una
+    // persona. Es para mirarlo, no para cortar nada automáticamente.
+    if (peorHora >= 4) {
+      console.log(`\n  ${peorHora} clientes distintos en la misma hora en una cuenta.`);
+      console.log(`  Eso no son los dispositivos de una persona: parece una cuenta`);
+      console.log(`  individual repartida. Mirarlo antes de decidir nada.`);
+      problemas++;
     }
   }
 

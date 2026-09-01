@@ -21,7 +21,12 @@
 
 ## 1 · La compra
 
-- [ ] Entra en la web y compra el **plan individual mensual**.
+- [ ] Entra en **https://cofundo-487ea--revision-fp0fsejh.web.app/** y compra el
+      **plan individual mensual**. La compra se abre desde "Empezar" o bajando a
+      precios; **no hay ruta `/cerebros`**, la home es el cerebro.
+      **No uses `cofundo.io`**: producción está vieja, no tiene la casilla del
+      desistimiento ni el aviso de 30 días, y devuelve 200 en cualquier URL
+      inventada (soft 404 pendiente de desplegar).
 - [ ] **Antes de pagar**, comprueba que aparece la casilla de que el servicio
       empieza ya y que aceptas perder el desistimiento. Si no está, **para**: sin
       eso no hay renuncia que valga.
