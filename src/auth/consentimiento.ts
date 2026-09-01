@@ -73,6 +73,8 @@ const ESTILOS = `
     border: 1px solid var(--borde); background: var(--aviso); margin-bottom: 16px;
   }
   .pie { font-size: 12.5px; margin: 18px 0 0; text-align: center; }
+  .cuenta { font-size: 13px; margin: -4px 0 18px; }
+  .cuenta a { color: inherit; }
 `;
 
 function pagina(cuerpo: string, extra = ""): string {

@@ -136,7 +136,9 @@ function pedirEmail(aviso?: string): void {
       <h1>Mira tu correo</h1>
       <p>Te hemos enviado un enlace de acceso a <strong>${esc(email)}</strong>.
          Ábrelo <strong>en este mismo navegador</strong> para volver aquí y
-         terminar.</p>`;
+         terminar.</p>
+      <p class="pie">Si lo abres en otro navegador o en el móvil, el enlace no
+         podrá continuar donde lo dejaste y tendrás que empezar de nuevo.</p>`;
   });
 }
 
@@ -152,9 +154,16 @@ async function pedirConsentimiento(): Promise<void> {
   );
 
   if (error || !data) {
+    // SE OLVIDA LA AUTORIZACIÓN MUERTA, y esto no estaba y costaba caro. El
+    // identificador se guarda para sobrevivir al viaje por el correo, pero solo
+    // se borraba al terminar BIEN. Si un intento fallaba, el identificador
+    // muerto se quedaba media hora y se recuperaba en cada visita siguiente:
+    // el navegador quedaba atascado en "esta solicitud ya no vale" aunque se
+    // empezara de cero, y con cualquier cuenta. Pasó de verdad.
+    olvidarAutorizacion();
     mostrarError(
       "Esta solicitud ya no vale",
-      error?.message ?? "No se pudo leer la solicitud de autorización.",
+      "Vuelve a Claude o a ChatGPT y conecta otra vez. Ahora ya funcionará.",
     );
     return;
   }
@@ -171,9 +180,22 @@ async function pedirConsentimiento(): Promise<void> {
   const cliente = data.client?.name || "Una aplicación";
   const scopes = (data.scope ?? "").split(" ").filter(Boolean);
 
+  // CON QUÉ CUENTA. El acceso al cerebro va asociado al correo, así que
+  // autorizar con la cuenta equivocada da un cerebro vacío y ningún error —
+  // parece que el producto no funciona. Antes esta pantalla no decía quién
+  // eras, y con dos cuentas en el mismo navegador es imposible saberlo.
+  const { data: sesionActual } = await sb.auth.getUser();
+  const correo = sesionActual?.user?.email ?? "";
+
   app.innerHTML = `
     <h1>${esc(cliente)} quiere acceder a tu Cerebro</h1>
     <p>Podrá consultar las técnicas de los cerebros que tengas contratados.</p>
+    ${
+      correo
+        ? `<p class="cuenta">Entrando como <strong>${esc(correo)}</strong> ·
+             <a href="#" id="otra-cuenta">usar otra cuenta</a></p>`
+        : ""
+    }
     <div class="permisos">
       <ul>${scopes
         .map((s) => `<li>${esc(NOMBRES_DE_SCOPE[s] ?? s)}</li>`)
@@ -182,6 +204,15 @@ async function pedirConsentimiento(): Promise<void> {
     <button id="autorizar">Autorizar</button>
     <button id="cancelar" class="secundario">Cancelar</button>
     <p class="pie">Podrás revocar el acceso cuando quieras.</p>`;
+
+  // SALIR DE LA SESIÓN, que antes no se podía. La sesión de Supabase vive en el
+  // navegador y se reutiliza sola: quien se equivoca de correo al comprar se
+  // queda atrapado en esa cuenta sin ninguna forma de cambiarla.
+  document.getElementById("otra-cuenta")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    await sb.auth.signOut();
+    pedirEmail("Sesión cerrada. Entra con la cuenta que quieras usar.");
+  });
 
   const decidir = async (aprobar: boolean): Promise<void> => {
     for (const b of app.querySelectorAll("button")) b.disabled = true;
