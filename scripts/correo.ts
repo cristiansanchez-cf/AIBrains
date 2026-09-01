@@ -59,15 +59,20 @@ if (res.ok) {
 // Los tres fallos que se dan de verdad, con qué hacer en cada uno.
 console.log(`FALLA — HTTP ${res.status}: ${cuerpo.message ?? cuerpo.name ?? "sin detalle"}\n`);
 
-if (res.status === 401 || res.status === 403) {
-  console.log("La clave no vale o no tiene permiso de envío.");
-  console.log("Comprueba que sea una de tipo 'Sending access' y que esté entera.");
-} else if (/domain is not verified|not verified/i.test(cuerpo.message ?? "")) {
+// EL ORDEN IMPORTA Y ESTABA AL REVÉS. Resend devuelve 403 tanto para "la clave
+// no vale" como para "el dominio no está verificado", así que mirar el código
+// primero hacía que un problema de DNS se anunciara como una clave mala. El
+// comando existe precisamente para no diagnosticar mal esto, y lo hizo la
+// primera vez que se usó. Se mira el MENSAJE antes que el código.
+if (/domain is not verified|not verified/i.test(cuerpo.message ?? "")) {
   console.log(`El dominio de "${config.correo.remitente}" no está verificado en Resend.`);
   console.log("Verifícalo en resend.com > Domains y añade los registros DNS que te dé.");
   console.log("Mientras tanto, para probar puedes usar:");
   console.log('  CORREO_REMITENTE="Cofundo <onboarding@resend.dev>" npm run correo -- prueba ' + destinatario);
   console.log("  (ese remitente de pruebas SOLO puede enviarse a tu propia cuenta de Resend)");
+} else if (res.status === 401 || res.status === 403) {
+  console.log("La clave no vale o no tiene permiso de envío.");
+  console.log("Comprueba que sea una de tipo 'Sending access' y que esté entera.");
 } else {
   console.log("Mira el mensaje de arriba: viene tal cual de Resend.");
 }
