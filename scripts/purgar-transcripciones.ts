@@ -35,7 +35,7 @@ const DESTINO = `transcripciones-exportadas.json`;
 async function main(): Promise<void> {
   const { data, error } = await supabase
     .from("fichas")
-    .select("id, creador_slug, fuente_url, transcripcion")
+    .select("id, creador_id, dominio, insight, fuente_url, transcripcion")
     .not("transcripcion", "is", null);
 
   if (error) throw new Error(`No se pudo leer: ${error.message}`);
