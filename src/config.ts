@@ -120,6 +120,14 @@ export const config = {
     /** A dónde apunta el tutorial que va dentro de los correos. */
     urlTutorial: process.env.CORREO_URL_TUTORIAL ?? "https://cofundo.io/tutorial",
     /**
+     * El panel del usuario, en la web.
+     *
+     * Variable y no fija porque hoy vive en un canal de preview que caduca. Es
+     * lo que evita que la pantalla de autorización deje tirado a quien entra
+     * sin venir de Claude: en vez de un callejón sin salida, un sitio a donde ir.
+     */
+    urlCuenta: process.env.CORREO_URL_CUENTA ?? "https://cofundo.io/cuenta",
+    /**
      * Los topes del plan contratado en Resend. Por defecto, los del gratuito.
      *
      * El día que se suba de plan, se cambian estos dos números y el aviso deja

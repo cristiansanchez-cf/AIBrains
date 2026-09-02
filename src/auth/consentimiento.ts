@@ -110,6 +110,9 @@ export function paginaDeConsentimiento(rutaDelScript: string): string {
     supabaseUrl: config.supabase.url,
     publishableKey: config.supabase.publishableKey,
     urlConsentimiento: `${config.http.urlBase}/oauth/consent`,
+    urlCuenta: config.correo.urlCuenta,
+    urlMcp: `${config.http.urlBase}/mcp`,
+    urlMcpChatgpt: `${config.http.urlBase}/mcp/chatgpt`,
   };
 
   // En un <script type="application/json"> el único peligro es cerrar la

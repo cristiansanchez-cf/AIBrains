@@ -13,6 +13,9 @@ interface Configuracion {
   supabaseUrl: string;
   publishableKey: string;
   urlConsentimiento: string;
+  urlCuenta: string;
+  urlMcp: string;
+  urlMcpChatgpt: string;
 }
 
 /**
@@ -239,18 +242,57 @@ async function pedirConsentimiento(): Promise<void> {
   document.getElementById("cancelar")!.addEventListener("click", () => void decidir(false));
 }
 
-function sinSolicitud(): void {
+/**
+ * Aquí llega quien entra sin venir de una aplicación.
+ *
+ * ANTES ERA UN CALLEJÓN SIN SALIDA: decía "se llega desde la propia aplicación"
+ * y ahí se acababa. Pero mucha gente llega aquí precisamente porque quiere
+ * entrar en SU CUENTA —ver su suscripción, saber cómo se instala— y el correo
+ * de acceso la trae a esta página. Dejarla mirando una pantalla que le dice que
+ * se ha equivocado de sitio es perder a alguien que venía con la intención
+ * correcta.
+ *
+ * Si hay sesión, se le dice quién es, se le dan las dos direcciones que va a
+ * necesitar y un camino a su cuenta. Si no la hay, se le ofrece entrar.
+ */
+async function sinSolicitud(): Promise<void> {
+  const { data } = await sb.auth.getUser();
+  const correo = data?.user?.email;
+
+  if (!correo) {
+    app.innerHTML = `
+      <h1>Entra en tu cuenta</h1>
+      <p>Desde aquí puedes ver tu suscripción y cómo conectar el cerebro.</p>`;
+    pedirEmail();
+    return;
+  }
+
   app.innerHTML = `
-    <h1>No hay ninguna solicitud pendiente</h1>
-    <p>Esta página sirve para autorizar el acceso de una aplicación a tu
-       Cerebro. Se llega a ella desde la propia aplicación.</p>
-    <p class="pie">Para conectar Claude, añade el conector
-       <strong>cerebro.cofundo.io/mcp</strong> desde sus ajustes.</p>`;
+    <h1>Ya has entrado</h1>
+    <p class="cuenta">Como <strong>${esc(correo)}</strong> ·
+       <a href="#" id="otra-cuenta">usar otra cuenta</a></p>
+    <p>No hay ninguna aplicación esperando permiso ahora mismo. Puedes ir a tu
+       cuenta o conectar el cerebro.</p>
+    <p style="margin:0 0 24px">
+      <a href="${esc(cfg.urlCuenta)}" style="display:inline-block;padding:12px 22px;background:#1a1a1a;color:#fff;border-radius:8px;text-decoration:none">Ir a mi cuenta</a>
+    </p>
+    <div class="permisos">
+      <p style="margin:0 0 6px;font-size:13px">Para <strong>Claude</strong>, añade este conector:</p>
+      <p style="margin:0 0 14px;font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">${esc(cfg.urlMcp)}</p>
+      <p style="margin:0 0 6px;font-size:13px">Para <strong>ChatGPT</strong> es otra distinta:</p>
+      <p style="margin:0;font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">${esc(cfg.urlMcpChatgpt)}</p>
+    </div>`;
+
+  document.getElementById("otra-cuenta")!.addEventListener("click", async (e) => {
+    e.preventDefault();
+    await sb.auth.signOut();
+    void sinSolicitud();
+  });
 }
 
 async function arrancar(): Promise<void> {
   if (!authorizationId) {
-    sinSolicitud();
+    void sinSolicitud();
     return;
   }
 
