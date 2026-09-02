@@ -104,12 +104,12 @@ Mismo recorrido con **dos diferencias que hay que decir a gritos**:
 > **La dirección es OTRA:** `https://cerebro.cofundo.io/mcp/chatgpt`
 > La de Claude no funciona aquí.
 
-Y lo que ya está en la web y se mantiene: puede pedir **modo desarrollador** y
-**plan de pago** según el tipo de cuenta.
+Hace falta activar el **modo desarrollador**, y va antes que todo lo demás.
 
-**Pendiente de confirmar con una cuenta real** si con esta dirección sigue
-haciendo falta el modo desarrollador. Hasta entonces el texto lo dice como
-posibilidad, no como hecho.
+**Con cuenta gratuita basta.** Comprobado con una cuenta real el 03/09/2026. Lo
+que decía antes aquí — que podía pedir plan de pago — era un requisito inventado
+que espantaba a gente que podía comprar hoy mismo. No lo devuelvas sin volver a
+comprobarlo.
 
 ---
 

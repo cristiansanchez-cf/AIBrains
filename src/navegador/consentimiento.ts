@@ -109,13 +109,13 @@ function mostrarError(titulo: string, detalle: string): void {
 function pedirEmail(aviso?: string): void {
   app.innerHTML = `
     <h1>Entra en tu cuenta</h1>
-    <p>Te enviamos un enlace de acceso. Sin contraseñas.</p>
+    <p>Te enviamos un código de seis cifras. Sin contraseñas.</p>
     ${aviso ? `<div class="mensaje">${esc(aviso)}</div>` : ""}
     <form id="formulario">
       <label for="email">Tu email</label>
       <input id="email" type="email" required autocomplete="email"
              placeholder="tu@empresa.com">
-      <button type="submit">Enviarme el enlace</button>
+      <button type="submit">Enviarme el código</button>
     </form>`;
 
   document.getElementById("formulario")!.addEventListener("submit", async (e) => {
@@ -135,13 +135,70 @@ function pedirEmail(aviso?: string): void {
       return;
     }
 
-    app.innerHTML = `
-      <h1>Mira tu correo</h1>
-      <p>Te hemos enviado un enlace de acceso a <strong>${esc(email)}</strong>.
-         Ábrelo <strong>en este mismo navegador</strong> para volver aquí y
-         terminar.</p>
-      <p class="pie">Si lo abres en otro navegador o en el móvil, el enlace no
-         podrá continuar donde lo dejaste y tendrás que empezar de nuevo.</p>`;
+    pedirCodigo(email);
+  });
+}
+
+/**
+ * El código, y no el enlace, es el camino principal para entrar.
+ *
+ * UN ENLACE MÁGICO DEPENDE DEL DISPOSITIVO POR CONSTRUCCIÓN. La persona conecta
+ * desde el ordenador, el correo le suena en el móvil, y lo abre ahí: es el
+ * gesto natural, y entonces el enlace aterriza en un navegador que no tiene la
+ * solicitud a medias. Ninguna advertencia en negrita lo evita — Cristian se lo
+ * comió tres veces en una tarde sabiendo exactamente lo que hacía. Un código se
+ * lee donde llegue y se teclea donde estás, así que el fallo no se avisa: no
+ * existe.
+ *
+ * Y de regalo se lleva por delante toda una clase de errores. Con el código el
+ * navegador NUNCA SALE DE ESTA PÁGINA, así que no hay viaje del que volver, ni
+ * `authorization_id` que rescatar del almacén, ni sesión que llegue tarde en el
+ * fragmento de la URL. Ese viaje es justo el que produjo el fallo que dejaba el
+ * navegador atascado media hora.
+ *
+ * El enlace se sigue mandando y se sigue aceptando: quien lo abra en el
+ * navegador correcto entra igual. Esto suma un camino, no sustituye ninguno.
+ */
+function pedirCodigo(email: string, aviso?: string): void {
+  app.innerHTML = `
+    <h1>Mira tu correo</h1>
+    <p>Hemos enviado un código de seis cifras a <strong>${esc(email)}</strong>.
+       Escríbelo aquí.</p>
+    ${aviso ? `<div class="mensaje">${esc(aviso)}</div>` : ""}
+    <form id="formulario">
+      <label for="codigo">Código</label>
+      <input id="codigo" type="text" required inputmode="numeric"
+             autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
+             placeholder="123456"
+             style="font-size:24px;letter-spacing:6px;text-align:center">
+      <button type="submit">Entrar</button>
+    </form>
+    <p class="pie">El mismo correo lleva un enlace: también sirve, pero solo si
+       lo abres <strong>en este navegador</strong>. El código funciona desde
+       donde estés.</p>`;
+
+  const campo = document.getElementById("codigo") as HTMLInputElement;
+  campo.focus();
+
+  document.getElementById("formulario")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const boton = app.querySelector("button")!;
+    boton.disabled = true;
+    boton.textContent = "Comprobando…";
+
+    // Se limpia lo que venga pegado del correo: espacios y guiones sobran.
+    const token = campo.value.replace(/\D/g, "");
+
+    const { error } = await sb.auth.verifyOtp({ email, token, type: "email" });
+
+    if (error) {
+      pedirCodigo(email, "Ese código no vale. Comprueba que lo has copiado entero, o pide otro volviendo atrás.");
+      return;
+    }
+
+    // Ya hay sesión y seguimos en la misma página: se continúa donde se dejó.
+    if (authorizationId) void pedirConsentimiento();
+    else void sinSolicitud();
   });
 }
 
