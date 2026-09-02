@@ -92,9 +92,7 @@ En ChatGPT: es OTRA dirección, no vale la de arriba
 Cuando te pida iniciar sesión, entra con ESTE correo: ${para}
 El acceso va asociado a esta dirección. Con otra no entrarás.
 
-Si prefieres verlo en vídeo: ${config.correo.urlTutorial}
-
-No hace falta que instales nada ni que te crees una cuenta aparte.`;
+${config.correo.urlTutorial ? `Paso a paso con imágenes: ${config.correo.urlTutorial}\n\n` : ""}No hace falta que instales nada ni que te crees una cuenta aparte.`;
 
   return {
     asunto: `Ya tienes acceso al Cerebro de Ventas`,
@@ -112,7 +110,7 @@ No hace falta que instales nada ni que te crees una cuenta aparte.`;
 
 <p style="margin:0 0 24px;padding:14px;background:#fff8e6;border-radius:8px;font-size:14px">Cuando te pida iniciar sesión, entra con <strong>${para}</strong>. El acceso va asociado a esta dirección; con otra no entrarás.</p>
 
-<p style="margin:0 0 8px"><a href="${config.correo.urlTutorial}" style="color:#1a1a1a">Verlo en vídeo →</a></p>
+${config.correo.urlTutorial ? `<p style="margin:0 0 8px"><a href="${config.correo.urlTutorial}" style="color:#1a1a1a">Paso a paso con imágenes →</a></p>` : ""}
 <p style="margin:24px 0 0;font-size:14px;color:#6b6560">No hace falta instalar nada ni crear otra cuenta.</p>`,
     ),
   };
@@ -157,8 +155,7 @@ En ChatGPT: es OTRA dirección, no vale la de arriba
 
 Entra con ESTE correo: ${para}. El acceso va asociado a esta dirección.
 
-Si prefieres verlo en vídeo: ${config.correo.urlTutorial}
-${paraEquipo}
+${config.correo.urlTutorial ? `Paso a paso con imágenes: ${config.correo.urlTutorial}\n` : ""}${paraEquipo}
 El recibo te lo manda Stripe por separado.`;
 
   return {
@@ -183,7 +180,7 @@ ${
     : ""
 }
 
-<p style="margin:0 0 8px"><a href="${config.correo.urlTutorial}" style="color:#1a1a1a">Verlo en vídeo →</a></p>
+${config.correo.urlTutorial ? `<p style="margin:0 0 8px"><a href="${config.correo.urlTutorial}" style="color:#1a1a1a">Paso a paso con imágenes →</a></p>` : ""}
 <p style="margin:24px 0 0;font-size:13px;color:#6b6560">El recibo te lo manda Stripe por separado.</p>`,
     ),
   };

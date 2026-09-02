@@ -117,8 +117,24 @@ export const config = {
      * propia cuenta.
      */
     remitente: process.env.CORREO_REMITENTE ?? "Cofundo <hola@correo.cofundo.io>",
-    /** A dónde apunta el tutorial que va dentro de los correos. */
-    urlTutorial: process.env.CORREO_URL_TUTORIAL ?? "https://cofundo.io/tutorial",
+    /**
+     * El tutorial de conexión, si existe.
+     *
+     * VACÍO POR DEFECTO Y A PROPÓSITO. Antes valía `https://cofundo.io/tutorial`
+     * por defecto, dando por hecho que esa página existiría. No existía: es un
+     * 404 que el alojamiento sirve con un 200, así que ni siquiera fallaba de
+     * forma visible. Ese enlace llegó a correos de compra REALES — el cliente
+     * pagaba, pulsaba «verlo en vídeo» y aterrizaba en un error.
+     *
+     * Ahora, sin variable no hay enlace: los correos se envían igual y sin
+     * mentir. Se rellena el día que la página esté publicada, y entonces el
+     * enlace aparece solo.
+     *
+     * Y NO se apunta a un canal de preview: caducan. Cambiar un enlace roto por
+     * uno que se romperá dentro de cuatro días es peor, porque nadie estará
+     * mirando ese día.
+     */
+    urlTutorial: process.env.CORREO_URL_TUTORIAL ?? "",
     /**
      * El panel del usuario, en la web.
      *
