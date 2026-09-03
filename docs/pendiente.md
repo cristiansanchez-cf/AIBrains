@@ -1,15 +1,19 @@
 # Qué hay hecho y qué queda
 
-> Lista viva. Se actualiza al cerrar cada cosa. Última revisión: 01/09/2026.
+> Lista viva. Se actualiza al cerrar cada cosa. Última revisión: 03/09/2026.
 
 ---
 
 ## En marcha ahora mismo
 
-**Las acciones del panel**, por una sesión que trabaja desde el móvil. `GET
-/api/mi` ya está hecho y desplegado; faltan pasar a anual, subir y bajar
-asientos, ceder un asiento y dar de alta o de baja a alguien. Todas tocan
-Stripe. Contexto completo en `docs/handoff.md`.
+**La lista de conexiones abiertas, con botón de revocar.** Es lo previo al
+límite de 4 clientes concurrentes que decidió Cristian: un límite que no se
+puede resolver solo es una llamada de soporte por cada usuario que lo toque.
+Falta decidir qué expone `/api/mi` y pasarle el contrato a la web.
+
+**Simplificar los correos** para que digan lo mínimo y lleven al tutorial, en
+vez de explicar la conexión entera dentro. Un correo no se puede actualizar
+cuando Claude mueva un botón; una página sí, y ya existe.
 
 ---
 
@@ -20,27 +24,21 @@ Stripe. Contexto completo en `docs/handoff.md`.
 la promesa del producto. No son 93 búsquedas: salen de unos 9 vídeos. Método en
 `docs/fichas-sin-enlace.md`.
 
-**2. Conectar ChatGPT a `https://cerebro.cofundo.io/mcp/chatgpt`** y decir si
-pide modo desarrollador y si Deep Research lo ve. Es lo único que no puedo
-comprobar yo.
-
-**3. Confirmar la facturación inmediata.** Pasar a anual y cambiar asientos usan
+**2. Confirmar la facturación inmediata.** Pasar a anual y cambiar asientos usan
 `always_invoice`: cobran en el acto. Está desplegado pero la web no debe enseñar
 esos botones hasta que se confirme.
 
-**4. Decidir el periodo de gracia ante un impago.** Hoy, al primer fallo de
-cobro, el acceso se corta en la siguiente consulta. Stripe sigue reintentando
-varios días, pero el cliente ya no entra: **una tarjeta caducada deja fuera a un
-equipo entero de golpe**. Lo normal es cortar al final de la ventana de
-reintentos, no al principio.
+**3. En el panel de Stripe:** que el webhook reciba `invoice.upcoming`, y
+arreglar el concepto que sale en el extracto del banco, que hoy dice "cofunder
+suite" y debería decir Cerebro Ventas.
 
-**5. Mezclar el PR de InternalApps** (`cristianalbertosanchez00-afk/InternalApps#5`).
+**4. Mezclar el PR de InternalApps** (`cristianalbertosanchez00-afk/InternalApps#5`).
 Con eso el minuto exacto empieza a funcionar solo en las fichas nuevas.
 
-**6. Dos DPA:** OpenAI (el único que recibe el texto de las consultas) y
+**5. Dos DPA:** OpenAI (el único que recibe el texto de las consultas) y
 Railway. Los otros cuatro ya están en vigor. Rutas en el traspaso a la web.
 
-**7. Limpieza cuando sobren:** la organización de pruebas
+**6. Limpieza cuando sobren:** la organización de pruebas
 (`delete from public.organizaciones where nombre = 'Empresa de Pruebas (borrar cuando sobre)'`)
 y el cliente OAuth `prueba-compatibilidad-cli (borrar)` desde el panel de Supabase.
 
@@ -64,11 +62,14 @@ para todos a la vez. Decidido por Cristian el 01/09/2026, **ya publicado en los
 términos de la web**, y con recordatorios por correo en cada reintento de Stripe.
 Si algún día se añadiera margen, ese texto hay que cambiarlo a la vez.
 
-**Pendiente de decidir sobre ese correo:** en un plan de equipo lo recibe quien
-paga. Los miembros se quedan sin acceso y no reciben nada, así que ven que el
-producto dejó de funcionar sin saber por qué — el mismo problema que este correo
-viene a resolver, trasladado a otras personas. Escribirles expondría a la
-plantilla que su empresa no ha pagado. No sale por defecto: hay que decidirlo.
+**Y decidido el 03/09/2026:** en un plan de equipo se avisa **a todos, sin el
+motivo**. Quien paga recibe el correo de verdad, con el enlace y la causa; los
+demás reciben uno neutro que dice que su acceso está pausado y que hablen con
+quien lleva la facturación. Ni dejarlos a oscuras —verían que dejó de funcionar
+sin saber por qué— ni contarles que a su administrador le falló la tarjeta, que
+es información de otra persona. Sin enlace de pago, porque no pueden usarlo, y
+**solo en el primer intento**: los reintentos de Stripe son recordatorios para
+quien puede pagar, no para quien no.
 
 **Y una acción que no existe:** `alta_admin` / `baja_admin`. Hoy el único
 administrador que se crea es el comprador, en el webhook. Para tener un segundo
@@ -172,10 +173,11 @@ cerebro con las dos herramientas que ChatGPT exige por nombre, `search` y
 mismas verjas, que un id inventado no distingue "no existe" de "no tienes
 acceso", y que el documento OAuth declara el recurso correcto para cada ruta.
 
-**Lo que NO está comprobado y necesita a Cristian:** cómo se comporta la
-interfaz de ChatGPT ante esto. Si con esta URL deja de hacer falta el modo
-desarrollador, y si Deep Research lo ve. Eso solo se sabe conectándolo desde una
-cuenta real. Hasta entonces, `docs/consignas-web.md` no lo promete.
+**Comprobado con una cuenta real el 03/09/2026:** funciona, hace falta activar
+el **modo desarrollador** y va antes que todo lo demás, y **basta con cuenta
+gratuita**. Lo de "puede pedir plan de pago" que decíamos era un requisito
+inventado que espantaba a quien podía comprar hoy mismo; corregido en el
+tutorial y en la web. Queda por ver si Deep Research lo ve.
 
 ---
 
