@@ -525,3 +525,39 @@ ejecutar `npm run migrar`.
   - etapa: Mentalidad · canal: YouTube
   - > "Es el estado, el ambiente que tenemos que crear si queremos cerrar. Un paciente no lo puedo operar si su cuerpo no está en un estado concreto; lo mismo en ventas: muchos no saben c"
   - https://notion.so/b7b636b0d71e838ba7698162a248ab50
+
+---
+
+## Lo aprendido el 03/09/2026, probando de verdad
+
+**No hay que construir nada: InternalApps ya lo hace.** `POST /api/video-to-text`
+está desplegado en Cloud Run, sin clave, con cabecera `Origin`. Para YouTube
+llama a Supadata desde el servidor —donde la clave ya vive y sale por proxies
+residenciales, sin el bot challenge— y cae a `yt-dlp` + Whisper si falla.
+Probado: 8,7 s por vídeo, devuelve la transcripción entera.
+
+**La comparación literal NO sirve aquí, y esta es la lección cara.** La
+destilación original usó una transcripción de Whisper; Supadata devuelve los
+subtítulos de YouTube. Son dos transcripciones distintas del mismo audio, así
+que casi ninguna tirada de siete palabras coincide. Medido contra las 16 fichas
+que sabemos que salen de `byXpCoddWoE`: **las encuentra 0 de 16**.
+
+**Lo que sí sirve es el solape de trigramas**, y está medido con control
+positivo y negativo:
+
+| | solape |
+|---|---|
+| Las 16 verdaderas contra su propio vídeo | 0,37 – 0,81 |
+| Esas mismas 16 contra 60 episodios que no son | nunca pasa de 0,24 |
+
+Umbral **0,30**, y además el mejor tiene que sacarle 0,10 al segundo.
+
+**Y el motivo por el que esto no se puede resolver a fuerza bruta:** el canal
+`@AlfonsoyChristian` tiene del orden de **644 vídeos**. El endpoint limita a 10
+peticiones por hora y la cuota gratuita de Supadata es de 100 al mes. Barrer el
+canal entero son ~64 horas y seis veces la cuota. Con 10 vídeos bajados se
+recuperó **1** ficha.
+
+**Por eso lo barato es preguntar.** Las 91 son de "Alfonso y Cristian" y hay una
+reunión con ellos: saber qué vídeos entregaron reduce 644 a un puñado, y
+entonces el emparejador ya está hecho y medido.
