@@ -41,11 +41,19 @@ describe("recuperar el enlace casando la transcripción", () => {
     // original. Una tirada de palabras que cruce el "..." no existe en ningún
     // vídeo, aunque las dos mitades sí estén. Sin partir, esto no se encuentra.
     const { texto } = tendido(SUBTITULOS);
-    // Las palabras 13 a 20 caen a caballo de la costura: "...ano se construyo" +
-    // "eso es lo que...". En el vídeo, entre esas dos mitades se dice otra cosa.
+    // LA PROPIEDAD QUE IMPORTA: TODAS las sondas tienen que existir en el vídeo.
+    // Cada fragmento es literal, así que si una sola no aparece es que cruzó la
+    // costura — y una sonda que cruza la costura no existe en ningún vídeo del
+    // mundo. Comprobarlo con `some` en vez de `every` no probaría nada: siempre
+    // hay alguna que cae dentro de un fragmento por pura suerte de alineación.
+    const sondas = sondasDe(DESTILADO);
+    expect(sondas.length).toBeGreaterThan(2);
+    expect(sondas.every((s) => texto.includes(s))).toBe(true);
+
+    // Y que la costura existe de verdad en este ejemplo: entre las dos mitades
+    // el vídeo dice otra cosa, así que el texto seguido NO está.
     const cruzando = normalizar(DESTILADO).split(" ").slice(13, 20).join(" ");
     expect(texto).not.toContain(cruzando);
-    expect(sondasDe(DESTILADO).some((s) => texto.includes(s))).toBe(true);
   });
 
   it("devuelve el segundo en que se dice, que es lo que llena fuente_timestamp", () => {
