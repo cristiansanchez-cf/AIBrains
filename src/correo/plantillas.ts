@@ -299,6 +299,41 @@ seguirás teniendo acceso hasta el último día del periodo que ya pagaste.`,
  * pidió Cristian salen sin programar nada. Por eso el texto no dice "primer
  * aviso" ni numera nada: cada uno tiene que sostenerse por sí mismo.
  */
+/**
+ * Para los COMPAÑEROS de un equipo cuyo pago ha fallado. No dice por qué.
+ *
+ * DECISION DE CRISTIAN, 03/09/2026: se avisa a todo el equipo, sin el motivo.
+ * Las tres opciones eran no avisar (los compañeros ven que dejó de funcionar y
+ * no saben por qué: el desconcierto que el correo viene a resolver, trasladado
+ * a otras personas), avisar con el motivo (le cuentas a sus compañeros que a
+ * quien administra le ha fallado la tarjeta, que es información de otra
+ * persona), o esto.
+ *
+ * POR ESO NO LLEVA ENLACE DE PAGO. Quien recibe este correo no puede arreglarlo
+ * y darle un botón que no le corresponde solo genera un intento fallido y una
+ * pregunta más. Lo único accionable para esta persona es hablar con quien lleva
+ * la facturación, y eso es exactamente lo que se le dice.
+ */
+export function accesoPausado(): Plantilla {
+  const cuerpo = `Tu acceso al Cerebro de Ventas está pausado ahora mismo.
+
+No es nada que puedas arreglar desde tu cuenta: depende de la cuenta de tu
+equipo. Habla con quien lleva la facturación y se reactiva.
+
+No has perdido nada. Cuando vuelva a estar activo, todo sigue como lo dejaste.`;
+
+  return {
+    asunto: "Tu acceso al Cerebro de Ventas está pausado",
+    texto: cuerpo,
+    html: envolver(
+      "Tu acceso está pausado",
+      `<p style="margin:0 0 16px">Tu acceso al Cerebro de Ventas está pausado ahora mismo.</p>
+<p style="margin:0 0 16px">No es nada que puedas arreglar desde tu cuenta: depende de la cuenta de tu equipo. Habla con <strong>quien lleva la facturación</strong> y se reactiva.</p>
+<p style="margin:0;font-size:14px;color:#6b6560">No has perdido nada. Cuando vuelva a estar activo, todo sigue como lo dejaste.</p>`,
+    ),
+  };
+}
+
 export function cobroFallido(esEquipo: boolean, urlDePago: string | null): Plantilla {
   const quien = esEquipo
     ? "El acceso de tu equipo al Cerebro de Ventas está cortado."

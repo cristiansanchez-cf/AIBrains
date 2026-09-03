@@ -28,6 +28,7 @@ import {
   suscripcionCancelada,
   renovacionProxima,
   cobroFallido,
+  accesoPausado,
 } from "../correo/plantillas.js";
 import { normalizarEmail } from "../email.js";
 
@@ -555,11 +556,66 @@ async function avisarDelImpago(factura: Stripe.Invoice, subId: string): Promise<
 
     const plantilla = cobroFallido(esEquipo, factura.hosted_invoice_url ?? null);
     await enviar({ para: email, tipo: "impago", ...plantilla });
+
+    // SOLO EN EL PRIMER INTENTO. Los reintentos de Stripe son recordatorios
+    // para quien PUEDE pagar; para el resto del equipo serían cinco correos
+    // seguidos sobre algo que no está en su mano arreglar. `attempt_count` lo
+    // dice sin que tengamos que guardar estado: vale 1 en el primer fallo y
+    // sube en cada reintento. Si nos perdiéramos ese primer evento, el equipo
+    // se queda sin aviso — que es preferible a repetirlo cinco veces.
+    if (esEquipo && factura.attempt_count === 1) {
+      await avisarAlEquipo(subId, email);
+    }
   } catch (error) {
     // Un correo no puede tumbar el webhook: si lanzara, Stripe reintentaría el
     // evento y volveríamos a procesar un impago ya procesado.
     console.error("[stripe] no se pudo avisar del impago:", error);
   }
+}
+
+/**
+ * Avisa a los compañeros de equipo de que su acceso está pausado, SIN el motivo.
+ *
+ * A quien paga se le manda el correo de verdad, con el enlace y el motivo. A
+ * los demás solo se les quita el desconcierto: ven que dejó de funcionar y no
+ * sabrían por qué. Contarles que a su administrador le falló la tarjeta sería
+ * repartir información de otra persona.
+ *
+ * SE MANDA DE CINCO EN CINCO. Resend limita los envíos por segundo, y esto
+ * corre dentro del webhook: soltar cincuenta a la vez tumbaría la mitad, y
+ * hacerlos de uno en uno dejaría a Stripe esperando la respuesta.
+ */
+async function avisarAlEquipo(subId: string, emailDeQuienPaga: string): Promise<void> {
+  const { data: org } = await supabase
+    .from("organizaciones")
+    .select("id")
+    .eq("stripe_subscription_id", subId)
+    .maybeSingle();
+  if (!org) return;
+
+  const { data: asientos } = await supabase
+    .from("organizacion_asientos")
+    .select("email")
+    .eq("organizacion_id", org.id)
+    .is("revocado_en", null);
+
+  const paga = normalizarEmail(emailDeQuienPaga);
+  const destinos = (asientos ?? [])
+    .map((a) => a.email as string)
+    .filter((correo) => normalizarEmail(correo) !== paga);
+
+  if (destinos.length === 0) return;
+
+  const plantilla = accesoPausado();
+  for (let i = 0; i < destinos.length; i += 5) {
+    await Promise.all(
+      destinos
+        .slice(i, i + 5)
+        .map((para) => enviar({ para, tipo: "pausa_equipo", ...plantilla })),
+    );
+  }
+
+  console.error(`[stripe] impago de equipo ${subId}: avisados ${destinos.length} asiento(s)`);
 }
 
 /** El creador ha avanzado en su verificación de Connect. */

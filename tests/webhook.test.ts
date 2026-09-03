@@ -17,14 +17,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /** Lo que cada tabla ha recibido. Es lo que se comprueba. */
 let cambios: Array<{ tabla: string; datos: unknown; filtro: unknown[] }> = [];
 
+/**
+ * Lo que devuelve cada tabla cuando se lee. Por defecto vale lo de siempre —una
+ * fila con la suscripción— que es lo que esperan las pruebas de corte. Las
+ * tablas de equipo se leen de verdad, así que ahí hay que poder poner asientos.
+ */
+let LECTURAS: Record<string, unknown[]> = {};
+
 function constructor(tabla: string) {
   const q: Record<string, unknown> = {};
   let datos: unknown;
   const encadenar = new Proxy(q, {
     get(_t, prop: string) {
       if (prop === "then") {
+        const filas = LECTURAS[tabla] ?? [{ stripe_subscription_id: "sub_1" }];
+        // `maybeSingle` pide UNA fila, no la lista.
+        const data = q.unica ? (filas[0] ?? null) : filas;
         return (resolver: (v: unknown) => unknown) =>
-          Promise.resolve({ data: [{ stripe_subscription_id: "sub_1" }], error: null }).then(resolver);
+          Promise.resolve({ data, error: null }).then(resolver);
+      }
+      if (prop === "maybeSingle") {
+        q.unica = true;
+        return () => encadenar;
       }
       return (...args: unknown[]) => {
         if (prop === "update") datos = args[0];
@@ -71,6 +85,7 @@ const { procesarWebhook } = await import("../src/pagos/webhook.js");
 beforeEach(() => {
   cambios = [];
   correos.length = 0;
+  LECTURAS = {};
   EVENTO = {
     id: "evt_1",
     type: "customer.subscription.deleted",
@@ -295,6 +310,78 @@ describe("aviso de cobro fallido", () => {
     expect(tocadas).toContain("suscripciones");
     expect(tocadas).toContain("suscripciones_dominio");
     expect(tocadas).toContain("organizaciones");
+  });
+
+  /** Una suscripción de equipo: lo que la hace equipo es la cantidad de asientos. */
+  function equipoDeCinco() {
+    return {
+      id: "sub_1",
+      cancel_at_period_end: false,
+      items: { data: [{ quantity: 5, price: { recurring: { interval: "month" } } }] },
+    };
+  }
+
+  function conAsientos() {
+    LECTURAS = {
+      organizaciones: [{ id: "org_1" }],
+      organizacion_asientos: [
+        { email: "quien@paga.com" },
+        { email: "companera@equipo.com" },
+        { email: "companero@equipo.com" },
+      ],
+    };
+  }
+
+  it("en equipo avisa a los compañeros, sin decirles el motivo", async () => {
+    // DECISION DE CRISTIAN: se avisa a todo el equipo pero sin el motivo. Sin
+    // aviso, los compañeros ven que dejó de funcionar y no saben por qué — el
+    // desconcierto que el correo viene a quitar, trasladado a otras personas.
+    // Con el motivo, se les cuenta que a quien administra le falló la tarjeta.
+    SUSCRIPCION = equipoDeCinco();
+    conAsientos();
+    EVENTO = {
+      id: "evt_e1",
+      type: "invoice.payment_failed",
+      data: { object: { ...facturaFallida(), attempt_count: 1 } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+
+    // Quien paga recibe el de verdad, con el enlace. Los otros dos, el neutro.
+    expect(correos.map((c) => ({ tipo: c.tipo, para: c.para }))).toEqual([
+      { tipo: "impago", para: "quien@paga.com" },
+      { tipo: "pausa_equipo", para: "companera@equipo.com" },
+      { tipo: "pausa_equipo", para: "companero@equipo.com" },
+    ]);
+  });
+
+  it("los reintentos de Stripe NO repiten el aviso al equipo", async () => {
+    // Stripe reintenta el cobro varias veces y emite el evento en cada intento.
+    // Para quien paga cada uno es un recordatorio útil; para el resto serían
+    // cinco correos seguidos sobre algo que no está en su mano arreglar.
+    SUSCRIPCION = equipoDeCinco();
+    conAsientos();
+    EVENTO = {
+      id: "evt_e2",
+      type: "invoice.payment_failed",
+      data: { object: { ...facturaFallida(), attempt_count: 3 } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos.map((c) => c.tipo)).toEqual(["impago"]);
+  });
+
+  it("en individual no se avisa a nadie más: no hay equipo que avisar", async () => {
+    SUSCRIPCION = suscripcionDe("month");
+    conAsientos();
+    EVENTO = {
+      id: "evt_e3",
+      type: "invoice.payment_failed",
+      data: { object: { ...facturaFallida(), attempt_count: 1 } },
+    };
+
+    await procesarWebhook(Buffer.from("{}"), "firma");
+    expect(correos.map((c) => c.tipo)).toEqual(["impago"]);
   });
 
   it("sin suscripción no hace nada: no es una cuota", async () => {
