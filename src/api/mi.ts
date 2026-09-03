@@ -46,6 +46,24 @@ export interface Facturacion {
   moneda: string | null;
   /** Solo cierto si Stripe contestó. Con `false`, la web no debe enseñar el bloque. */
   disponible: boolean;
+  /**
+   * Portal de cliente de Stripe: cancelar, cambiar tarjeta y ver facturas.
+   *
+   * POR QUE EXISTE. Los terminos publicados prometian "puedes cancelar cuando
+   * quieras desde tu cuenta" y el panel no tenia ese boton: una promesa sin
+   * mecanismo, que alguien estaba atendiendo a mano. El portal de Stripe ya
+   * hace las tres cosas, asi que evita construir tres pantallas y ninguna
+   * entera.
+   *
+   * PUEDE VENIR `null` Y LA WEB TIENE QUE AGUANTARLO. El portal hay que
+   * configurarlo antes en el panel de Stripe; si no lo esta, Stripe rechaza la
+   * peticion. Un panel que se rompe por eso deja al usuario sin ver ni su
+   * suscripcion.
+   *
+   * CADUCA. Cada enlace vale para una visita y un rato, por eso se crea en cada
+   * peticion y no se guarda en ningun sitio.
+   */
+  portal_url: string | null;
 }
 
 export interface Asiento {
@@ -88,6 +106,7 @@ const SIN_FACTURACION: Facturacion = {
   importe_centimos: null,
   moneda: null,
   disponible: false,
+  portal_url: null,
 };
 
 /**
@@ -123,6 +142,34 @@ function periodoDe(intervalo: string | undefined): "mensual" | "anual" | null {
   return null;
 }
 
+/**
+ * Un enlace de un solo uso al portal de cliente de Stripe.
+ *
+ * SE TRAGA SUS PROPIOS FALLOS a proposito. Es lo ultimo que se anade al panel y
+ * lo menos importante de el: si el portal no esta configurado en Stripe, o la
+ * peticion falla, se devuelve `null` y el usuario sigue viendo su plan, sus
+ * cerebros y su fecha de renovacion. Dejar que esto tumbara el panel entero
+ * seria cambiar un boton que falta por una pantalla en blanco.
+ */
+async function portalDeCliente(
+  stripe: Stripe,
+  cliente: string | Stripe.Customer | Stripe.DeletedCustomer,
+): Promise<string | null> {
+  const id = typeof cliente === "string" ? cliente : cliente.id;
+  if (!id) return null;
+
+  try {
+    const sesion = await stripe.billingPortal.sessions.create({
+      customer: id,
+      return_url: config.correo.urlCuenta,
+    });
+    return sesion.url;
+  } catch (error) {
+    console.error("[cerebro] no se pudo crear el portal de cliente:", error);
+    return null;
+  }
+}
+
 async function facturacionDeStripe(subscriptionId: string | null): Promise<Facturacion> {
   if (!subscriptionId || !config.stripe.secretKey) return SIN_FACTURACION;
 
@@ -132,6 +179,7 @@ async function facturacionDeStripe(subscriptionId: string | null): Promise<Factu
     const linea = s.items.data[0];
 
     return {
+      portal_url: await portalDeCliente(stripe, s.customer),
       periodo: periodoDe(linea?.price.recurring?.interval),
       renueva_en: linea?.current_period_end
         ? new Date(linea.current_period_end * 1000).toISOString()
