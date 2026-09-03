@@ -59,6 +59,57 @@ function olvidarAutorizacion(): void {
   }
 }
 
+/**
+ * A quién se le acaba de mandar un código, para que la caja donde escribirlo
+ * SOBREVIVA a recargar la página.
+ *
+ * ESTE ES EL FALLO QUE SE ARREGLA AQUÍ, Y LO ENCONTRÓ CRISTIAN PROBANDO. La
+ * caja del código solo existía en memoria, justo después de pedirlo. Si
+ * recargabas, volvías atrás o abrías la pantalla otra vez, el arranque te veía
+ * sin sesión y te enseñaba el formulario del correo: un campo para el correo y
+ * un botón de pedir código. Con el código ya en la mano y ningún sitio donde
+ * escribirlo. Sus palabras: "vino un botón y digo, pero coño, entonces ¿para
+ * qué me das el código?".
+ *
+ * Y es el caso NORMAL, no el raro: se pide el código en el ordenador, se coge
+ * el móvil para leerlo, y al volver muchos navegadores han descargado la
+ * pestaña. Recordar el correo convierte eso en "sigue donde lo dejaste".
+ */
+const CORREO_PENDIENTE = "cerebro.correo_pendiente";
+/** Lo que dura un código de Supabase. Pasado eso, la caja ya no sirve de nada. */
+const PENDIENTE_MS = 60 * 60 * 1000;
+
+function guardarPendiente(email: string): void {
+  try {
+    localStorage.setItem(CORREO_PENDIENTE, JSON.stringify({ email, ts: Date.now() }));
+  } catch {
+    // Modo privado: se sigue igual, solo se pierde al recargar.
+  }
+}
+
+function recuperarPendiente(): string | null {
+  try {
+    const crudo = localStorage.getItem(CORREO_PENDIENTE);
+    if (!crudo) return null;
+    const { email, ts } = JSON.parse(crudo) as { email: string; ts: number };
+    if (Date.now() - ts > PENDIENTE_MS) {
+      localStorage.removeItem(CORREO_PENDIENTE);
+      return null;
+    }
+    return email;
+  } catch {
+    return null;
+  }
+}
+
+function olvidarPendiente(): void {
+  try {
+    localStorage.removeItem(CORREO_PENDIENTE);
+  } catch {
+    /* da igual */
+  }
+}
+
 const NOMBRES_DE_SCOPE: Record<string, string> = {
   openid: "Saber quién eres",
   email: "Ver tu dirección de email",
@@ -135,6 +186,7 @@ function pedirEmail(aviso?: string): void {
       return;
     }
 
+    guardarPendiente(email);
     pedirCodigo(email);
   });
 }
@@ -175,7 +227,14 @@ function pedirCodigo(email: string, aviso?: string): void {
     </form>
     <p class="pie">El mismo correo lleva un enlace: también sirve, pero solo si
        lo abres <strong>en este navegador</strong>. El código funciona desde
-       donde estés.</p>`;
+       donde estés.</p>
+    <p class="pie"><a href="#" id="otro-correo">Usar otro correo o pedir un código nuevo</a></p>`;
+
+  document.getElementById("otro-correo")!.addEventListener("click", (e) => {
+    e.preventDefault();
+    olvidarPendiente();
+    pedirEmail();
+  });
 
   const campo = document.getElementById("codigo") as HTMLInputElement;
   campo.focus();
@@ -197,6 +256,7 @@ function pedirCodigo(email: string, aviso?: string): void {
     }
 
     // Ya hay sesión y seguimos en la misma página: se continúa donde se dejó.
+    olvidarPendiente();
     if (authorizationId) void pedirConsentimiento();
     else void sinSolicitud();
   });
@@ -317,6 +377,11 @@ async function sinSolicitud(): Promise<void> {
   const correo = data?.user?.email;
 
   if (!correo) {
+    const pendiente = recuperarPendiente();
+    if (pendiente) {
+      pedirCodigo(pendiente);
+      return;
+    }
     app.innerHTML = `
       <h1>Entra en tu cuenta</h1>
       <p>Desde aquí puedes ver tu suscripción y cómo conectar el cerebro.</p>`;
@@ -372,7 +437,10 @@ async function arrancar(): Promise<void> {
     const {
       data: { session: reintento },
     } = await sb.auth.getSession();
-    if (!reintento) pedirEmail();
+    if (reintento) return;
+    const pendiente = recuperarPendiente();
+    if (pendiente) pedirCodigo(pendiente);
+    else pedirEmail();
   }, 600);
 }
 
