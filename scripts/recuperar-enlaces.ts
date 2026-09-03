@@ -65,6 +65,40 @@ export interface Trozo {
  * cuerpo vacío, que es la peor forma de fallar — parece que el vídeo no tiene
  * subtítulos cuando sí los tiene.
  */
+async function porSupadata(videoId: string): Promise<Trozo[]> {
+  const clave = process.env.SUPADATA_API_KEY;
+  if (!clave) return [];
+
+  const url = new URL("https://api.supadata.ai/v1/youtube/transcript");
+  url.searchParams.set("videoId", videoId);
+  // `text=false` pide los subtitulos TROCEADOS, con el desplazamiento de cada
+  // trozo. Con `true` Supadata devuelve texto plano y tira los tiempos, que es
+  // justo lo que aqui hace falta. Mismo criterio que el worker de InternalApps.
+  url.searchParams.set("text", "false");
+  url.searchParams.set("lang", "es");
+
+  const res = await fetch(url, {
+    headers: { "x-api-key": clave },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`Supadata respondio ${res.status}`);
+
+  const datos = (await res.json()) as { content?: Array<{ text?: string; offset?: number }> | string };
+  if (!Array.isArray(datos.content)) return [];
+
+  // Supadata da el desplazamiento en MILISEGUNDOS. Confundir las unidades
+  // pondria el minuto 7 en la hora 1:55, y solo se veria pulsando el enlace.
+  return datos.content
+    .map((c) => ({ segundo: Math.round((c.offset ?? 0) / 1000), texto: (c.text ?? "").trim() }))
+    .filter((t) => t.texto.length > 0);
+}
+
+/** El id de 11 caracteres, venga suelto o dentro de una URL. */
+function idDeVideo(video: string): string {
+  const m = video.match(/[\w-]{11}/);
+  return m ? m[0] : video;
+}
+
 function subtitulosDe(video: string): Trozo[] {
   const carpeta = mkdtempSync(join(tmpdir(), "subs-"));
   try {
@@ -175,12 +209,25 @@ async function principal(): Promise<void> {
   const hallazgos = new Map<number, { url: string; segundo: number; aciertos: number }[]>();
 
   for (const video of videos) {
-    let trozos: Trozo[];
+    let trozos: Trozo[] = [];
     try {
       trozos = subtitulosDe(video);
     } catch (e) {
-      console.error(`  ${video}: no se pudieron bajar los subtítulos (${(e as Error).message.slice(0, 80)})`);
-      continue;
+      // SE INTENTA SUPADATA ANTES DE DARSE POR VENCIDO. yt-dlp puede no estar
+      // instalado, y YouTube ya no sirve los subtitulos a pelo: responde 200
+      // con el cuerpo vacio, que parece "este video no tiene subtitulos"
+      // cuando si los tiene. Sin este respaldo, la recuperacion se daria por
+      // imposible por una herramienta que falta.
+      try {
+        trozos = await porSupadata(idDeVideo(video));
+      } catch (e2) {
+        console.error(`  ${video}: ni yt-dlp ni Supadata (${(e2 as Error).message.slice(0, 60)})`);
+        continue;
+      }
+      if (trozos.length === 0) {
+        console.error(`  ${video}: sin subtítulos (${(e as Error).message.slice(0, 60)})`);
+        continue;
+      }
     }
     if (trozos.length === 0) {
       console.error(`  ${video}: sin subtítulos automáticos en español`);
