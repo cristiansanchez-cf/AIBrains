@@ -31,7 +31,10 @@ import { join } from "node:path";
 import { supabase } from "../src/db/supabase.js";
 
 /** Cuántas palabras del centro se usan como sonda. */
-const PALABRAS_SONDA = 9;
+const PALABRAS_SONDA = 7;
+
+/** Cuántas sondas tienen que caer para creerse el hallazgo. */
+const MINIMO_COINCIDENCIAS = 3;
 
 /**
  * Se compara sin tildes, sin puntuación y en minúsculas.
@@ -98,16 +101,27 @@ function subtitulosDe(video: string): Trozo[] {
 
 /** El vídeo entero como un texto seguido, y dónde empieza cada trozo dentro. */
 /**
- * La tirada de palabras del CENTRO del trozo, que es la que se busca.
+ * Todas las tiradas de palabras literales que se pueden buscar del trozo.
  *
- * El destilador recorta por los bordes para que la transcripción empiece y
- * acabe en frase entera, así que el principio y el final pueden no ser
- * literales del original. El centro sí lo es siempre.
+ * SE PARTE POR LOS PUNTOS SUSPENSIVOS, Y ESTO NO ES UN DETALLE. El destilador
+ * COSE fragmentos que no son contiguos en el original y los une con "...". Una
+ * sonda que cruce esa costura no existe en ningún vídeo, por mucho que las dos
+ * mitades sí estén. Medido: buscando una sola tirada del centro, el emparejador
+ * acertaba en 22 de 60 fichas cuyo origen ya conocíamos; partiendo por la
+ * costura, en 256 de 278.
+ *
+ * Se devuelven varias por fragmento y no una: cuantas más coincidan, más seguro
+ * es el hallazgo, y ese recuento es lo que separa un acierto de una casualidad.
  */
-export function sondaDe(transcripcion: string): string {
-  const palabras = normalizar(transcripcion).split(" ");
-  const arranque = Math.max(0, Math.floor((palabras.length - PALABRAS_SONDA) / 2));
-  return palabras.slice(arranque, arranque + PALABRAS_SONDA).join(" ");
+export function sondasDe(transcripcion: string): string[] {
+  const fuera: string[] = [];
+  for (const fragmento of (transcripcion ?? "").split(/\.{3}|…/)) {
+    const palabras = normalizar(fragmento).split(" ").filter(Boolean);
+    for (let i = 0; i + PALABRAS_SONDA <= palabras.length; i += PALABRAS_SONDA) {
+      fuera.push(palabras.slice(i, i + PALABRAS_SONDA).join(" "));
+    }
+  }
+  return fuera;
 }
 
 export function tendido(trozos: Trozo[]): { texto: string; indices: Array<{ desde: number; segundo: number }> } {
@@ -158,7 +172,7 @@ async function principal(): Promise<void> {
   );
 
   /** id de ficha -> lo que se ha encontrado. Si dos vídeos casan, se avisa. */
-  const hallazgos = new Map<number, { url: string; segundo: number }[]>();
+  const hallazgos = new Map<number, { url: string; segundo: number; aciertos: number }[]>();
 
   for (const video of videos) {
     let trozos: Trozo[];
@@ -178,20 +192,31 @@ async function principal(): Promise<void> {
     let encontradas = 0;
 
     for (const f of pendientes) {
-      const donde = texto.indexOf(sondaDe((f.transcripcion as string) ?? ""));
-      if (donde === -1) continue;
+      const sondas = sondasDe((f.transcripcion as string) ?? "");
+      const posiciones = sondas.map((s) => texto.indexOf(s)).filter((p) => p !== -1);
+      // TRES COINCIDENCIAS, NO UNA. Una tirada de siete palabras puede repetirse
+      // por casualidad entre dos vídeos del mismo creador, que hablan de lo
+      // mismo con las mismas palabras. Tres ya no es casualidad.
+      if (posiciones.length < MINIMO_COINCIDENCIAS) continue;
 
       encontradas++;
       const lista = hallazgos.get(f.id as number) ?? [];
-      lista.push({ url, segundo: segundoEn(donde, indices) });
+      lista.push({ url, segundo: segundoEn(Math.min(...posiciones), indices), aciertos: posiciones.length });
       hallazgos.set(f.id as number, lista);
     }
 
     console.log(`  ${url}  ->  ${encontradas} ficha(s)`);
   }
 
-  const seguras = [...hallazgos.entries()].filter(([, v]) => v.length === 1);
-  const dudosas = [...hallazgos.entries()].filter(([, v]) => v.length > 1);
+  // Si dos vídeos encajan, gana el que doble al segundo; si no le dobla, no se
+  // toca. Preferimos una ficha sin enlace a una ficha con el enlace equivocado.
+  const seguras: Array<[number, { url: string; segundo: number; aciertos: number }]> = [];
+  const dudosas: Array<[number, unknown]> = [];
+  for (const [id, lista] of hallazgos) {
+    const orden = [...lista].sort((a, b) => b.aciertos - a.aciertos);
+    if (orden.length === 1 || orden[0]!.aciertos >= 2 * orden[1]!.aciertos) seguras.push([id, orden[0]!]);
+    else dudosas.push([id, lista]);
+  }
 
   console.log(`\n${seguras.length} ficha(s) con un único vídeo que encaja.`);
   if (dudosas.length > 0) {
@@ -204,10 +229,10 @@ async function principal(): Promise<void> {
     return;
   }
 
-  for (const [id, [hallazgo]] of seguras) {
+  for (const [id, hallazgo] of seguras) {
     const { error: fallo } = await supabase
       .from("fichas")
-      .update({ fuente_url: hallazgo!.url, fuente_timestamp: hallazgo!.segundo })
+      .update({ fuente_url: hallazgo.url, fuente_timestamp: hallazgo.segundo })
       .eq("id", id)
       .is("fuente_url", null); // Si otro lo llenó mientras, no se pisa.
     if (fallo) console.error(`  ficha ${id}: ${fallo.message}`);
