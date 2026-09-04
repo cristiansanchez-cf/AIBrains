@@ -31,6 +31,7 @@ import { normalizarEmail, pareceEmail } from "../email.js";
 import { panelDelUsuario, type Panel } from "./mi.js";
 import { enviar } from "../correo/enviar.js";
 import { asientoConcedido } from "../correo/plantillas.js";
+import { estaCancelada } from "../pagos/cancelacion.js";
 
 /** Petición mal formada o que no tiene sentido en este estado. Responde 400. */
 export class AccionInvalida extends Error {}
@@ -231,7 +232,7 @@ async function pasarAAnual(panel: Panel, userId: string): Promise<string> {
   if (linea.price.recurring?.interval === "year") {
     throw new AccionInvalida("Esta suscripción ya es anual.");
   }
-  if (suscripcion.cancel_at_period_end) {
+  if (estaCancelada(suscripcion)) {
     throw new AccionInvalida(
       "Esta suscripción está cancelada a fin de periodo. Reactívala antes de pasarla a anual.",
     );

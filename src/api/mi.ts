@@ -28,6 +28,7 @@ import { supabase } from "../db/supabase.js";
 import { creadoresDisponibles } from "../db/consultas.js";
 import { config } from "../config.js";
 import { normalizarEmail } from "../email.js";
+import { estaCancelada, finDelAcceso } from "../pagos/cancelacion.js";
 
 export interface CerebroContratado {
   slug: string;
@@ -197,6 +198,11 @@ async function portalDeCliente(
     const sesion = await stripe.billingPortal.sessions.create({
       customer: id,
       return_url: config.correo.urlCuenta,
+      // Sin esto el portal sale en INGLES. Stripe no lo deduce del navegador ni
+      // de la moneda: si no se le dice, usa el idioma por defecto de la cuenta.
+      // Cancelar la suscripcion en un idioma que no es el tuyo es justo donde
+      // no conviene hacer dudar a nadie.
+      locale: "es",
     });
     return sesion.url;
   } catch (error) {
@@ -216,10 +222,13 @@ async function facturacionDeStripe(subscriptionId: string | null): Promise<Factu
     return {
       portal_url: await portalDeCliente(stripe, s.customer),
       periodo: periodoDe(linea?.price.recurring?.interval),
-      renueva_en: linea?.current_period_end
-        ? new Date(linea.current_period_end * 1000).toISOString()
-        : null,
-      cancelada: s.cancel_at_period_end,
+      // Cuando está cancelada esta fecha ya no es "cuándo se cobra" sino "hasta
+      // cuándo tienes acceso", y la web pinta un texto u otro según `cancelada`.
+      renueva_en: (() => {
+        const cuando = finDelAcceso(s) ?? linea?.current_period_end;
+        return cuando ? new Date(cuando * 1000).toISOString() : null;
+      })(),
+      cancelada: estaCancelada(s),
       importe_centimos: (linea?.price.unit_amount ?? 0) * (linea?.quantity ?? 1) || null,
       moneda: linea?.price.currency ?? null,
       disponible: true,

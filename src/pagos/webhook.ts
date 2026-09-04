@@ -31,6 +31,7 @@ import {
   accesoPausado,
 } from "../correo/plantillas.js";
 import { normalizarEmail } from "../email.js";
+import { acabaDeCancelarse, estaCancelada, finDelAcceso } from "./cancelacion.js";
 
 export class FirmaInvalida extends Error {}
 
@@ -347,7 +348,9 @@ async function avisarDeCancelacion(sub: Stripe.Subscription): Promise<void> {
       return;
     }
 
-    const fin = sub.items.data[0]?.current_period_end;
+    // La fecha sale de `finDelAcceso` y no del fin de periodo: si la baja se
+    // programó para otro día, el fin de periodo diría una fecha equivocada.
+    const fin = finDelAcceso(sub) ?? sub.items.data[0]?.current_period_end;
     const plantilla = suscripcionCancelada(
       email,
       fin ? new Date(fin * 1000).toISOString() : null,
@@ -384,8 +387,10 @@ async function avisarDeRenovacion(factura: Stripe.Invoice): Promise<void> {
     const stripe = new Stripe(config.stripe.secretKey);
     const sub = await stripe.subscriptions.retrieve(subId);
 
-    // Si ya está cancelada a fin de periodo, no hay renovación que anunciar.
-    if (sub.cancel_at_period_end) return;
+    // Si ya está cancelada, no hay renovación que anunciar. Ojo con el criterio:
+    // ver `cancelacion.ts`. Mirando solo `cancel_at_period_end` se le anunciaba
+    // la renovación a quien acababa de darse de baja.
+    if (estaCancelada(sub)) return;
 
     // EL PERIODO SE LEE DE LA SUSCRIPCIÓN, no de la línea de la factura.
     // Primero lo saqué de `factura.lines`, y esa forma cambió entre versiones
@@ -480,9 +485,8 @@ async function sincronizarSuscripcion(evento: Stripe.Event): Promise<void> {
     await supabase.from(tabla).update({ activa }).eq("stripe_subscription_id", sub.id);
   }
 
-  // ¿Acaba de cancelarse a fin de periodo? Solo se avisa en la TRANSICIÓN.
-  const antes = evento.data.previous_attributes as { cancel_at_period_end?: boolean } | undefined;
-  if (sub.cancel_at_period_end && antes && antes.cancel_at_period_end === false) {
+  // ¿Acaba de cancelarse? Solo se avisa en la TRANSICIÓN.
+  if (acabaDeCancelarse(evento)) {
     void avisarDeCancelacion(sub);
   }
 
