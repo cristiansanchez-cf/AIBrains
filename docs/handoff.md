@@ -6,6 +6,85 @@
 > Léelo entero antes de tocar nada. Son diez minutos y te ahorra repetir errores
 > que ya costaron caros.
 
+
+---
+
+# Dónde estamos ahora mismo · 04/09/2026
+
+> **Si solo vas a leer una parte, lee esta.** Lo de abajo es el contexto largo y
+> los errores que ya se cometieron aquí; esto es el estado de hoy.
+
+## Lo que está pasando hoy
+
+Cristian está haciendo **la prueba de punta a punta** contra producción, con
+dinero real: `docs/prueba-de-punta-a-punta.md`. Compra, recibe los correos,
+conecta Claude y ChatGPT, cancela. Va soltando lo que no cuadra según lo
+encuentra, y la forma de trabajar es **arreglarlo en el momento y desplegar**.
+
+**El paso 3 es el que importa**: pedir el acceso en el ordenador, abrir el
+correo en el MÓVIL y teclear el código de seis cifras en el ordenador. Ha
+fallado dos veces hoy, cada vez por un motivo distinto. Si vuelve a fallar, es
+ahí donde hay que mirar primero.
+
+**Hay una segunda sesión trabajando en la web** (`cofundo.io`), que es otro
+repositorio. Este lado es el servidor: `cerebro.cofundo.io`, la API y los
+correos. Las dos se hablan por mensajes entre sesiones — y ojo, ese canal ha
+estado cayéndose: hoy se perdió a media tarde y hubo que pasar los recados por
+Cristian.
+
+## En qué estado está el producto
+
+Producción viva en `https://cerebro.cofundo.io`. **407 fichas**, de las cuales
+**93 sin enlace de origen**. Dos suscripciones activas de prueba.
+
+Cerrado hoy y verificado contra producción — **no hace falta volver a mirarlo**:
+
+- **Se entra con un código de seis cifras**, no con un enlace. El enlace fallaba
+  por construcción: el correo suena en el móvil y se abre ahí, y ese navegador
+  no tiene la solicitud a medias. La caja del código sobrevive a recargar la
+  página, que fue el segundo fallo del día.
+- **Portal de cliente de Stripe** en `/api/mi`, campo `facturacion.portal_url`:
+  cancelar, cambiar tarjeta y facturas. En español, y el panel aguanta que
+  llegue `null`.
+- **Las bajas hechas desde el portal** — ver `src/pagos/cancelacion.ts`. Stripe
+  las apunta en `cancel_at` y no en `cancel_at_period_end`, y solo mirábamos el
+  segundo. No rompía nada y por eso era peor.
+- **Impago en equipo**: se avisa a todos, sin decirles el motivo, y solo en el
+  primer intento.
+- **Ocho fichas mal atribuidas**, corregidas en la base.
+- **`conexiones` en `/api/mi`**: desde dónde se usa cada cuenta. Sin botón de
+  revocar una sola, porque Supabase no lo permite — está explicado en el tipo.
+
+## Qué está abierto, por orden
+
+1. **Las 91 fichas sin enlace.** Bloqueado **a propósito**: hay que preguntarle
+   a Alfonso y Cristian qué vídeos entregaron. El canal tiene 644 vídeos y
+   barrerlo son 64 horas y seis veces la cuota mensual. El emparejador ya está
+   hecho y medido: `scripts/recuperar-enlaces.ts` y `docs/fichas-sin-enlace.md`.
+   **No lo intentes por fuerza bruta**, ya se probó.
+2. **`/pago/listo` debe llevar el wizard entero**, reutilizando el componente de
+   `/tutorial` en vez de una copia. Es de la sesión de la web.
+3. **`pasar_a_anual` está vivo pero escondido** en el panel: factura en el acto
+   y falta que Cristian confirme que el importe cobrado es el que se anuncia.
+4. **El límite de 4 conexiones, sin activar** hasta que haya uso real. El
+   razonamiento está en `docs/pendiente.md` y el número está elegido a ojo.
+5. **`alta_admin` / `baja_admin`** no existen: el segundo administrador se mete
+   a mano en la base.
+6. **El PDF de tareas de founder**, cuando no quede nada de desarrollo que pueda
+   cambiar esa lista.
+
+## Cosas que confunden si no te las cuentan
+
+- **`/salud` puede decir «degradado» por un desfase de reloj** entre Railway y
+  Supabase (`JWT issued at future`). Pasó el 04/09 y se arregló solo en dos
+  minutos. Si aparece y se va, es eso; si se queda, ya no.
+- **El destilador cose trozos que no son contiguos** y los pega con `...`. Por
+  eso buscar una tirada larga de palabras en el vídeo original no encuentra
+  nada aunque el texto sea suyo.
+- **Dos transcripciones del mismo audio no coinciden palabra por palabra.** La
+  destilación usó Whisper y Supadata devuelve los subtítulos de YouTube; por eso
+  se compara por solape de trigramas y no al pie de la letra.
+
 ---
 
 ## Qué es esto
@@ -281,57 +360,3 @@ npm run prueba                   # MCP de punta a punta contra producción
 Y si tocaste el camino de búsqueda, `npm run evaluar` — cuesta céntimos y es la
 única forma de saber que no bajaste la calidad.
 
----
-
-# Dónde se quedó todo el 04/09/2026
-
-> Añadido para que una sesión que llegue nueva —o desde el móvil— sepa el estado
-> sin que Cristian tenga que contarlo otra vez.
-
-## Lo que Cristian está haciendo ahora
-
-**La prueba de punta a punta**, `docs/prueba-de-punta-a-punta.md`. Compra real,
-correos reales, conexión real. Va soltando lo que no cuadra según lo encuentra;
-la forma de trabajar es arreglarlo en el momento y desplegar.
-
-**El paso 3 es el que importa**: pedir el acceso en el ordenador, abrir el
-correo en el MÓVIL y teclear el código en el ordenador. Es el recorrido que ha
-fallado dos veces hoy, cada vez por un motivo distinto.
-
-## Lo cerrado hoy, para no volver a mirarlo
-
-- **Entrar con código de seis cifras** en vez de enlace. El enlace fallaba por
-  construcción: el correo suena en el móvil y se abre ahí. Y la caja del código
-  ahora sobrevive a recargar la página, que fue el segundo fallo.
-- **Portal de cliente de Stripe** en `/api/mi` como `facturacion.portal_url`.
-  Cancelar, cambiar tarjeta y facturas. En español (`locale`), y el panel
-  aguanta que llegue `null`.
-- **Las bajas por `cancel_at`**: ver `src/pagos/cancelacion.ts`. Un fallo que no
-  rompía nada y por eso era peor.
-- **Impago en equipo**: se avisa a todos, sin el motivo, y solo en el primer
-  intento.
-- **Ocho fichas mal atribuidas**, corregidas en la base.
-- **`conexiones` en `/api/mi`**: desde dónde se usa cada cuenta. Sin botón de
-  revocar una sola, porque Supabase no lo permite — está explicado en el tipo.
-
-## Lo que sigue abierto, por orden
-
-1. **Las 91 fichas sin enlace.** Bloqueado a propósito: hay que preguntarle a
-   Alfonso y Cristian qué vídeos entregaron. El canal tiene 644 y barrerlo son
-   64 horas y seis veces la cuota. El emparejador ya está hecho y medido —
-   `scripts/recuperar-enlaces.ts` y `docs/fichas-sin-enlace.md`.
-2. **`/pago/listo` debe llevar el wizard entero**, reutilizando el componente de
-   `/tutorial`, no una copia. Es de la sesión de la web.
-3. **`pasar_a_anual` está vivo pero escondido**: factura en el acto y falta
-   confirmar que el importe cobrado es el que anuncia la pantalla.
-4. **El límite de 4 conexiones, sin activar** hasta que haya uso real. El
-   razonamiento está en `docs/pendiente.md`.
-5. **`alta_admin` / `baja_admin`** no existen.
-6. **El PDF de tareas de founder**, cuando no quede nada de desarrollo que pueda
-   cambiar esa lista.
-
-## Cómo se trabaja aquí, en una línea
-
-Nada se da por hecho: se comprueba contra producción o contra la base. Los tests
-se prueban rompiendo el código a ver si fallan — hoy eso cazó dos tests que no
-medían nada. Y `git push` a `main` despliega.
