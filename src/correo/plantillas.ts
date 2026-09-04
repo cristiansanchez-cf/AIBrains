@@ -129,8 +129,27 @@ ${config.correo.urlTutorial ? `<p style="margin:0 0 8px"><a href="${config.corre
  * Stripe y dos correos con cifras distintas es cuestión de tiempo. Aquí van
  * instrucciones.
  */
+/**
+ * El correo de despues de comprar.
+ *
+ * LO PRIMERO ES EL BOTON AL TUTORIAL, Y ESO CAMBIO EL 04/09/2026. Antes el
+ * correo empezaba con las dos direcciones del conector y dejaba el paso a paso
+ * al final, en texto subrayado. Cristian lo recibio de verdad y dijo lo que
+ * habia que oir: "no se ve bien lo de paso a paso". Tenia razon -- lo unico que
+ * la mayoria necesita es que alguien le lleve de la mano, y estaba puesto como
+ * si fuera una nota al pie.
+ *
+ * LAS DIRECCIONES SE QUEDAN, PERO DEBAJO. Quien ya sabe lo que hace quiere
+ * copiar y pegar sin salir del correo, y quitarselas seria obligarle a un
+ * viaje de mas. Lo que NO se hace es explicar aqui los pasos de conexion: un
+ * correo no se puede corregir cuando Claude mueva un boton, y una pagina si.
+ *
+ * SI NO HAY TUTORIAL, las direcciones suben a primer plano solas. El enlace
+ * solo aparece cuando apunta a algo que existe.
+ */
 export function compraConfirmada(para: string, esEquipo: boolean, asientos: number): Plantilla {
   const { claude, chatgpt } = conector();
+  const tutorial = config.correo.urlTutorial;
 
   const paraEquipo = esEquipo
     ? `\nTIENES ${asientos} ASIENTOS\n\n` +
@@ -145,17 +164,14 @@ Le cuentas la situación que tienes delante -"el cliente lleva dos semanas sin
 contestarme"- y te devuelve la técnica que aplica, por qué funciona, y el vídeo
 del formador del que sale para que puedas comprobarlo.
 
-CÓMO CONECTARLO
+${tutorial ? `CÓMO CONECTARLO, PASO A PASO CON IMÁGENES\n  ${tutorial}\n\nSon dos minutos. Está explicado para Claude, ChatGPT y Gemini.\n` : ""}
+LAS DIRECCIONES, SI LAS QUIERES A MANO
 
-En Claude: añade un conector con esta dirección
-  ${claude}
-
-En ChatGPT: es OTRA dirección, no vale la de arriba
-  ${chatgpt}
+Claude:  ${claude}
+ChatGPT: ${chatgpt}   (es OTRA, no vale la de arriba)
 
 Entra con ESTE correo: ${para}. El acceso va asociado a esta dirección.
-
-${config.correo.urlTutorial ? `Paso a paso con imágenes: ${config.correo.urlTutorial}\n` : ""}${paraEquipo}
+${paraEquipo}
 El recibo te lo manda Stripe por separado.`;
 
   return {
@@ -163,13 +179,20 @@ El recibo te lo manda Stripe por separado.`;
     texto,
     html: envolver(
       esEquipo ? "Ya tenéis el Cerebro de Ventas" : "Ya tienes el Cerebro de Ventas",
-      `<p style="margin:0 0 24px">Le cuentas la situación que tienes delante —<em>«el cliente lleva dos semanas sin contestarme»</em>— y te devuelve la técnica que aplica, por qué funciona, y el vídeo del formador del que sale para que puedas comprobarlo.</p>
+      `<p style="margin:0 0 28px">Le cuentas la situación que tienes delante —<em>«el cliente lleva dos semanas sin contestarme»</em>— y te devuelve la técnica que aplica, por qué funciona, y el vídeo del formador del que sale para que puedas comprobarlo.</p>
 
-<h2 style="margin:0 0 12px;font-size:15px">Cómo conectarlo</h2>
-<p style="margin:0 0 8px">En <strong>Claude</strong>:</p>
-<p style="margin:0 0 20px;padding:12px;background:#f5f3f0;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">${claude}</p>
-<p style="margin:0 0 8px">En <strong>ChatGPT</strong> es <strong>otra dirección distinta</strong>:</p>
-<p style="margin:0 0 24px;padding:12px;background:#f5f3f0;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">${chatgpt}</p>
+${
+  tutorial
+    ? `<p style="margin:0 0 10px"><a href="${tutorial}" style="display:inline-block;padding:14px 26px;background:#1a1a1a;color:#fff;border-radius:8px;text-decoration:none;font-size:16px;font-weight:600">Cómo conectarlo, paso a paso</a></p>
+<p style="margin:0 0 30px;font-size:14px;color:#6b6560">Dos minutos, con imágenes. Está para Claude, ChatGPT y Gemini.</p>`
+    : ""
+}
+
+<h2 style="margin:0 0 12px;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:#8a8580">Las direcciones, si las quieres a mano</h2>
+<p style="margin:0 0 6px;font-size:13px;color:#6b6560">Claude</p>
+<p style="margin:0 0 16px;padding:11px;background:#f5f3f0;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">${claude}</p>
+<p style="margin:0 0 6px;font-size:13px;color:#6b6560">ChatGPT — es <strong>otra distinta</strong></p>
+<p style="margin:0 0 24px;padding:11px;background:#f5f3f0;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">${chatgpt}</p>
 
 <p style="margin:0 0 24px;padding:14px;background:#fff8e6;border-radius:8px;font-size:14px">Entra con <strong>${para}</strong>. El acceso va asociado a esta dirección.</p>
 
@@ -179,25 +202,11 @@ ${
 <p style="margin:0 0 24px;font-size:14px">Uno es tuyo, porque todavía no has invitado a nadie. Puedes cedérselo a otra persona y quedarte solo como administrador. Los demás se reparten desde tu cuenta, y cada persona recibe su propio aviso.</p>`
     : ""
 }
-
-${config.correo.urlTutorial ? `<p style="margin:0 0 8px"><a href="${config.correo.urlTutorial}" style="color:#1a1a1a">Paso a paso con imágenes →</a></p>` : ""}
-<p style="margin:24px 0 0;font-size:13px;color:#6b6560">El recibo te lo manda Stripe por separado.</p>`,
+<p style="margin:0;font-size:13px;color:#8a8580">El recibo te lo manda Stripe por separado.</p>`,
     ),
   };
 }
 
-/**
- * Cancelada, pero con acceso hasta el final del periodo pagado.
- *
- * ES EL CORREO QUE MÁS RINDE POR LÍNEA DE CÓDIGO, y no por retener a nadie:
- * quien cancela normalmente **cree que ha perdido el acceso ese mismo día** y
- * deja de usarlo. Ha pagado un mes y usa dos semanas. Decirle la fecha exacta
- * le devuelve lo que ya es suyo, y de paso es el único momento en que
- * reactivar tiene sentido para él.
- *
- * NO INTENTA RETENER. Sin descuento, sin "¿seguro?", sin encuesta. Quien acaba
- * de cancelar no quiere que le convenzan; quiere saber qué pasa ahora.
- */
 export function suscripcionCancelada(para: string, finISO: string | null): Plantilla {
   const fin = finISO ? comoFecha(finISO) : null;
 
