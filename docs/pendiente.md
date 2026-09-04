@@ -7,9 +7,24 @@
 ## En marcha ahora mismo
 
 **La lista de conexiones abiertas, con botón de revocar.** Es lo previo al
-límite de 4 clientes concurrentes que decidió Cristian: un límite que no se
-puede resolver solo es una llamada de soporte por cada usuario que lo toque.
-Falta decidir qué expone `/api/mi` y pasarle el contrato a la web.
+límite de 4 clientes concurrentes: un límite que no se puede resolver solo es
+una llamada de soporte por cada usuario que lo toque. Falta decidir qué expone
+`/api/mi` y pasarle el contrato a la web.
+
+**Por qué 4, y por qué todavía NO se activa.** El razonamiento de Cristian
+(03/09/2026): lo habitual es que una persona se quede con **un proveedor** y lo
+reparta entre sus dispositivos, porque tener «mis conversaciones» en un mismo
+sitio pesa mucho. Con eso, 4 deja hueco a portátil, sobremesa, móvil y tableta
+del mismo cliente, y sigue estorbando a quien reparte credenciales por una
+oficina — que es el agujero que esto tapa: comprar Individual a 10 € y usarlo
+entre cinco en vez de pagar los 36 € del mínimo de Equipo.
+
+Pero el número está elegido **a ojo, y hay que decirlo**: en todo el histórico
+hay 2 clientes distintos y 21 consultas, todas de pruebas internas. No hay con
+qué saber si 4 aprieta. Así que primero la lista, y el límite cuando haya
+semanas de uso real que lo respalden. Lo que NO vale es medir registros
+acumulados: seis registros OAuth de una sola persona son normales, cada cliente
+MCP hace el suyo. Se mide **concurrencia** — clientes distintos a la vez.
 
 **Simplificar los correos** para que digan lo mínimo y lleven al tutorial, en
 vez de explicar la conexión entera dentro. Un correo no se puede actualizar
