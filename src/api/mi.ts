@@ -83,6 +83,25 @@ export interface Organizacion {
   administradores: string[];
 }
 
+/**
+ * Una aplicacion desde la que esta persona ha consultado el cerebro.
+ *
+ * QUE ES UNA "CONEXION" AQUI, PORQUE NO ES OBVIO. Cada cliente MCP se registra
+ * por su cuenta contra nuestro OAuth, asi que una sola persona genera un
+ * registro por cada aplicacion Y por cada maquina: Claude en el portatil y
+ * Claude en el sobremesa son dos. Seis registros de una persona son normales.
+ * Por eso lo que se cuenta aqui NO son registros, sino aplicaciones que han
+ * consultado de verdad, con cuando fue la ultima vez.
+ */
+export interface Conexion {
+  id: string;
+  /** "Claude", "ChatGPT"... el nombre con el que la aplicacion se registro. */
+  nombre: string;
+  /** ISO. La ultima consulta hecha desde ahi. */
+  ultima_vez: string;
+  consultas: number;
+}
+
 export interface Panel {
   email: string;
   /** 'individual', 'equipo' o null si no tiene nada contratado. */
@@ -97,6 +116,22 @@ export interface Panel {
   conector: { claude: string; chatgpt: string };
   facturacion: Facturacion | null;
   organizacion: Organizacion | null;
+  /**
+   * Desde donde se esta usando esta cuenta. Vacio si todavia no se ha usado.
+   *
+   * NO HAY BOTON DE REVOCAR UNA SOLA, y no es un olvido: Supabase no expone
+   * ninguna forma de retirarle el permiso a UN cliente de UN usuario. Su API de
+   * administracion deja listar y borrar clientes OAuth, pero borrar uno se lo
+   * quita a TODO EL MUNDO, no a esta persona. Lo unico honrado que puede hacer
+   * el panel es "cerrar sesion en todos los dispositivos", y eso lo tiene que
+   * hacer el navegador con la sesion del propio usuario -- el servidor no tiene
+   * su token y no puede.
+   *
+   * Asi que esto es, hoy, para MIRAR: ver que hay algo conectado que no
+   * reconoces es la mitad del valor, y la otra mitad se resuelve cerrando todo
+   * y volviendo a conectar lo que quieras.
+   */
+  conexiones: Conexion[];
 }
 
 const SIN_FACTURACION: Facturacion = {
@@ -225,6 +260,55 @@ async function cerebrosDe(userId: string, email: string): Promise<CerebroContrat
   );
 }
 
+/**
+ * Desde que aplicaciones ha consultado esta persona, y cuando fue la ultima vez.
+ *
+ * SALE DE LAS CONSULTAS Y NO DEL REGISTRO DE CLIENTES, a proposito. En el
+ * registro hay diez clientes "Claude" porque cada conexion crea el suyo, y la
+ * mayoria no se han usado nunca. Lo que le interesa a una persona no es cuantas
+ * veces se registro algo, sino desde donde se esta usando su cuenta.
+ *
+ * El nombre se pregunta uno a uno y no listando todos los clientes: la lista
+ * crece con cada conexion de cada usuario del sistema, y aqui hacen falta como
+ * mucho un punado.
+ */
+async function conexionesDe(userId: string): Promise<Conexion[]> {
+  const { data, error } = await supabase
+    .from("consultas")
+    .select("client_id, cuando")
+    .eq("user_id", userId)
+    .not("client_id", "is", null)
+    .order("cuando", { ascending: false })
+    .limit(500);
+  if (error || !data?.length) return [];
+
+  const porCliente = new Map<string, { ultima: string; consultas: number }>();
+  for (const fila of data as Array<{ client_id: string; cuando: string }>) {
+    const ya = porCliente.get(fila.client_id);
+    if (ya) ya.consultas++;
+    // Vienen ordenadas de mas nueva a mas vieja: la primera que se ve es la ultima.
+    else porCliente.set(fila.client_id, { ultima: fila.cuando, consultas: 1 });
+  }
+
+  const oauth = (supabase.auth as unknown as {
+    admin: { oauth: { getClient: (id: string) => Promise<{ data: { client_name?: string } | null }> } };
+  }).admin.oauth;
+
+  return Promise.all(
+    [...porCliente.entries()].map(async ([id, uso]) => {
+      let nombre = "Aplicacion desconocida";
+      try {
+        const { data: cliente } = await oauth.getClient(id);
+        if (cliente?.client_name) nombre = cliente.client_name;
+      } catch {
+        // Si no se puede leer el nombre, la fila sigue valiendo: lo que importa
+        // es que hay algo conectado y cuando se uso.
+      }
+      return { id, nombre, ultima_vez: uso.ultima, consultas: uso.consultas };
+    }),
+  );
+}
+
 export async function panelDelUsuario(userId: string, email: string): Promise<Panel> {
   const correo = normalizarEmail(email);
 
@@ -301,6 +385,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
       cerebros: await cerebrosDe(userId, correo),
       conector,
       facturacion,
+      conexiones: await conexionesDe(userId),
       organizacion: {
         id: orgId,
         nombre: (org?.nombre as string) ?? "",
@@ -349,6 +434,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
       cerebros: [],
       conector,
       facturacion: null,
+      conexiones: await conexionesDe(userId),
       organizacion: null,
     };
   }
@@ -370,6 +456,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
     cerebros: await cerebrosDe(userId, correo),
     conector,
     facturacion,
+    conexiones: await conexionesDe(userId),
     organizacion: null,
   };
 }
