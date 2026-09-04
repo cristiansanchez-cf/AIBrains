@@ -280,3 +280,58 @@ npm run prueba                   # MCP de punta a punta contra producción
 
 Y si tocaste el camino de búsqueda, `npm run evaluar` — cuesta céntimos y es la
 única forma de saber que no bajaste la calidad.
+
+---
+
+# Dónde se quedó todo el 04/09/2026
+
+> Añadido para que una sesión que llegue nueva —o desde el móvil— sepa el estado
+> sin que Cristian tenga que contarlo otra vez.
+
+## Lo que Cristian está haciendo ahora
+
+**La prueba de punta a punta**, `docs/prueba-de-punta-a-punta.md`. Compra real,
+correos reales, conexión real. Va soltando lo que no cuadra según lo encuentra;
+la forma de trabajar es arreglarlo en el momento y desplegar.
+
+**El paso 3 es el que importa**: pedir el acceso en el ordenador, abrir el
+correo en el MÓVIL y teclear el código en el ordenador. Es el recorrido que ha
+fallado dos veces hoy, cada vez por un motivo distinto.
+
+## Lo cerrado hoy, para no volver a mirarlo
+
+- **Entrar con código de seis cifras** en vez de enlace. El enlace fallaba por
+  construcción: el correo suena en el móvil y se abre ahí. Y la caja del código
+  ahora sobrevive a recargar la página, que fue el segundo fallo.
+- **Portal de cliente de Stripe** en `/api/mi` como `facturacion.portal_url`.
+  Cancelar, cambiar tarjeta y facturas. En español (`locale`), y el panel
+  aguanta que llegue `null`.
+- **Las bajas por `cancel_at`**: ver `src/pagos/cancelacion.ts`. Un fallo que no
+  rompía nada y por eso era peor.
+- **Impago en equipo**: se avisa a todos, sin el motivo, y solo en el primer
+  intento.
+- **Ocho fichas mal atribuidas**, corregidas en la base.
+- **`conexiones` en `/api/mi`**: desde dónde se usa cada cuenta. Sin botón de
+  revocar una sola, porque Supabase no lo permite — está explicado en el tipo.
+
+## Lo que sigue abierto, por orden
+
+1. **Las 91 fichas sin enlace.** Bloqueado a propósito: hay que preguntarle a
+   Alfonso y Cristian qué vídeos entregaron. El canal tiene 644 y barrerlo son
+   64 horas y seis veces la cuota. El emparejador ya está hecho y medido —
+   `scripts/recuperar-enlaces.ts` y `docs/fichas-sin-enlace.md`.
+2. **`/pago/listo` debe llevar el wizard entero**, reutilizando el componente de
+   `/tutorial`, no una copia. Es de la sesión de la web.
+3. **`pasar_a_anual` está vivo pero escondido**: factura en el acto y falta
+   confirmar que el importe cobrado es el que anuncia la pantalla.
+4. **El límite de 4 conexiones, sin activar** hasta que haya uso real. El
+   razonamiento está en `docs/pendiente.md`.
+5. **`alta_admin` / `baja_admin`** no existen.
+6. **El PDF de tareas de founder**, cuando no quede nada de desarrollo que pueda
+   cambiar esa lista.
+
+## Cómo se trabaja aquí, en una línea
+
+Nada se da por hecho: se comprueba contra producción o contra la base. Los tests
+se prueban rompiendo el código a ver si fallan — hoy eso cazó dos tests que no
+medían nada. Y `git push` a `main` despliega.
