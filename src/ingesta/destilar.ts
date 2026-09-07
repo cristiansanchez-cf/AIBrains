@@ -184,28 +184,51 @@ Reglas que no se negocian:
 const MAXIMO_POR_TANDA = 60_000;
 
 /**
- * Parte por PARRAFOS, no por caracteres a pelo.
+ * Parte la transcripcion en tandas que quepan, sin romper ideas.
  *
- * Cortar a mitad de frase deja las dos tandas con media idea y el modelo
- * destila mal las dos. Si un parrafo suelto pasara del maximo -- no ocurre con
- * transcripciones reales, pero puede -- se manda entero: mejor una tanda larga
- * que una frase partida.
+ * EN CASCADA, Y CADA ESCALON EXISTE POR UN MOTIVO. Primero parrafos, que es el
+ * corte natural. Pero LAS TRANSCRIPCIONES REALES NO TIENEN PARRAFOS: la de 150
+ * minutos que provoco esto son 155.000 caracteres con CERO saltos de linea y
+ * 1.510 finales de frase. La primera version solo miraba parrafos, no
+ * encontraba ninguno, devolvia el texto entero y la destilacion se cortaba
+ * igual -- el troceado no llegaba ni a activarse.
+ *
+ * Por eso hay segundo escalon: frases. Y un tercero a pelo por caracteres,
+ * para un texto sin puntuacion ninguna, donde partir mal es mejor que no
+ * destilar nada.
  */
 export function trocear(texto: string, maximo: number): string[] {
   if (texto.length <= maximo) return [texto];
 
-  const trozos: string[] = [];
-  let actual = "";
-  for (const parrafo of texto.split(/\n\s*\n/)) {
-    if (actual && actual.length + parrafo.length > maximo) {
-      trozos.push(actual);
-      actual = parrafo;
-    } else {
-      actual = actual ? `${actual}\n\n${parrafo}` : parrafo;
+  const juntar = (piezas: string[], union: string): string[] => {
+    const trozos: string[] = [];
+    let actual = "";
+    for (const pieza of piezas) {
+      if (actual && actual.length + pieza.length + union.length > maximo) {
+        trozos.push(actual);
+        actual = pieza;
+      } else {
+        actual = actual ? actual + union + pieza : pieza;
+      }
     }
-  }
-  if (actual) trozos.push(actual);
-  return trozos;
+    if (actual) trozos.push(actual);
+    return trozos;
+  };
+
+  // 1. Parrafos.
+  let trozos = juntar(texto.split(/\n\s*\n/), "\n\n");
+
+  // 2. Los que sigan sin caber, por frases.
+  trozos = trozos.flatMap((t) =>
+    t.length <= maximo ? [t] : juntar(t.split(/(?<=[.!?])\s+/), " "),
+  );
+
+  // 3. Y si aun asi no cabe, a pelo. Un texto sin un solo punto en 60.000
+  //    caracteres no existe en la practica, pero si llegara, cortarlo mal es
+  //    preferible a devolverlo entero y que falle la destilacion.
+  return trozos.flatMap((t) =>
+    t.length <= maximo ? [t] : (t.match(new RegExp(`.{1,${maximo}}`, "gs")) ?? [t]),
+  );
 }
 
 /**

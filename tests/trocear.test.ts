@@ -38,8 +38,22 @@ describe("trocear una transcripción larga", () => {
     for (const t of trocear(texto, 900)) expect(t.trimStart()).toMatch(/^Parrafo \d+\./);
   });
 
-  it("un párrafo enorme se manda entero antes que partirlo", () => {
-    const gigante = "palabra ".repeat(500);
-    expect(trocear(gigante, 100)).toEqual([gigante]);
+  it("una transcripción SIN saltos de línea también se parte", () => {
+    // EL CASO REAL, y el que se me escapo: la transcripcion de 150 minutos son
+    // 155.000 caracteres con CERO saltos de linea y 1.510 finales de frase. Mis
+    // fixtures tenian parrafos y las transcripciones de verdad no, asi que el
+    // test pasaba y la destilacion seguia cortandose.
+    const seguido = Array.from({ length: 200 }, (_, i) => `Esta es la frase numero ${i} del video.`).join(" ");
+    expect(seguido).not.toContain("\n");
+    const tandas = trocear(seguido, 1_000);
+    expect(tandas.length).toBeGreaterThan(1);
+    for (const t of tandas) expect(t.length).toBeLessThanOrEqual(1_000);
+  });
+
+  it("aguanta un texto sin ni un punto: mal partido antes que sin destilar", () => {
+    const sinPuntuacion = "palabra ".repeat(500);
+    const tandas = trocear(sinPuntuacion, 100);
+    expect(tandas.length).toBeGreaterThan(1);
+    for (const t of tandas) expect(t.length).toBeLessThanOrEqual(100);
   });
 });
