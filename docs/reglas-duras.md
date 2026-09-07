@@ -235,3 +235,46 @@ Todo lo demás. La estética, la estructura del código, los nombres, qué frame
 en qué orden se hacen las cosas. Ahí no hace falta pedir permiso a nadie.
 
 Estas once existen porque todas costaron algo la primera vez.
+
+---
+
+## §12 · Un test que pasa con el código roto no mide nada
+
+Añadida el 07/09/2026 después de que pasara **tres veces en un día**.
+
+**La regla:** después de escribir un test, rómpelo a propósito por donde debería
+fallar y comprueba que falla. Si sigue en verde, el test no mide lo que dices
+que mide, y lo peor no es que no sirva: es que da permiso para desplegar.
+
+Las tres veces de ese día, todas con los tests en verde:
+
+- **El troceado de transcripciones.** El test cortaba texto con párrafos; las
+  transcripciones reales tienen **cero saltos de línea**. El troceado no llegaba
+  ni a activarse y la destilación seguía cortándose igual.
+- **El mismo test, segunda versión.** Comprobaba solo el tamaño de las tandas, y
+  el corte a pelo también produce tandas que caben. Quitar el corte por frases
+  no rompía nada.
+- **El aviso de cancelación.** Faltaba el caso de que Stripe no mande
+  `previous_attributes`; sin él, cambiar de tarjeta te habría avisado otra vez
+  de que te has dado de baja.
+
+**El patrón de las tres:** el fixture se parecía a lo que yo imaginaba, no a lo
+que llega de verdad. Cuando puedas, construye el caso de prueba **con material
+real** —una transcripción de verdad, un evento de Stripe de verdad— aunque sea
+recortado.
+
+---
+
+## §13 · `--seco` no es gratis, y ningún ensayo lo es por defecto
+
+Añadida el 07/09/2026.
+
+`npm run ingerir -- --seco` **transcribe y destila igual**: lo único que se salta
+es escribir en la base. Se le dijo a Cristian que era gratis y lanzó ocho vídeos
+creyendo que no gastaba.
+
+**La regla, para cualquier ensayo que se añada:** si una opción se llama "en
+seco", "dry-run" o similar, di explícitamente **qué gasta y qué no** antes de
+que alguien la lance. Y cuando una comprobación pueda hacerse antes de gastar,
+va antes: la guarda de duplicados por URL se subió a antes de transcribir por
+esto mismo, y ahora un vídeo ya procesado se rechaza sin costar una llamada.
