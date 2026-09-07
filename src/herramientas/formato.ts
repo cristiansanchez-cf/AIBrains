@@ -182,7 +182,7 @@ export function bloqueDeFuentes(fichas: FichaConCreador[]): string {
   });
 
   const lineas = [...porFuente.values()].map((f) => {
-    const cuales = f.indices.length === 1 ? `ficha ${f.indices[0]}` : `fichas ${f.indices.join(", ")}`;
+    const cuales = f.indices.length === 1 ? `técnica ${f.indices[0]}` : `técnicas ${f.indices.join(", ")}`;
 
     if (!f.url) return `- ${f.creador} — _sin enlace al original_ (${cuales})`;
     if (!f.exacta) return `- ${f.creador} — ${f.url} — _perfil del creador; no tenemos el vídeo exacto_ (${cuales})`;

@@ -31,7 +31,7 @@ describe("agrupar las fuentes", () => {
     const salida = bloqueDeFuentes([ficha({ id: 1 }), ficha({ id: 2 }), ficha({ id: 3 })]);
     expect(salida.split("\n").filter((l) => l.startsWith("- "))).toHaveLength(1);
     // Y se dice cuáles, para que se pueda comprobar cada una.
-    expect(salida).toContain("fichas 1, 2, 3");
+    expect(salida).toContain("técnicas 1, 2, 3");
   });
 
   it("vídeos distintos siguen siendo líneas distintas", () => {

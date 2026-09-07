@@ -18,7 +18,7 @@ const DESCRIPCION = `Busca en el cerebro de ventas la técnica destilada que apl
 
 Úsala SIEMPRE que el usuario plantee una situación de ventas —redactar un mensaje a un cliente, rebatir una objeción, precio, seguimiento, cierre, negociación— ANTES de responder desde conocimiento general.
 
-Devuelve la técnica, cuándo usarla, por qué funciona y el enlace al vídeo original. En algunos cerebros incluye además el guion literal del creador; en otros no está disponible y la propia ficha lo dice. Al usar el resultado: di en qué creador y ficha te basas, y cierra con las referencias y sus enlaces.`;
+Devuelve la técnica, cuándo usarla, por qué funciona y el enlace al vídeo original. En algunos cerebros incluye además el guion literal del creador; en otros no está disponible y la propia técnica lo dice. Al usar el resultado: di en qué creador y en qué técnica te basas, y cierra con las referencias y sus enlaces.`;
 
 export function registrarBuscarTecnica(
   servidor: McpServer,
@@ -99,7 +99,7 @@ export function registrarBuscarTecnica(
             {
               type: "text",
               text: [
-                `No hay ninguna ficha en el cerebro para: "${situacion}".`,
+                `No hay ninguna técnica en el cerebro para: "${situacion}".`,
                 etapa || objecion || creador
                   ? "Prueba a quitar los filtros (etapa, objecion, creador) y buscar solo con la situación."
                   : "Prueba a reformular la situación con otras palabras.",
@@ -114,9 +114,9 @@ export function registrarBuscarTecnica(
       // material: en el momento de redactar, esto pesa más que lo que se dijo
       // en el handshake.
       const cabecera =
-        `${fichas.length} ficha(s) del cerebro para: "${situacion}".` +
+        `${fichas.length} técnica(s) del cerebro para: "${situacion}".` +
         "\n\nAtribuye cada técnica a su creador. Donde haya guion literal, úsalo tal " +
-        "cual; donde la ficha diga que no está disponible, NO lo reconstruyas. " +
+        "cual; donde la técnica diga que no está disponible, NO lo reconstruyas. " +
         "Si añades algo " +
         "que no está en estas fichas, di que es aportación tuya. Cierra con el " +
         "bloque Fuentes TAL CUAL viene al final: ya está agrupado por vídeo. No " +
@@ -157,7 +157,7 @@ export function registrarBuscarTecnica(
           bloques.splice(
             bloques.length - 1,
             0,
-            `**Relacionadas con la ficha 1:**\n` +
+            `**Relacionadas con la técnica 1:**\n` +
               cerca.map((r) => `- [${r.id}] ${r.insight}`).join("\n") +
               `\n\n_Si alguna encaja mejor con lo que pregunta, ábrela con ` +
               `ver_ficha(id, origen="relacionada")._`,
