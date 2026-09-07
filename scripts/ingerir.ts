@@ -130,6 +130,31 @@ async function main(): Promise<void> {
     console.log(`--rehacer: se vuelve a procesar.`);
   }
 
+  // TAMBIÉN ANTES DE TRANSCRIBIR, y por el mismo motivo. Esta comprobación va
+  // por `fuente_url` y no por la huella, porque la huella no existe hasta haber
+  // transcrito — es decir, hasta haber pagado. En este corpus es LA que sirve:
+  // 402 de las 407 fichas vinieron migradas de Notion y no tienen huella, así
+  // que la de abajo no casaría con ninguna y re-destilar habría dejado las
+  // viejas flacas conviviendo con las nuevas.
+  const { data: previasPorUrl } = url
+    ? await supabase
+        .from("fichas")
+        .select("id, estado")
+        .eq("fuente_url", url)
+        .neq("estado", "descartada")
+    : { data: null };
+  const cuantasPorUrl = previasPorUrl?.length ?? 0;
+
+  if (cuantasPorUrl > 0 && !process.argv.includes("--rehacer")) {
+    console.log(`\nESTE VÍDEO YA TIENE ${cuantasPorUrl} ficha(s) vivas.`);
+    console.log(
+      `No se transcribe ni se destila: destilar otra vez daría un reparto\n` +
+        `distinto y quedarían duplicadas. Para rehacerlo igualmente (las\n` +
+        `anteriores pasan a descartadas):  --rehacer`,
+    );
+    return;
+  }
+
   const transcripcion = (await obtenerTranscripcion(url)).trim();
   if (transcripcion.length < 200) {
     throw new Error(`La transcripción tiene ${transcripcion.length} caracteres. ¿Se leyó bien?`);
@@ -241,15 +266,35 @@ async function main(): Promise<void> {
 
   // Se descarta el lote anterior justo antes de insertar el nuevo, para no
   // dejar el material sin fichas si la destilación acabara fallando.
-  if ((yaHabia ?? 0) > 0) {
-    const { data: previo, error: errorPrevio } = await supabase
-      .rpc("descartar_ingesta_anterior", { hash: huella })
-      .single();
+  if ((yaHabia ?? 0) > 0 || cuantasPorUrl > 0) {
+    let descartadas = 0;
+    let publicadas = 0;
 
-    if (errorPrevio) throw new Error(`Al descartar el lote anterior: ${errorPrevio.message}`);
+    if ((yaHabia ?? 0) > 0) {
+      const { data: previo, error: errorPrevio } = await supabase
+        .rpc("descartar_ingesta_anterior", { hash: huella })
+        .single();
+      if (errorPrevio) throw new Error(`Al descartar el lote anterior: ${errorPrevio.message}`);
+      const p = previo as { descartadas: number; habia_publicadas: number };
+      descartadas += p.descartadas;
+      publicadas += p.habia_publicadas;
+    }
 
-    const p = previo as { descartadas: number; habia_publicadas: number };
-    console.log(`\n${p.descartadas} ficha(s) anteriores descartadas.`);
+    // Las que solo se reconocen por la URL, que en este corpus son casi todas.
+    if (cuantasPorUrl > 0 && url) {
+      publicadas += (previasPorUrl ?? []).filter((f) => f.estado === "publicada").length;
+      const { data: tocadas, error: falloUrl } = await supabase
+        .from("fichas")
+        .update({ estado: "descartada" })
+        .eq("fuente_url", url)
+        .neq("estado", "descartada")
+        .select("id");
+      if (falloUrl) throw new Error(`Al descartar las anteriores de ${url}: ${falloUrl.message}`);
+      descartadas += tocadas?.length ?? 0;
+    }
+
+    console.log(`\n${descartadas} ficha(s) anteriores descartadas.`);
+    const p = { habia_publicadas: publicadas };
     if (p.habia_publicadas > 0) {
       console.log(
         `  OJO: ${p.habia_publicadas} de ellas estaban PUBLICADAS y revisadas.\n` +

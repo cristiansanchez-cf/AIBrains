@@ -23,7 +23,7 @@
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { supabase } from "../src/db/supabase.js";
-import { registrarFuente, type Fuente } from "../src/ingesta/fuentes.js";
+import { marcarFuente, registrarFuente, type Fuente } from "../src/ingesta/fuentes.js";
 
 function argumento(nombre: string): string | undefined {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -133,6 +133,7 @@ async function procesar(): Promise<void> {
 
   console.log(`Procesando ${pendientes.length} de ${max} como máximo${seco ? " (EN SECO)" : ""}.\n`);
   let bien = 0;
+  const fallos: string[] = [];
   for (const [i, f] of pendientes.entries()) {
     const slug = slugs.get(f.creador_id);
     if (!slug) {
@@ -143,10 +144,28 @@ async function procesar(): Promise<void> {
     // EN SERIE, no en paralelo. Son llamadas caras a OpenAI y al servicio de
     // transcripcion: en paralelo se choca con los limites de peticiones y se
     // pierde el trabajo a medias, que es peor que tardar mas.
-    if (await ingerir(slug, f.url, seco)) bien++;
+    if (await ingerir(slug, f.url, seco)) {
+      bien++;
+      continue;
+    }
+    fallos.push(f.url);
+    // SE MARCA EL FALLO, o la cola reintenta lo mismo para siempre. Hoy los
+    // TikTok fallan todos: el extractor de yt-dlp esta roto rio arriba y no se
+    // arregla actualizando. Cada reintento es una llamada al servicio para
+    // acabar en el mismo 500. Marcado queda fuera y a la vista en `ver`, y se
+    // vuelve a poner pendiente a mano el dia que se arregle.
+    if (!seco) {
+      await marcarFuente(f.id, "sin_material", {
+        motivo: "la transcripción falló; ver el error de la ejecución",
+      });
+    }
   }
 
   console.log(`\n${bien} de ${pendientes.length} procesada(s) sin error.`);
+  if (fallos.length > 0) {
+    console.log(`\n${fallos.length} fallaron y quedan marcadas para no reintentarlas:`);
+    for (const u of fallos) console.log(`  ${u}`);
+  }
   if (!seco && bien > 0) {
     console.log(`\nLas fichas han entrado como BORRADOR y todavía no se sirven.`);
     console.log(`Revísalas con:  npm run revisar`);
