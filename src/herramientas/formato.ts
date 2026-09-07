@@ -136,3 +136,73 @@ export function urlDeLaFuente(ficha: FichaConCreador): string | null {
   const separador = ficha.fuente_url.includes("?") ? "&" : "?";
   return `${ficha.fuente_url}${separador}t=${segundo}`;
 }
+
+/**
+ * Las fuentes de una tanda de fichas, AGRUPADAS POR VÍDEO.
+ *
+ * POR QUÉ AGRUPADAS. Antes cada ficha aportaba su propia línea de bibliografía
+ * y el modelo las listaba todas al cerrar: nueve fichas eran nueve enlaces,
+ * repitiendo el mismo vídeo tres veces si tres técnicas salían de ahí. Se veía
+ * enorme y parecía que citábamos de más para aparentar rigor.
+ *
+ * Agrupado, esas nueve fichas son tres líneas. No se cita ni una fuente menos
+ * -- cada ficha sigue diciendo de dónde sale -- pero se cuenta una vez lo que
+ * es una vez.
+ *
+ * Y CAMBIA LO QUE SIGNIFICA REPETIR UN VÍDEO. Que tres técnicas distintas
+ * vengan del mismo episodio no es un defecto del cerebro: es que ese episodio
+ * es bueno. Suelto parecía que no teníamos más material; agrupado, y sobre todo
+ * el día que haya minutos, se lee como profundidad.
+ *
+ * NO TOCA QUÉ FICHAS SALEN. El orden lo decide la búsqueda y las mejores son
+ * las mejores, vengan de donde vengan. Esto es solo cómo se listan al final.
+ */
+export function bloqueDeFuentes(fichas: FichaConCreador[]): string {
+  /** clave del vídeo -> qué fichas salieron de él y en qué momentos. */
+  const porFuente = new Map<
+    string,
+    { creador: string; url: string | null; exacta: boolean; indices: number[]; momentos: number[] }
+  >();
+
+  fichas.forEach((ficha, i) => {
+    // Se agrupa por el vídeo, no por el enlace con minuto: dos fichas del mismo
+    // episodio en momentos distintos son UNA fuente citada dos veces.
+    const clave = ficha.fuente_url ?? ficha.creadores?.perfil_url ?? `sin-enlace-${ficha.id}`;
+    const ya = porFuente.get(clave);
+    const entrada = ya ?? {
+      creador: ficha.creadores?.nombre ?? "creador desconocido",
+      url: ficha.fuente_url ?? ficha.creadores?.perfil_url ?? null,
+      exacta: ficha.fuente_url != null,
+      indices: [],
+      momentos: [],
+    };
+    entrada.indices.push(i + 1);
+    if (ficha.fuente_timestamp != null) entrada.momentos.push(ficha.fuente_timestamp);
+    porFuente.set(clave, entrada);
+  });
+
+  const lineas = [...porFuente.values()].map((f) => {
+    const cuales = f.indices.length === 1 ? `ficha ${f.indices[0]}` : `fichas ${f.indices.join(", ")}`;
+
+    if (!f.url) return `- ${f.creador} — _sin enlace al original_ (${cuales})`;
+    if (!f.exacta) return `- ${f.creador} — ${f.url} — _perfil del creador; no tenemos el vídeo exacto_ (${cuales})`;
+
+    // Con minutos, el enlace lleva al primero y los demás se enumeran: es la
+    // diferencia entre "escúchate este podcast" y "está en el minuto 47".
+    if (f.momentos.length > 0) {
+      const orden = [...new Set(f.momentos)].sort((a, b) => a - b);
+      const separador = f.url.includes("?") ? "&" : "?";
+      return `- ${f.creador} — ${f.url}${separador}t=${orden[0]} — ${orden.map(comoMinuto).join(", ")} (${cuales})`;
+    }
+    return `- ${f.creador} — ${f.url} (${cuales})`;
+  });
+
+  return `**Fuentes:**\n${lineas.join("\n")}`;
+}
+
+/** 2730 segundos -> "45:30". El formato que entiende cualquiera. */
+function comoMinuto(segundos: number): string {
+  const m = Math.floor(segundos / 60);
+  const s = segundos % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}

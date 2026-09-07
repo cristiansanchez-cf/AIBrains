@@ -29,7 +29,11 @@ interface Caso {
 }
 
 async function main(): Promise<void> {
-  const muestra = Number(process.argv[2] ?? 120);
+  // TODAS las elegibles por defecto, no una muestra. Son ~255 y cada una cuesta
+  // un embedding: cuatro centesimas de centimo en total. Evaluar solo 120 dejaba
+  // sin probar nunca las fichas nuevas, que son las que mas se parecen entre si
+  // y donde la recuperacion mas sufre -- justo las que hay que vigilar.
+  const muestra = Number(process.argv[2] ?? 100000);
 
   const { data: creadores } = await supabase
     .from("creadores")
@@ -48,6 +52,14 @@ async function main(): Promise<void> {
     .in("creador_id", creadorIds)
     .not("script", "is", null)
     .not("embedding", "is", null)
+    // ORDEN EXPLICITO, Y ESTO NO ES COSMETICA. Sin `order`, Postgres devuelve
+    // el orden fisico de la tabla, que cambia solo: al actualizar una fila, su
+    // version nueva se escribe al final y la ventana de `limit` se desplaza. El
+    // 04/09/2026 corregi el enlace de ocho fichas y la muestra cambio sola --
+    // los suelos "cayeron" 9 puntos sin que nadie tocara la busqueda. Una
+    // medida que se mueve por si misma no vale como suelo: dispara alarmas
+    // falsas y, peor, puede tapar una caida de verdad compensandola.
+    .order("id")
     .limit(muestra);
 
   if (error) throw new Error(error.message);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { buscarFichas, creadoresDisponibles, fichasRelacionadas } from "../db/consultas.js";
-import { formatearFicha } from "./formato.js";
+import { bloqueDeFuentes, formatearFicha } from "./formato.js";
 import {
   FILTRO_DE_VOZ,
   momentoDeEjecucion,
@@ -111,8 +111,9 @@ export function registrarBuscarTecnica(
         "\n\nAtribuye cada técnica a su creador. Donde haya guion literal, úsalo tal " +
         "cual; donde la ficha diga que no está disponible, NO lo reconstruyas. " +
         "Si añades algo " +
-        "que no está en estas fichas, di que es aportación tuya. Cierra con los " +
-        "enlaces de la sección Fuente.";
+        "que no está en estas fichas, di que es aportación tuya. Cierra con el " +
+        "bloque Fuentes TAL CUAL viene al final: ya está agrupado por vídeo. No " +
+        "repitas un enlace por cada ficha.";
 
       // El filtro de voz va AL FINAL, detrás de las fichas: es una regla de
       // redacción y tiene que llegar en el momento de redactar, que es justo
@@ -129,6 +130,10 @@ export function registrarBuscarTecnica(
       const bloques = [
         cabecera,
         ...fichas.map((ficha, i) => formatearFicha(ficha, i + 1)),
+        // Agrupado por vídeo. Cada ficha sigue diciendo de dónde sale, pero la
+        // bibliografía de cierre cuenta una vez lo que es una vez: tres fichas
+        // del mismo episodio son una línea, no tres enlaces iguales.
+        bloqueDeFuentes(fichas),
         FILTRO_DE_VOZ,
       ];
 
