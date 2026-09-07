@@ -169,7 +169,72 @@ Reglas que no se negocian:
  * streaming: por encima de ~16k una petición sin stream se arriesga a agotar
  * el tiempo de espera del cliente HTTP.
  */
+/**
+ * Cuanta transcripcion se le da al modelo de una vez.
+ *
+ * NO ES UN LIMITE DE ENTRADA, ES DE SALIDA. Cabe muchisimo mas texto del que
+ * cabe respuesta: un video de 150 minutos (157.000 caracteres) dio 47 fichas,
+ * y 47 fichas rozan los 32.000 tokens de `max_tokens`. Rozar el limite es peor
+ * que pasarse, porque unas veces sale y otras no: la misma transcripcion
+ * destilo bien en un ensayo y se corto en la ejecucion de verdad.
+ *
+ * 60.000 caracteres dan del orden de 18 fichas, que es un tercio del techo. Se
+ * pierde poco troceando y se gana que no falle nunca.
+ */
+const MAXIMO_POR_TANDA = 60_000;
+
+/**
+ * Parte por PARRAFOS, no por caracteres a pelo.
+ *
+ * Cortar a mitad de frase deja las dos tandas con media idea y el modelo
+ * destila mal las dos. Si un parrafo suelto pasara del maximo -- no ocurre con
+ * transcripciones reales, pero puede -- se manda entero: mejor una tanda larga
+ * que una frase partida.
+ */
+export function trocear(texto: string, maximo: number): string[] {
+  if (texto.length <= maximo) return [texto];
+
+  const trozos: string[] = [];
+  let actual = "";
+  for (const parrafo of texto.split(/\n\s*\n/)) {
+    if (actual && actual.length + parrafo.length > maximo) {
+      trozos.push(actual);
+      actual = parrafo;
+    } else {
+      actual = actual ? `${actual}\n\n${parrafo}` : parrafo;
+    }
+  }
+  if (actual) trozos.push(actual);
+  return trozos;
+}
+
+/**
+ * Destila una transcripcion, troceandola si hace falta.
+ *
+ * Las tandas van EN SERIE. En paralelo se destila mas rapido pero se choca con
+ * los limites de peticiones justo en las transcripciones largas, que son las
+ * unicas que necesitan trocearse.
+ */
 export async function destilar(
+  transcripcion: string,
+  contexto?: { creador?: string; canal?: string; titulo?: string },
+): Promise<FichaDestilada[]> {
+  if (!config.anthropic.apiKey) throw new SinClaveDeAnthropic();
+
+  const tandas = trocear(transcripcion, MAXIMO_POR_TANDA);
+  if (tandas.length > 1) {
+    console.log(`  (transcripción larga: se destila en ${tandas.length} tandas)`);
+    const todas: FichaDestilada[] = [];
+    for (const [i, tanda] of tandas.entries()) {
+      console.log(`  tanda ${i + 1}/${tandas.length}…`);
+      todas.push(...(await destilarUna(tanda, contexto)));
+    }
+    return todas;
+  }
+  return destilarUna(transcripcion, contexto);
+}
+
+async function destilarUna(
   transcripcion: string,
   contexto?: { creador?: string; canal?: string; titulo?: string },
 ): Promise<FichaDestilada[]> {
