@@ -303,6 +303,44 @@ export interface FiltrosBusqueda {
  * calla el cliente MCP responde desde conocimiento general y se pierde la
  * cita, que es justo lo que se está pagando.
  */
+/**
+ * Los valores que EXISTEN de verdad en el corpus. Nada mas se puede filtrar.
+ *
+ * POR QUE ESTA ESCRITO AQUI Y NO SE PREGUNTA A LA BASE. Es una taxonomia
+ * cerrada que solo cambia cuando se destila con criterios nuevos; consultarla
+ * en cada busqueda seria un viaje de ida y vuelta por un dato que no cambia en
+ * meses. Si algun dia se amplia, se amplia aqui y en la descripcion de la
+ * herramienta, que tienen que decir lo mismo.
+ */
+export const ETAPAS = [
+  "Prospección", "Primer contacto", "Descubrimiento", "Pitch / Demo",
+  "Objeciones", "Negociación", "Cierre", "Seguimiento", "Mentalidad",
+] as const;
+
+export const OBJECIONES = [
+  "Precio", "Tiempo / me lo pienso", "Desconfianza", "No lo necesito",
+  "No decido yo", "Quiere comparar opciones", "Ya tengo proveedor",
+] as const;
+
+/**
+ * Traduce lo que manda el modelo al valor real, o lo tira si no existe.
+ *
+ * EL MODELO SE INVENTA ETIQUETAS, y durante un tiempo se las sugerimos
+ * nosotros: la descripcion de la herramienta ponia "propuesta" como ejemplo de
+ * etapa y esa etapa NO EXISTE. Tres consultas reales de una usuaria devolvieron
+ * CERO fichas por eso -- "una periodista no responde al primer email", que
+ * tiene 48 fichas que la responden. El filtro las mato todas en silencio.
+ *
+ * Un filtro que no se entiende se IGNORA, no se aplica a ciegas. Buscar sin
+ * filtrar por etapa devuelve algo util; filtrar por una etapa inexistente no
+ * devuelve nada y parece que el cerebro esta vacio.
+ */
+export function normalizar(valor: string | undefined, validos: readonly string[]): string | undefined {
+  if (!valor) return undefined;
+  const limpio = valor.trim().toLowerCase();
+  return validos.find((v) => v.toLowerCase() === limpio);
+}
+
 export async function buscarFichas(
   contexto: ContextoDeAcceso,
   filtros: FiltrosBusqueda,
@@ -351,15 +389,24 @@ export async function buscarFichas(
   }
 
   const ids = candidatos.map((c) => c.id);
+  // Se limpian ANTES de buscar: lo que no esta en la taxonomia no filtra.
+  const limpios: FiltrosBusqueda = {
+    ...filtros,
+    etapa: normalizar(filtros.etapa, ETAPAS),
+    objecion: normalizar(filtros.objecion, OBJECIONES),
+  };
   let degradada = false;
   let fichas: FichaConCreador[] = [];
+  /** Se guarda para poder reintentar sin filtros sin volver a pedirlo a OpenAI. */
+  let vectorUsado: number[] | null = null;
 
   if (embedding) {
     try {
       const { vector, error } = await embedding;
       if (error) throw error;
       if (!vector) throw new Error("OpenAI devolvió un embedding vacío");
-      fichas = await buscarPorSimilitud(ids, filtros, vector);
+      vectorUsado = vector;
+      fichas = await buscarPorSimilitud(ids, limpios, vector);
     } catch (error) {
       // Degradar, no caerse: una respuesta peor vale más que ninguna. Pero se
       // deja constancia, o el fallo se vuelve invisible y nadie lo arregla.
@@ -376,7 +423,18 @@ export async function buscarFichas(
     degradada = true;
   }
 
-  if (degradada) fichas = await buscarPorTexto(ids, filtros);
+  if (degradada) fichas = await buscarPorTexto(ids, limpios);
+
+  // RED DE SEGURIDAD. Aunque el valor sea valido, puede que ninguna ficha lo
+  // lleve: "Mentalidad" + "Ya tengo proveedor" puede no existir combinado. Una
+  // pregunta respondible no puede acabar en cero porque el modelo afinara de
+  // mas. Se reintenta sin filtros antes de rendirse.
+  if (fichas.length === 0 && (limpios.etapa || limpios.objecion)) {
+    const anchos: FiltrosBusqueda = { ...limpios, etapa: undefined, objecion: undefined };
+    fichas = vectorUsado
+      ? await buscarPorSimilitud(ids, anchos, vectorUsado)
+      : await buscarPorTexto(ids, anchos);
+  }
 
   registrar(filtros, fichas, degradada, Date.now() - empezo, contexto);
   return fichas;

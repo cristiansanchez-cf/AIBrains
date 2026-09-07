@@ -40,13 +40,20 @@ export function registrarBuscarTecnica(
           .string()
           .optional()
           .describe(
-            "Filtro por etapa del embudo si el usuario la deja clara. Ej: prospección, descubrimiento, propuesta, negociación, cierre.",
+            "Filtro por etapa, SOLO uno de estos valores exactos: Prospección, " +
+              "Primer contacto, Descubrimiento, Pitch / Demo, Objeciones, " +
+              "Negociación, Cierre, Seguimiento, Mentalidad. Si la situación no " +
+              "encaja claramente en uno, NO lo mandes: buscar sin filtrar da " +
+              "mejores resultados que filtrar por una etapa equivocada.",
           ),
         objecion: z
           .string()
           .optional()
           .describe(
-            'Filtro por objeción concreta cuando la situación es una objeción identificable. Ej: "precio", "tiempo", "competencia".',
+            "Filtro por objeción, SOLO uno de estos valores exactos: Precio, " +
+              "Tiempo / me lo pienso, Desconfianza, No lo necesito, No decido yo, " +
+              "Quiere comparar opciones, Ya tengo proveedor. Si no es exactamente " +
+              "una de ellas, NO lo mandes.",
           ),
         creador: z
           .string()
