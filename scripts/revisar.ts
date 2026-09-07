@@ -128,6 +128,16 @@ async function ponerEnlace(id: string, url: string): Promise<void> {
   console.log(`[${data.id}] enlace puesto: ${url}`);
 }
 
+/** Aplica el mismo estado a varias fichas, contando lo que hizo. */
+async function cambiarVarias(ids: string[], estado: string): Promise<void> {
+  let hechas = 0;
+  for (const id of ids) {
+    await cambiarEstado(id, estado as never);
+    hechas++;
+  }
+  if (ids.length > 1) console.log(`\n${hechas} ficha(s) a "${estado}".`);
+}
+
 async function main(): Promise<void> {
   const [orden, ...resto] = process.argv.slice(2);
 
@@ -138,12 +148,16 @@ async function main(): Promise<void> {
     case "ver":
       if (!resto[0]) throw new Error("Uso: ver <id>");
       return ver(resto[0]);
+    // VARIAS DE UNA VEZ. Una re-destilacion produce decenas de borradores -- la
+    // del video de 150 minutos dio 71 -- y aprobarlas de una en una son 71
+    // comandos. Se revisan leyendo, que es lo que no se puede automatizar; el
+    // aprobado en si no gana nada por ser tecleado 71 veces.
     case "publicar":
-      if (!resto[0]) throw new Error("Uso: publicar <id>");
-      return cambiarEstado(resto[0], "publicada");
+      if (!resto[0]) throw new Error("Uso: publicar <id> [<id>…]");
+      return cambiarVarias(resto, "publicada");
     case "descartar":
-      if (!resto[0]) throw new Error("Uso: descartar <id>");
-      return cambiarEstado(resto[0], "descartada");
+      if (!resto[0]) throw new Error("Uso: descartar <id> [<id>…]");
+      return cambiarVarias(resto, "descartada");
     case "enlace":
       if (resto.length < 2) throw new Error("Uso: enlace <id> <url>");
       return ponerEnlace(resto[0]!, resto[1]!);
