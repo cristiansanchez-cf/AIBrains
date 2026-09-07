@@ -41,7 +41,8 @@
     "stripe": "tsx scripts/stripe-comprobar.ts",
     "metricas": "tsx scripts/metricas.ts",
     "correo": "tsx scripts/correo.ts",
-    "recuperar-enlaces": "tsx scripts/recuperar-enlaces.ts"
+    "recuperar-enlaces": "tsx scripts/recuperar-enlaces.ts",
+    "cola": "tsx scripts/cola.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

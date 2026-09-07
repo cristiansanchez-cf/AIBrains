@@ -46,8 +46,12 @@ async function main(): Promise<void> {
 
   // Solo fichas con guion: son las que tienen material retenido con el que
   // construir una consulta honesta.
+  // `fichas_servibles`, NO `fichas`. La busqueda solo puede devolver lo que se
+  // sirve, asi que evaluar una ficha descartada es contar un fallo seguro: no
+  // puede salir por definicion. Habia 9 asi, y restaban ~3 puntos al resultado
+  // sin que nada estuviera roto.
   const { data: fichas, error } = await supabase
-    .from("fichas")
+    .from("fichas_servibles")
     .select("id, insight, script")
     .in("creador_id", creadorIds)
     .not("script", "is", null)
