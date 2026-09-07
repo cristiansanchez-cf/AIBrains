@@ -48,6 +48,12 @@ describe("trocear una transcripción larga", () => {
     const tandas = trocear(seguido, 1_000);
     expect(tandas.length).toBeGreaterThan(1);
     for (const t of tandas) expect(t.length).toBeLessThanOrEqual(1_000);
+
+    // Y LO QUE DE VERDAD IMPORTA: que corte por FRASES, no a pelo. Comprobar
+    // solo el tamaño no distingue una cosa de la otra -- el corte a pelo
+    // tambien produce trozos que caben, partiendo palabras por la mitad. Cada
+    // tanda tiene que acabar en punto.
+    for (const t of tandas.slice(0, -1)) expect(t.trimEnd()).toMatch(/[.!?]$/);
   });
 
   it("aguanta un texto sin ni un punto: mal partido antes que sin destilar", () => {
