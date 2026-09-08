@@ -28,6 +28,26 @@ interface Caso {
   consulta: string;
 }
 
+/**
+ * Reintenta lo que falla por red. Tres veces, esperando un poco mas cada vez.
+ *
+ * No distingue el tipo de error a proposito: aqui todo lo que se llama es de
+ * solo lectura, asi que repetirlo no puede hacer dano. Si falla tres veces
+ * seguidas es que pasa algo de verdad y entonces si conviene enterarse.
+ */
+async function conReintento<T>(hacer: () => Promise<T>): Promise<T> {
+  let ultimo: unknown;
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      return await hacer();
+    } catch (e) {
+      ultimo = e;
+      if (intento < 3) await new Promise((r) => setTimeout(r, 1500 * intento));
+    }
+  }
+  throw ultimo;
+}
+
 async function main(): Promise<void> {
   // TODAS las elegibles por defecto, no una muestra. Son ~255 y cada una cuesta
   // un embedding: cuatro centesimas de centimo en total. Evaluar solo 120 dejaba
@@ -84,17 +104,22 @@ async function main(): Promise<void> {
 
   for (let i = 0; i < casos.length; i += LOTE) {
     const lote = casos.slice(i, i + LOTE);
-    const vectores = await generarEmbeddings(lote.map((c) => c.consulta));
+    // CON REINTENTOS. Una evaluación son cientos de llamadas a OpenAI y a la
+    // base, y basta con que UNA falle por un corte de red para perder el
+    // trabajo entero: pasó a la 400 de 411, con un "fetch failed" seco. Aquí
+    // reintentar es trivial —la llamada no cambia nada— y no hacerlo cuesta
+    // diez minutos y todos los embeddings ya pagados.
+    const vectores = await conReintento(() => generarEmbeddings(lote.map((c) => c.consulta)));
 
     for (const [j, caso] of lote.entries()) {
-      const { data } = await supabase.rpc("buscar_fichas_similares", {
+      const { data } = await conReintento(async () => await supabase.rpc("buscar_fichas_similares", {
         consulta: JSON.stringify(vectores[j]),
         creadores: creadorIds,
         texto: caso.consulta,
         limite: 5,
         // Sin recortes: se mide la recuperación, no la presentación.
         proporcion_minima: 0,
-      });
+      }));
 
       // El RPC devuelve { ficha: jsonb, similitud }, no columnas sueltas. Esto
       // leía `f.id` —que quedó `undefined` al cambiar la firma— y la evaluación
