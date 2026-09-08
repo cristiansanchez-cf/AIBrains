@@ -278,3 +278,57 @@ seco", "dry-run" o similar, di explícitamente **qué gasta y qué no** antes de
 que alguien la lance. Y cuando una comprobación pueda hacerse antes de gastar,
 va antes: la guarda de duplicados por URL se subió a antes de transcribir por
 esto mismo, y ahora un vídeo ya procesado se rechaza sin costar una llamada.
+
+---
+
+## §14 · El minuto no se estima nunca
+
+Añadida el 08/09/2026, después de medirlo.
+
+Cristian propuso aproximar el minuto de una ficha con una regla de tres: si el
+guion está al 40% de la transcripción, el minuto está al 40% del vídeo. Es una
+idea razonable y **está medida contra los 71 minutos reales** que Supadata dio
+del vídeo de 150 minutos:
+
+| | error frente al minuto real |
+|---|---|
+| mediana | 92 s |
+| percentil 90 | 740 s (12 min) |
+| el peor | 3.306 s (55 min) |
+| acierta dentro de 30 s | 11 % |
+
+Nadie habla a ritmo constante: hay intros, pausas, tramos rápidos. **Un minuto
+estimado manda al sitio equivocado con toda la confianza**, y eso es peor que
+no dar minuto — el usuario pincha, no encuentra la frase, y lo que se cae es lo
+único que vendemos.
+
+**La regla:** `fuente_timestamp` sale de marcas de tiempo reales o vale `null`.
+Nunca se deduce de la posición en el texto ni de la duración.
+
+**El camino bueno** cuando falten: pedírselos a quien transcribe. Whisper puede
+devolverlos con `response_format: "verbose_json"`; hoy le pedimos `text` y los
+tira. Eso daría minutos de verdad a los 149 fichas de Spotify, que son pódcast
+largos y donde más falta hacen.
+
+---
+
+## §15 · Re-destilar rinde según lo largo que sea el vídeo
+
+Añadida el 08/09/2026. No es una prohibición, es una guía de gasto.
+
+Medido re-destilando cuatro vídeos:
+
+| | antes | después |
+|---|---|---|
+| YouTube, 150 min | 16 fichas flacas | **71 fichas**, con minuto |
+| TikTok, 66 s | 2 fichas flacas | 2 fichas flacas |
+| TikTok, 37 s | 1 ficha flaca | 1 ficha flaca |
+
+Un minuto de vídeo tiene un minuto de material: en formato corto, re-destilar
+cuesta lo mismo y no mejora nada. **Prioriza vídeos largos** — YouTube y
+Spotify. El corpus de Manuel Trejo es casi todo TikTok, así que un repaso
+masivo suyo sería caro y estéril.
+
+Y el troceado explica por qué los largos rinden tanto: en una sola pasada el
+modelo tenía que elegir qué contar de dos horas y media. En tres tandas no
+elige.
