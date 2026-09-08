@@ -23,6 +23,7 @@ import { crearServidor, type Perfil } from "./servidor.js";
 import { config } from "./config.js";
 import { estadoDeSalud, ultimoEstadoConocido } from "./salud.js";
 import { panelDelUsuario } from "./api/mi.js";
+import { panelDeAdmin } from "./api/admin.js";
 import {
   ejecutarAccion,
   AccionInvalida,
@@ -92,6 +93,50 @@ function corsOrigen(req: IncomingMessage): string {
   const permitidos = config.http.origenesPermitidos;
   if (permitidos.length === 0) return typeof origen === "string" ? origen : "*";
   return typeof origen === "string" && permitidos.includes(origen) ? origen : permitidos[0]!;
+}
+
+/**
+ * El panel de superadministracion.
+ *
+ * SE RESPONDE 404 Y NO 403 a quien no es. Un 403 confirma que la ruta existe y
+ * quien pregunta no tiene permiso, que es informacion que no hace falta dar:
+ * para todo el mundo menos para una persona, esta ruta simplemente no esta.
+ */
+async function manejarAdmin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const noExiste = () => responderJson(res, 404, { error: "No existe." }, corsOrigen(req));
+
+  // Sin variable configurada no hay panel para nadie. Fallo seguro.
+  if (!config.superadmin.email) {
+    noExiste();
+    return;
+  }
+
+  const token = tokenDeCabecera(req.headers.authorization);
+  if (!token) {
+    responderJson(res, 401, { error: "Hace falta iniciar sesion." }, corsOrigen(req));
+    return;
+  }
+
+  let usuario;
+  try {
+    usuario = await verificarSesion(token);
+  } catch (error) {
+    responderJson(
+      res,
+      401,
+      { error: error instanceof TokenInvalido ? error.message : "Sesion no valida." },
+      corsOrigen(req),
+    );
+    return;
+  }
+
+  if ((usuario.email ?? "").trim().toLowerCase() !== config.superadmin.email) {
+    console.error(`[cerebro] /api/admin: intento de ${usuario.email ?? "sin correo"}`);
+    noExiste();
+    return;
+  }
+
+  responderJson(res, 200, await panelDeAdmin(), corsOrigen(req));
 }
 
 async function manejarMi(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -524,6 +569,31 @@ const http = createServer((req, res) => {
   // Panel del usuario. Es la ÚNICA ruta que acepta una sesión normal de
   // Supabase; /mcp sigue exigiendo un token del flujo OAuth. Ver
   // `verificarSesion` en src/auth/token.ts para por qué son dos puertas.
+  // Panel de superadministracion. Misma puerta que /api/mi -- sesion normal de
+  // Supabase -- y ademas una comprobacion de quien es.
+  if (ruta === "/api/admin") {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": corsOrigen(req),
+        "access-control-allow-methods": "GET, OPTIONS",
+        "access-control-allow-headers": "content-type, authorization",
+        "access-control-max-age": "86400",
+        vary: "origin",
+      });
+      res.end();
+      return;
+    }
+    if (req.method !== "GET") {
+      responderJson(res, 405, { error: "Solo GET." });
+      return;
+    }
+    manejarAdmin(req, res).catch((error: unknown) => {
+      console.error("[cerebro] /api/admin:", error);
+      responderJson(res, 500, { error: "No se pudo leer el panel." });
+    });
+    return;
+  }
+
   if (ruta === "/api/mi") {
     if (req.method === "OPTIONS") {
       res.writeHead(204, {

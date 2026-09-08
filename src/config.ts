@@ -157,6 +157,22 @@ export const config = {
     limiteDiario: Number(process.env.CORREO_LIMITE_DIARIO ?? 100),
   },
 
+  /**
+   * Quien ve el panel de superadministracion. UNA direccion.
+   *
+   * No es un rol en la base ni una tabla de permisos, a proposito: mientras sea
+   * una persona, una variable de entorno es mas dificil de estropear que un
+   * sistema de roles, y se ve de un vistazo quien tiene acceso. El dia que sean
+   * tres, se cambia por lo que toque.
+   *
+   * SI ESTA VACIA, LA RUTA NO EXISTE PARA NADIE. Es el fallo seguro correcto:
+   * un panel que enseña lo que pregunta la gente no puede quedarse abierto
+   * porque alguien olvidara configurar una variable.
+   */
+  superadmin: {
+    email: (process.env.CEREBRO_SUPERADMIN ?? "").trim().toLowerCase(),
+  },
+
   stripe: {
     /**
      * dashboard.stripe.com > Desarrolladores > Claves API. Empieza por sk_.
