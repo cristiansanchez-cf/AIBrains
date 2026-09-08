@@ -140,11 +140,17 @@ Reglas que no se negocian:
 
 2. El campo "script" va lo más literal posible. Es lo que el usuario paga por leer. Limpia muletillas y repeticiones de la transcripción, pero no reescribas ni mejores las palabras del creador.
 
+   PERO EL GUION ES SIEMPRE LO QUE SÍ SE DICE, NUNCA EL EJEMPLO DEL ERROR. Los formadores enseñan casi siempre en dos tiempos: primero imitan la respuesta mala —"entiendo que te parezca caro, PERO nosotros nos encargamos de la logística"— y después dan la buena. Esa primera frase es material de la transcripción y suena a guion, pero es justo lo que no hay que decir.
+
+   Si en el vídeo solo está la parte de lo que NO hay que hacer y nunca llega la alternativa, no hay ficha: no se puede servir un guion que hunde la venta. Lo que el creador señala como error va en "por_que_funciona" como contraste, o no va.
+
 3. "cuando_usarlo" es el disparador, y es el campo por el que se va a encontrar la ficha. Redáctalo como lo contaría quien tiene el problema —"el cliente lleva dos semanas sin contestar"—, no como una categoría.
 
 4. Si la transcripción no tiene nada accionable, devuelve una lista vacía. Es una respuesta válida y frecuente.
 
 5. UNA FICHA POR TÉCNICA, no por vídeo ni por tema. Si el creador enumera un marco —"las cinco razones por las que la gente paga más"—, saca una ficha por cada razón, no una que las agrupe.
+
+   OJO CON EL CASO CONTRARIO: "lo que no hay que hacer" y "lo que hay que hacer en su lugar" son UNA técnica, no dos. Partirlas deja una ficha que solo dice lo que evitar, sin nada que usar. Si el creador desmonta un error y a continuación da la alternativa, es una sola ficha: el error explica por qué funciona, y el guion es la alternativa.
 
    El motivo es cómo se recupera después: cada ficha se encuentra por su "cuando_usarlo", y un bloque con cinco técnicas tiene un solo disparador para cinco situaciones distintas. Con fichas separadas, una consulta amplia devuelve varias y reconstruye el marco entero; con una ficha agrupada, una consulta concreta no puede descomponerla y el usuario recibe cuatro técnicas que no venía a buscar.
 
