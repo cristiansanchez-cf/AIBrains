@@ -303,8 +303,37 @@ async function main(): Promise<void> {
     }
   }
 
-  const { error } = await supabase.from("fichas").insert(filas);
-  if (error) throw new Error(`No se pudieron guardar: ${error.message}`);
+  // SE GUARDA POR TANDAS, Y SE REINTENTA. Un video largo produce 50-70 fichas y
+  // cada una lleva un vector de 1.536 numeros: en una sola peticion son varios
+  // megas, y la conexion se cayo de verdad -- "fetch failed" despues de haber
+  // transcrito y destilado un podcast de 88 minutos. La destilacion es la parte
+  // cara y perderla por un fallo de red al final es tirar el trabajo entero.
+  //
+  // Las tandas que ya entraron se quedan: si falla la cuarta, las tres primeras
+  // estan guardadas y se ven en `revisar`. Es mejor un lote incompleto y
+  // visible que nada.
+  const TANDA = 20;
+  let guardadas = 0;
+  for (let i = 0; i < filas.length; i += TANDA) {
+    const lote = filas.slice(i, i + TANDA);
+    let ultimoFallo: unknown = null;
+    for (let intento = 1; intento <= 3; intento++) {
+      const { error } = await supabase.from("fichas").insert(lote);
+      if (!error) {
+        ultimoFallo = null;
+        break;
+      }
+      ultimoFallo = error;
+      if (intento < 3) await new Promise((r) => setTimeout(r, 1000 * intento));
+    }
+    if (ultimoFallo) {
+      throw new Error(
+        `No se pudieron guardar (${guardadas} de ${filas.length} sí entraron): ` +
+          `${(ultimoFallo as { message?: string }).message ?? String(ultimoFallo)}`,
+      );
+    }
+    guardadas += lote.length;
+  }
 
   if (fuente) {
     await marcarFuente(fuente.id, "procesada", { hash: huella, fichas: filas.length });
