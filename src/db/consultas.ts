@@ -341,6 +341,43 @@ export function normalizar(valor: string | undefined, validos: readonly string[]
   return validos.find((v) => v.toLowerCase() === limpio);
 }
 
+/**
+ * Senales de que quien pregunta no necesita una tecnica, sino desbloquearse.
+ *
+ * NO ES UNA LISTA DE PALABRAS BONITA, ES UN PARCHE A UN FALLO MEDIDO. Alguien
+ * escribe "me bloqueo antes de coger el telefono para llamar a un desconocido"
+ * y el cerebro devuelve framework de llamada en frio, prospectar en rafagas y
+ * volver a llamar si no cogen. La ficha que le sirve -- "sal a buscar 100
+ * rechazos para inmunizarte al miedo", cuyo disparador es casi literal a lo que
+ * ha escrito -- sale en el PUESTO 11.
+ *
+ * El motivo es aritmetico: la frase esta llena de "telefono", "llamar" y
+ * "desconocido", que comparten las veinte fichas de prospeccion. El "me
+ * bloqueo" es una fraccion del vector y pierde.
+ *
+ * Y darle tecnica a quien dice que no consigue arrancar es la ayuda equivocada
+ * en el momento equivocado: es explicarle la receta a quien tiene miedo de
+ * entrar en la cocina.
+ */
+const SENALES_DE_BLOQUEO =
+  /\b(me bloqueo|bloquea|bloqueado|me da (mucho |mucha )?(miedo|verguenza|panico)|panico|no me atrevo|me cuesta( mucho)?|lo voy dejando|procrastin|hundido|desanimado|quemado|inseguro|no puedo con|se me hace bola|ansiedad|nervios)\b/i;
+
+/**
+ * ¿Quien pregunta esta bloqueado, en vez de no saber como hacerlo?
+ *
+ * SE QUITAN LOS ACENTOS ANTES DE MIRAR, y esto no es un detalle: la gente
+ * escribe "verguenza" y "vergüenza", "panico" y "pánico". La primera version
+ * comparaba en crudo y no reconocia "me da mucha vergüenza llamar a puerta
+ * fria" -- una de las formas mas comunes de decirlo en espanol.
+ */
+export function pareceBloqueo(texto: string): boolean {
+  const limpio = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return SENALES_DE_BLOQUEO.test(limpio);
+}
+
 export async function buscarFichas(
   contexto: ContextoDeAcceso,
   filtros: FiltrosBusqueda,
@@ -434,6 +471,25 @@ export async function buscarFichas(
     fichas = vectorUsado
       ? await buscarPorSimilitud(ids, anchos, vectorUsado)
       : await buscarPorTexto(ids, anchos);
+  }
+
+  // SI HAY BLOQUEO, SE LE RESERVA UN SITIO A LA MENTALIDAD. No se reordena
+  // nada ni se penaliza a las tecnicas: se cambia la ultima por la mejor ficha
+  // de Mentalidad, y solo si no salia ya ninguna. Quien pregunta sigue
+  // llevandose las cuatro mejores tecnicas y ademas algo que le ayude a
+  // arrancar, que es lo que ha pedido sin decirlo.
+  if (
+    pareceBloqueo(filtros.situacion) &&
+    fichas.length > 1 &&
+    !fichas.some((f) => f.etapa === "Mentalidad")
+  ) {
+    const deMentalidad = vectorUsado
+      ? await buscarPorSimilitud(ids, { ...limpios, etapa: "Mentalidad", limite: 1 }, vectorUsado)
+      : await buscarPorTexto(ids, { ...limpios, etapa: "Mentalidad", limite: 1 });
+    const suplente = deMentalidad[0];
+    if (suplente && !fichas.some((f) => f.id === suplente.id)) {
+      fichas = [...fichas.slice(0, -1), suplente];
+    }
   }
 
   registrar(filtros, fichas, degradada, Date.now() - empezo, contexto);
