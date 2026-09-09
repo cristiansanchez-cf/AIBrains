@@ -28,6 +28,32 @@ export interface Hueco {
   ultima_vez: string;
 }
 
+export interface UsuarioActivo {
+  email: string;
+  /** "individual", "equipo" o "sin suscripción" — de dónde le viene el acceso. */
+  plan: string;
+  activa: boolean;
+  consultas_30d: number;
+  ultima_consulta: string | null;
+}
+
+/**
+ * Qué cubre cada creador y qué no.
+ *
+ * PARA QUÉ SIRVE, QUE NO ES OBVIO. No es una estadística de vanidad: es lo que
+ * se le enseña al creador cuando toca renovar o pedir material. "Tenéis 40
+ * fichas de objeciones y 3 de prospección" es una conversación concreta, y
+ * termina en que ellos graben lo que falta. Sin este dato, pedir contenido es
+ * pedirlo a ciegas.
+ */
+export interface CoberturaCreador {
+  creador: string;
+  fichas: number;
+  por_etapa: Array<{ etapa: string; fichas: number }>;
+  /** Las etapas donde este creador tiene poco comparado con el resto. */
+  flojo_en: string[];
+}
+
 export interface PanelAdmin {
   medido_en: string;
   uso: {
@@ -62,6 +88,10 @@ export interface PanelAdmin {
   salud: "ok" | "degradado" | "roto" | null;
   /** Lo que se pregunta y el cerebro no sabe. Ordenado por demanda. */
   huecos: Hueco[];
+  /** Quién está usando esto y en qué estado está su acceso. */
+  usuarios: UsuarioActivo[];
+  /** Qué cubre cada creador. Para las conversaciones con ellos. */
+  cobertura: CoberturaCreador[];
 }
 
 const SUELO_1 = 90;
@@ -89,7 +119,7 @@ export async function panelDeAdmin(): Promise<PanelAdmin> {
       .select("*", { count: "exact", head: true })
       .not("user_id", "is", null)
       .gte("cuando", hace30),
-    supabase.from("fichas_servibles").select("creador_id, fuente_url, fuente_timestamp, insight, tecnica, cuando_usarlo, por_que_funciona"),
+    supabase.from("fichas_servibles").select("creador_id, etapa, fuente_url, fuente_timestamp, insight, tecnica, cuando_usarlo, por_que_funciona"),
     supabase.from("creadores").select("id, nombre"),
   ]);
 
@@ -171,7 +201,125 @@ export async function panelDeAdmin(): Promise<PanelAdmin> {
     },
     salud: estado,
     huecos: huecosDe(consultas),
+    usuarios: await usuariosActivos(),
+    cobertura: coberturaPorCreador(servibles, nombre),
   };
+}
+
+/**
+ * Quién está usando esto y de dónde le viene el acceso.
+ *
+ * SE CRUZAN TRES SITIOS porque hay tres formas de tener acceso: una
+ * suscripción individual, una de dominio, o un asiento en una organización.
+ * Mirar solo una tabla deja fuera a gente que sí está pagando -- ya paso al
+ * comprobar la cuenta de Cristian, que no aparecia por correo porque su
+ * suscripcion va por `user_id`.
+ */
+async function usuariosActivos(): Promise<UsuarioActivo[]> {
+  const hace30 = haceDias(30);
+  const [{ data: individuales }, { data: dominios }, { data: asientos }, { data: consultas }] =
+    await Promise.all([
+      supabase.from("suscripciones").select("user_id, activa"),
+      supabase.from("suscripciones_dominio").select("user_id, dominio, activa"),
+      supabase.from("organizacion_asientos").select("email, user_id, revocado_en").is("revocado_en", null),
+      supabase.from("consultas").select("user_id, cuando").not("user_id", "is", null).gte("cuando", hace30),
+    ]);
+
+  const uso = new Map<string, { n: number; ultima: string }>();
+  for (const c of (consultas ?? []) as Array<{ user_id: string; cuando: string }>) {
+    const y = uso.get(c.user_id);
+    if (y) { y.n++; if (c.cuando > y.ultima) y.ultima = c.cuando; }
+    else uso.set(c.user_id, { n: 1, ultima: c.cuando });
+  }
+
+  // ACTIVA SI ALGUNA LO ESTA, no la ultima que se lea. Una persona tiene UNA
+  // FILA POR CREADOR en `suscripciones`, asi que sobrescribir con la ultima
+  // pintaba de inactivo a quien tiene acceso: la cuenta de Cristian salia
+  // "activa=false" porque su ultima fila era la del cerebro de pruebas, que
+  // esta apagado, mientras las dos de verdad estaban vivas.
+  const porUsuario = new Map<string, { plan: string; activa: boolean }>();
+  const anotar = (id: string | null, plan: string, activa: boolean) => {
+    if (!id) return;
+    const ya = porUsuario.get(id);
+    porUsuario.set(id, { plan: ya?.plan ?? plan, activa: (ya?.activa ?? false) || activa });
+  };
+  for (const x of (individuales ?? []) as Array<{ user_id: string; activa: boolean }>) {
+    anotar(x.user_id, "individual", x.activa);
+  }
+  for (const x of (dominios ?? []) as Array<{ user_id: string; activa: boolean }>) {
+    anotar(x.user_id, "dominio", x.activa);
+  }
+  for (const x of (asientos ?? []) as Array<{ user_id: string | null }>) {
+    if (x.user_id && !porUsuario.has(x.user_id)) porUsuario.set(x.user_id, { plan: "equipo", activa: true });
+  }
+  // Quien consulta sin figurar en ninguna tabla: interesa verlo, no esconderlo.
+  for (const id of uso.keys()) {
+    if (!porUsuario.has(id)) porUsuario.set(id, { plan: "sin suscripción", activa: false });
+  }
+
+  const { data: cuentas } = await (supabase.auth as unknown as {
+    admin: { listUsers: (o?: unknown) => Promise<{ data: { users: Array<{ id: string; email?: string }> } }> };
+  }).admin.listUsers({ perPage: 500 });
+  const correo = new Map((cuentas?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+
+  return [...porUsuario.entries()]
+    .map(([id, d]) => ({
+      email: correo.get(id) || "(sin cuenta)",
+      plan: d.plan,
+      activa: d.activa,
+      consultas_30d: uso.get(id)?.n ?? 0,
+      ultima_consulta: uso.get(id)?.ultima ?? null,
+    }))
+    .sort((a, b) => b.consultas_30d - a.consultas_30d);
+}
+
+/**
+ * Qué cubre cada creador, y dónde está flojo COMPARADO CON LOS DEMAS.
+ *
+ * La comparación importa: decirle a alguien "tienes 3 fichas de prospección"
+ * no dice nada por sí solo. "Tienes 3 y el otro 21" es una conversación.
+ */
+function coberturaPorCreador(
+  fichas: Array<Record<string, unknown> & { creador_id: string }>,
+  nombre: Map<string, string>,
+): CoberturaCreador[] {
+  const porCreador = new Map<string, Map<string, number>>();
+  const totalEtapa = new Map<string, number>();
+  for (const f of fichas) {
+    const c = nombre.get(f.creador_id) ?? "desconocido";
+    const e = String(f.etapa ?? "sin etapa");
+    if (!porCreador.has(c)) porCreador.set(c, new Map());
+    const m = porCreador.get(c)!;
+    m.set(e, (m.get(e) ?? 0) + 1);
+    totalEtapa.set(e, (totalEtapa.get(e) ?? 0) + 1);
+  }
+
+  return [...porCreador.entries()].map(([creador, etapas]) => {
+    const total = [...etapas.values()].reduce((a, b) => a + b, 0);
+    const cuota = total / (fichas.length || 1);
+    // FLOJO = tiene menos del 70% de lo que le tocaría por su tamaño.
+    //
+    // El 0,5 que había antes no señalaba nada: exigía tener menos de la MITAD
+    // de tu parte, y con eso los dos creadores salían impecables aunque Manuel
+    // Trejo tenga 10 fichas de Negociación sobre 242 y Alfonso y Cristian 46
+    // sobre 499 —la mitad de densidad—. Un umbral que nunca se dispara no
+    // informa: solo tranquiliza.
+    //
+    // El mínimo de 8 fichas en el corpus entero evita señalar una etapa
+    // anecdótica como hueco de todo el mundo.
+    const flojo = [...totalEtapa.entries()]
+      .filter(([etapa, n]) => n >= 8 && (etapas.get(etapa) ?? 0) < n * cuota * 0.7)
+      .map(([etapa]) => etapa)
+      .sort();
+    return {
+      creador,
+      fichas: total,
+      por_etapa: [...etapas.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([etapa, n]) => ({ etapa, fichas: n })),
+      flojo_en: flojo,
+    };
+  });
 }
 
 /**
