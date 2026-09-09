@@ -160,7 +160,7 @@ function mostrarError(titulo: string, detalle: string): void {
 function pedirEmail(aviso?: string): void {
   app.innerHTML = `
     <h1>Entra en tu cuenta</h1>
-    <p>Te enviamos un código de seis cifras. Sin contraseñas.</p>
+    <p>Te enviamos un código de acceso. Sin contraseñas.</p>
     ${aviso ? `<div class="mensaje">${esc(aviso)}</div>` : ""}
     <form id="formulario">
       <label for="email">Tu email</label>
@@ -214,14 +214,14 @@ function pedirEmail(aviso?: string): void {
 function pedirCodigo(email: string, aviso?: string): void {
   app.innerHTML = `
     <h1>Mira tu correo</h1>
-    <p>Hemos enviado un código de seis cifras a <strong>${esc(email)}</strong>.
+    <p>Hemos enviado un código a <strong>${esc(email)}</strong>.
        Escríbelo aquí.</p>
     ${aviso ? `<div class="mensaje">${esc(aviso)}</div>` : ""}
     <form id="formulario">
       <label for="codigo">Código</label>
       <input id="codigo" type="text" required inputmode="numeric"
-             autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
-             placeholder="123456"
+             autocomplete="one-time-code" maxlength="12"
+             placeholder="12345678"
              style="font-size:24px;letter-spacing:6px;text-align:center">
       <button type="submit">Entrar</button>
     </form>
@@ -245,13 +245,31 @@ function pedirCodigo(email: string, aviso?: string): void {
     boton.disabled = true;
     boton.textContent = "Comprobando…";
 
-    // Se limpia lo que venga pegado del correo: espacios y guiones sobran.
-    const token = campo.value.replace(/\D/g, "");
+    // Se quitan espacios y guiones de pegar, pero NADA MAS.
+    //
+    // AQUI HABIA UN FALLO QUE HACIA IMPOSIBLE ENTRAR. La caja tenia
+    // `maxlength="6"` porque di por hecho que el codigo eran seis cifras, que es
+    // lo habitual. El de este proyecto tiene OCHO: se podian teclear los seis
+    // primeros y el codigo NUNCA valia. Cristian lo sufrio conectando Claude, y
+    // en la web funcionaba porque esa pantalla es de otro repositorio y no tenia
+    // el limite. No se dio por hecho otra vez: la longitud se comprobo pidiendole
+    // uno de verdad a Supabase.
+    const token = campo.value.replace(/[\s-]/g, "");
 
-    const { error } = await sb.auth.verifyOtp({ email, token, type: "email" });
+    // DOS TIPOS, PORQUE SUPABASE USA UNO U OTRO segun si la cuenta ya existia.
+    // Un codigo pedido con `signInWithOtp` para alguien registrado llega como
+    // "magiclink"; para alguien nuevo, como "signup". Probar solo uno deja
+    // fuera a la mitad de la gente, y el error no dice cual es.
+    let error = (await sb.auth.verifyOtp({ email, token, type: "email" })).error;
+    if (error) {
+      error = (await sb.auth.verifyOtp({ email, token, type: "magiclink" })).error;
+    }
 
     if (error) {
-      pedirCodigo(email, "Ese código no vale. Comprueba que lo has copiado entero, o pide otro volviendo atrás.");
+      pedirCodigo(
+        email,
+        "Ese código no vale. Si has pedido varios, solo sirve el del último correo.",
+      );
       return;
     }
 

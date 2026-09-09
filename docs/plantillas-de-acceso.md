@@ -36,7 +36,7 @@ que no le hagan leer.
 
 ## Reglas que se quedan aunque cambie el diseño
 
-- **`{{ .Token }}` es el código de seis cifras.** Es lo que hace que el acceso
+- **`{{ .Token }}` es el código de acceso** (ocho cifras en este proyecto; no lo des por hecho, se comprueba pidiendo uno). Es lo que hace que el acceso
   funcione desde cualquier dispositivo. Si se cae de la plantilla, la caja de
   la pantalla de acceso se queda sin nada que escribir y volvemos al problema
   de antes.
