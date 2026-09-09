@@ -22,7 +22,7 @@ conecta Claude y ChatGPT, cancela. Va soltando lo que no cuadra según lo
 encuentra, y la forma de trabajar es **arreglarlo en el momento y desplegar**.
 
 **El paso 3 es el que importa**: pedir el acceso en el ordenador, abrir el
-correo en el MÓVIL y teclear el código de seis cifras en el ordenador. Ha
+correo en el MÓVIL y teclear el código en el ordenador. Ha
 fallado dos veces hoy, cada vez por un motivo distinto. Si vuelve a fallar, es
 ahí donde hay que mirar primero.
 
@@ -39,7 +39,7 @@ Producción viva en `https://cerebro.cofundo.io`. **407 fichas**, de las cuales
 
 Cerrado hoy y verificado contra producción — **no hace falta volver a mirarlo**:
 
-- **Se entra con un código de seis cifras**, no con un enlace. El enlace fallaba
+- **Se entra con un código de acceso**, no con un enlace. El enlace fallaba
   por construcción: el correo suena en el móvil y se abre ahí, y ese navegador
   no tiene la solicitud a medias. La caja del código sobrevive a recargar la
   página, que fue el segundo fallo del día.

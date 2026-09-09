@@ -71,7 +71,7 @@ parezca raro, porque es justo el que te dejó tirado tres veces.
 - [ ] Ponle de nombre **Cerebro Ventas**.
 - [ ] Escribe el correo de la compra y pide entrar.
 - [ ] **Ahora coge el móvil y abre ahí el correo.** No lo abras en el ordenador.
-- [ ] Lee el **código de seis cifras** y tecléalo en el ordenador.
+- [ ] Lee el **código** (son ocho cifras) y tecléalo en el ordenador.
 
 **Qué debería pasar:** entras. Sin volver atrás, sin empezar de nuevo, sin que
 el navegador se quede diciendo que la solicitud ya no vale.
