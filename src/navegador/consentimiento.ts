@@ -182,7 +182,17 @@ function pedirEmail(aviso?: string): void {
     });
 
     if (error) {
-      pedirEmail(error.message);
+      // EL LIMITE DE RITMO SE EXPLICA, NO SE REPITE EN CRUDO. Supabase deja un
+      // minuto entre envios al mismo correo y contesta en ingles con un codigo
+      // de error. Enseñar eso tal cual deja a la persona sin saber que lo unico
+      // que tiene que hacer es esperar -- y volviendolo a intentar mantiene el
+      // reloj corriendo. Le paso a Cristian pidiendo codigos seguidos.
+      const segundos = /after (\d+) seconds/.exec(error.message)?.[1];
+      pedirEmail(
+        segundos
+          ? `Acabamos de mandarte uno. Mira tu correo, o espera ${segundos} segundos para pedir otro.`
+          : error.message,
+      );
       return;
     }
 
