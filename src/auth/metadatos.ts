@@ -14,11 +14,21 @@ export function issuerDeAutorizacion(): string {
 /**
  * Scopes que pedimos.
  *
- * `openid` y `email` bastan: solo necesitamos saber QUIÉN es el usuario para
- * resolver sus suscripciones. Nada de `profile` ni `phone`, que serían datos
- * personales que no usamos.
+ * `openid` y `email` para saber QUIÉN es y resolver sus suscripciones. Nada de
+ * `profile` ni `phone`, que serían datos personales que no usamos.
+ *
+ * Y `offline_access`, QUE FALTABA Y COSTABA CARO. Es el permiso que hace que
+ * el cliente reciba un *refresh token*. Sin él, Claude recibe un token que
+ * caduca en una hora y no tiene con qué renovarlo: lo único que puede hacer es
+ * pedirle al usuario que vuelva a conectar. Se vio en los datos —29 registros
+ * distintos de "Claude" en el servidor OAuth, cuatro en un solo día— y en que
+ * Cristian tenía que reconectar cada vez que abría un chat.
+ *
+ * No es un permiso "de más": mantener la sesión es exactamente lo que el
+ * usuario espera al conectar un conector, y la pantalla de consentimiento ya
+ * se lo dice con esas palabras.
  */
-export const SCOPES = ["openid", "email"] as const;
+export const SCOPES = ["openid", "email", "offline_access"] as const;
 
 /**
  * @param recurso  La URL exacta del endpoint que el cliente está usando.
