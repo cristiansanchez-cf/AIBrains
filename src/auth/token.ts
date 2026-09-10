@@ -31,6 +31,25 @@ export class TokenInvalido extends Error {}
  * servicio del mismo proyecto de Supabase sirva aquí. Sin ella, cualquiera con
  * una sesión en cualquier app nuestra podría leer las fichas.
  */
+/**
+ * Margen de reloj al validar un token. Treinta segundos.
+ *
+ * NO ES UNA CONCESIÓN DE SEGURIDAD, ES CÓMO SE VALIDA UN JWT. Supabase firma
+ * el token en su máquina y nosotros lo comprobamos en la nuestra; entre las
+ * dos hay milisegundos de diferencia, y sin margen un token recién emitido se
+ * lee como "emitido en el futuro" y se rechaza.
+ *
+ * Pasó de verdad y no era teórico: Cristian consultó el cerebro desde Claude y
+ * recibió "JWT issued at future". Los relojes de las dos máquinas coinciden al
+ * segundo —comprobado— así que el desfase era de fracciones, y aun así tumbaba
+ * la consulta.
+ *
+ * Treinta segundos no abre ninguna puerta: un token robado sigue siendo un
+ * token robado, y la caducidad sigue comprobándose. Lo único que cambia es que
+ * un token legítimo emitido hace medio segundo no se descarte por un reloj.
+ */
+const TOLERANCIA_DE_RELOJ = 30;
+
 export async function verificarToken(token: string): Promise<UsuarioAutenticado> {
   try {
     // Firma, emisor y caducidad los comprueba jose. La procedencia se mira
@@ -40,6 +59,7 @@ export async function verificarToken(token: string): Promise<UsuarioAutenticado>
       // Explícito aunque jose ya impida la confusión de claves por diseño: no
       // cuesta nada y quita la duda a quien lo lea.
       algorithms: ["ES256", "RS256"],
+      clockTolerance: TOLERANCIA_DE_RELOJ,
     });
 
     comprobarProcedencia(payload);
@@ -90,6 +110,7 @@ export async function verificarSesion(token: string): Promise<UsuarioAutenticado
     const { payload } = await jwtVerify(token, jwks, {
       issuer: issuerDeAutorizacion(),
       algorithms: ["ES256", "RS256"],
+      clockTolerance: TOLERANCIA_DE_RELOJ,
     });
 
     const userId = payload.sub;
