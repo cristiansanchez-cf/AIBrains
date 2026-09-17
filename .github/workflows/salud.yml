@@ -117,31 +117,39 @@ jobs:
       # mientras el servidor no existia, y nadie las leyo. Detectar sin avisar
       # a donde mira la persona es no avisar.
       #
-      # SOLO PARA LO QUE DESPIERTA. `degradado` se sigue quedando en la
-      # incidencia: significa que el producto funciona peor, no que este caido,
-      # y un aviso al movil que no exige actuar acaba silenciandose -- y con el,
-      # los que si importan.
-      - name: Avisar por WhatsApp si esta caido
+      # POR RESEND Y NO POR OTRO SITIO: ya lo usamos para los correos del
+      # producto, la clave ya existe y la cuota ya se vigila. Meter un servicio
+      # nuevo para esto seria una pieza mas que puede romperse en silencio, y
+      # justamente de eso venimos.
+      #
+      # SOLO PARA LO QUE DESPIERTA. `degradado` se queda en la incidencia:
+      # significa que el producto funciona peor, no que este caido, y un aviso
+      # que no exige actuar acaba ignorandose -- y con el, los que si importan.
+      - name: Avisar por correo si esta caido
         if: steps.estado.outputs.estado == 'roto' || steps.estado.outputs.estado == 'incomunicado'
         env:
-          # La URL la pone Cristian y apunta a SU n8n, que es quien habla con
-          # WhatsApp. Asi su numero no viaja a ningun tercero nuevo, y cambiar
-          # de canal -- Telegram, SMS, lo que sea -- es cambiar una variable.
-          AVISO: ${{ secrets.CEREBRO_AVISO_URL }}
+          RESEND: ${{ secrets.RESEND_API_KEY }}
+          PARA: ${{ vars.CEREBRO_AVISO_EMAIL }}
           ESTADO: ${{ steps.estado.outputs.estado }}
           RESUMEN: ${{ steps.estado.outputs.resumen }}
         run: |
-          if [ -z "$AVISO" ]; then
-            echo "Sin CEREBRO_AVISO_URL configurada: no se avisa a nadie. Esto es un agujero."
+          if [ -z "$RESEND" ] || [ -z "$PARA" ]; then
+            echo "SIN AVISO: falta RESEND_API_KEY o la variable CEREBRO_AVISO_EMAIL."
+            echo "La incidencia se abrira igual, pero nadie recibira un correo."
             exit 0
           fi
-          texto="CEREBRO DE VENTAS $ESTADO"$'\n\n'"$RESUMEN"$'\n\n'"https://cerebro.cofundo.io/salud"
-          # `--fail-with-body` para que un webhook roto salga en rojo aqui en
-          # vez de dar por enviado lo que nadie recibio.
-          curl -sS --fail-with-body -m 20 -X POST "$AVISO" \
+
+          cuerpo=$(printf '%s\n\n%s\n\nComprobar: https://cerebro.cofundo.io/salud' \
+            "El cerebro de ventas esta $ESTADO." "$RESUMEN")
+
+          # --fail-with-body para que un envio rechazado salga en ROJO aqui en
+          # vez de darse por enviado. Un aviso que falla en silencio es peor que
+          # no tener aviso: crea la sensacion de estar vigilado.
+          curl -sS --fail-with-body -m 20 -X POST "https://api.resend.com/emails" \
+            -H "authorization: Bearer $RESEND" \
             -H "content-type: application/json" \
-            -d "$(jq -n --arg t "$texto" --arg e "$ESTADO" '{estado:$e, texto:$t}')" \
-            || echo "NO SE PUDO AVISAR. El canal de aviso esta roto."
+            -d "$(jq -n --arg p "$PARA" --arg s "[cerebro] esta $ESTADO" --arg t "$cuerpo" \
+                  '{from:"Cerebro <hola@correo.cofundo.io>", to:[$p], subject:$s, text:$t}')"
 
       - name: Abrir o cerrar el aviso
         env:
