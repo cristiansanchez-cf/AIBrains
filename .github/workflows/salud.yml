@@ -74,7 +74,31 @@ jobs:
             exit 0
           fi
 
-          estado=$(jq -r '.estado // "desconocido"' respuesta.json)
+          estado=$(jq -r '.estado // ""' respuesta.json)
+
+          # SIN CAMPO `estado` NO ES NUESTRO SERVIDOR, Y ESO ES UNA CAIDA.
+          #
+          # Railway responde 404 con un JSON suyo -- {"status":"error","code":404,
+          # "message":"Application not found"} -- cuando la aplicacion ya no
+          # existe. Eso paso de verdad y estuvo asi UNA SEMANA: la alarma lo leia
+          # como estado "desconocido", abria una incidencia que decia "el cerebro
+          # esta desconocido", y nadie entendia que eso significaba que el
+          # servidor habia desaparecido del todo.
+          #
+          # Si el cuerpo no trae `estado`, quien contesta no somos nosotros.
+          if [ -z "$estado" ]; then
+            estado=incomunicado
+            resumen="- El dominio responde HTTP $codigo pero no es nuestro servidor. Railway dice: $(jq -r '.message // "sin mensaje"' respuesta.json). Mirar si el servicio sigue existiendo."
+            echo "estado=$estado" >> "$GITHUB_OUTPUT"
+            {
+              echo "resumen<<FIN"
+              echo "$resumen"
+              echo "FIN"
+            } >> "$GITHUB_OUTPUT"
+            echo "HTTP $codigo · NO responde nuestro servidor"
+            cat respuesta.json
+            exit 0
+          fi
           resumen=$(jq -r '[.comprobaciones[]? | select(.estado != "ok") | "- \(.nombre): \(.detalle)"] | join("\n")' respuesta.json)
           [ -z "$resumen" ] && resumen="(todas las comprobaciones en orden)"
 
@@ -87,6 +111,37 @@ jobs:
 
           echo "HTTP $codigo · estado: $estado"
           cat respuesta.json
+
+      # UNA INCIDENCIA DE GITHUB NO ES UNA ALARMA, ES UN DIARIO. La de abajo
+      # funciono perfectamente durante una semana: abrio diez incidencias
+      # mientras el servidor no existia, y nadie las leyo. Detectar sin avisar
+      # a donde mira la persona es no avisar.
+      #
+      # SOLO PARA LO QUE DESPIERTA. `degradado` se sigue quedando en la
+      # incidencia: significa que el producto funciona peor, no que este caido,
+      # y un aviso al movil que no exige actuar acaba silenciandose -- y con el,
+      # los que si importan.
+      - name: Avisar por WhatsApp si esta caido
+        if: steps.estado.outputs.estado == 'roto' || steps.estado.outputs.estado == 'incomunicado'
+        env:
+          # La URL la pone Cristian y apunta a SU n8n, que es quien habla con
+          # WhatsApp. Asi su numero no viaja a ningun tercero nuevo, y cambiar
+          # de canal -- Telegram, SMS, lo que sea -- es cambiar una variable.
+          AVISO: ${{ secrets.CEREBRO_AVISO_URL }}
+          ESTADO: ${{ steps.estado.outputs.estado }}
+          RESUMEN: ${{ steps.estado.outputs.resumen }}
+        run: |
+          if [ -z "$AVISO" ]; then
+            echo "Sin CEREBRO_AVISO_URL configurada: no se avisa a nadie. Esto es un agujero."
+            exit 0
+          fi
+          texto="CEREBRO DE VENTAS $ESTADO"$'\n\n'"$RESUMEN"$'\n\n'"https://cerebro.cofundo.io/salud"
+          # `--fail-with-body` para que un webhook roto salga en rojo aqui en
+          # vez de dar por enviado lo que nadie recibio.
+          curl -sS --fail-with-body -m 20 -X POST "$AVISO" \
+            -H "content-type: application/json" \
+            -d "$(jq -n --arg t "$texto" --arg e "$ESTADO" '{estado:$e, texto:$t}')" \
+            || echo "NO SE PUDO AVISAR. El canal de aviso esta roto."
 
       - name: Abrir o cerrar el aviso
         env:
