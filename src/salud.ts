@@ -84,15 +84,50 @@ function peor(estados: Estado[]): Estado {
  */
 async function comprobarBase(): Promise<Comprobacion> {
   const t0 = Date.now();
-  const { error } = await supabase
-    .from("creadores")
-    .select("id", { count: "exact", head: true })
-    .limit(1);
 
-  if (error) {
-    return { nombre: "base", estado: "roto", detalle: `no responde: ${error.message}` };
+  // TRES INTENTOS ANTES DE GRITAR, Y ESTO NO ES TAPAR UN FALLO.
+  //
+  // La red entre Railway y Supabase falla de vez en cuando con un "fetch
+  // failed" sin mensaje. Ya tiro una destilacion de 88 minutos y una
+  // evaluacion de 400 fichas, y las dos veces el arreglo fue el mismo:
+  // reintentar. Aqui pasaba algo peor -- una sola peticion fallida declaraba la
+  // base CAIDA y mandaba un correo de alarma. Cristian recibio varios seguidos
+  // con la base funcionando: comprobado a los pocos minutos, ocho lecturas
+  // seguidas en verde a 468 ms.
+  //
+  // Y UN AVISO FALSO NO ES INOCUO: es lo que enseña a ignorar la alarma, que es
+  // justo el agujero que acabamos de cerrar tras una semana de caida sin que
+  // nadie mirara. Una alarma que se equivoca deja de ser una alarma.
+  //
+  // Si la base esta caida de verdad, fallan los tres intentos y el aviso sale
+  // igual, con unos segundos de retraso que no le importan a nadie.
+  let ultimo = "";
+  for (let intento = 1; intento <= 3; intento++) {
+    const { error } = await supabase
+      .from("creadores")
+      .select("id", { count: "exact", head: true })
+      .limit(1);
+
+    if (!error) {
+      const ms = Date.now() - t0;
+      // Si hizo falta reintentar, se DICE. Un blip no es una caida, pero
+      // tampoco es nada: si empiezan a ser habituales, aqui se ven.
+      return {
+        nombre: "base",
+        estado: "ok",
+        detalle:
+          intento === 1
+            ? `responde en ${ms} ms`
+            : `responde en ${ms} ms (hizo falta el intento ${intento}: la red falla a ratos)`,
+      };
+    }
+    // `fetch failed` llega con el mensaje vacio, y "no responde: " a secas no
+    // dice nada a quien lee el aviso.
+    ultimo = error.message || "sin mensaje (fallo de red)";
+    if (intento < 3) await new Promise((r) => setTimeout(r, 400 * intento));
   }
-  return { nombre: "base", estado: "ok", detalle: `responde en ${Date.now() - t0} ms` };
+
+  return { nombre: "base", estado: "roto", detalle: `no responde tras 3 intentos: ${ultimo}` };
 }
 
 /**
