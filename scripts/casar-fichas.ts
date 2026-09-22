@@ -69,6 +69,32 @@ export const MARGEN = 0.1;
 export const MINIMO_TRIOS = 20;
 
 /**
+ * Palabras seguidas que, si salen tal cual en el vídeo, bastan por sí solas.
+ *
+ * Medido sobre las 434 de origen conocido, Y LAS DOS MEDIDAS NO DICEN LO MISMO:
+ *
+ *   umbral │ tiradas largas que  │ enlaces que escribiría
+ *          │ existen en el vídeo │ de verdad, y errores
+ *          │ equivocado          │
+ *   ───────┼─────────────────────┼───────────────────────
+ *     8    │        13           │
+ *    10    │         5           │   360, 0 equivocados
+ *    12    │         1           │   325, 0 equivocados
+ *    15    │         0           │   264, 0 equivocados
+ *
+ * La primera columna asusta y no es la que manda: que una tirada larga exista
+ * también en otro vídeo suyo no escribe nada, porque el enlace se pone al que
+ * GANA. Mirando lo que de verdad se escribiría, diez ya no se equivoca ni una
+ * vez en 434, y recupera casi cien fichas más que quince.
+ *
+ * Empezó en quince por leer mal la primera columna, y eso dejaba fuera cosas
+ * como "ya que hemos estado montando esta instalacion para tu vecino conoces a
+ * paco verdad" —catorce palabras con un nombre propio dentro—, que no se
+ * parecen a otro vídeo: son ese vídeo.
+ */
+export const RACHA_SEGURA = 10;
+
+/**
  * Los subtítulos se guardan en disco porque el mismo vídeo se mira muchas veces.
  *
  * Calibrar son 275 fichas contra una docena de vídeos, y sin caché cada prueba
@@ -107,6 +133,36 @@ function subtitulosDe(video: string): string {
   } finally {
     rmSync(carpeta, { recursive: true, force: true });
   }
+}
+
+/**
+ * La tirada MÁS LARGA de palabras seguidas de la ficha que aparece tal cual en
+ * el vídeo, medida en palabras.
+ *
+ * POR QUÉ NO BASTA EL PORCENTAJE. El texto de la ficha es el guion MÁS el
+ * análisis del destilador —el por qué funciona, el cómo aplicarlo—, y eso
+ * último no lo dice nadie en ningún vídeo. Así que una ficha cuyo guion sale
+ * palabra por palabra puede quedarse en 0,28 porque dos tercios de su texto es
+ * comentario. Pasó con seis fichas: "oye te animas a que trabajemos juntos o
+ * que necesitarias tener claro ahora mismo para dar el paso", diecisiete
+ * palabras seguidas, descartada por tres centésimas.
+ *
+ * Una tirada larga es de otra naturaleza que un parecido: no es que se hable de
+ * lo mismo, es que es la misma frase.
+ */
+export function rachaMasLarga(texto: string, video: string): number {
+  const palabras = normalizar(texto).split(" ").filter(Boolean);
+  let mejor = 0;
+  for (let i = 0; i < palabras.length; i++) {
+    // Se arranca desde la mejor ya encontrada: una tirada más corta no aporta,
+    // y sin esto son minutos por ficha en vez de milisegundos.
+    let largo = mejor;
+    while (i + largo < palabras.length && video.includes(palabras.slice(i, i + largo + 1).join(" "))) {
+      largo++;
+    }
+    if (largo > mejor) mejor = largo;
+  }
+  return mejor;
 }
 
 export function trios(texto: string): Set<string> {
@@ -160,7 +216,17 @@ export function textoDe(f: Ficha): string {
  * es como no tener regla: se ajusta una, se olvida la otra, y la calibración
  * acaba midiendo algo distinto de lo que luego se usa.
  */
-export function seAcepta(punto: number, margen: number, triosDeLaFicha: number): boolean {
+export function seAcepta(
+  punto: number,
+  margen: number,
+  triosDeLaFicha: number,
+  racha: number,
+): boolean {
+  // Dos puertas, y la segunda no es un parche: mide otra cosa. El porcentaje
+  // dice "esta ficha se parece a este vídeo y a ningún otro"; la racha dice
+  // "esta frase está ahí, tal cual". Una ficha cuyo guion sale palabra por
+  // palabra pero cuyo texto es mitad análisis se queda en 0,28 y no entraba.
+  if (racha >= RACHA_SEGURA) return true;
   return triosDeLaFicha >= MINIMO_TRIOS && punto >= UMBRAL && margen >= MARGEN;
 }
 
@@ -184,6 +250,7 @@ async function principal(): Promise<void> {
 
   console.log(`Bajando subtítulos de ${videos.length} vídeo(s)...`);
   const porVideo = new Map<string, Set<string>>();
+  const crudoDe = new Map<string, string>();
   for (const v of videos) {
     const texto = subtitulosDe(v);
     if (!texto) {
@@ -191,6 +258,7 @@ async function principal(): Promise<void> {
       continue;
     }
     porVideo.set(v, trios(texto));
+    crudoDe.set(v, texto);
     console.log(`  ${v}: ${texto.split(" ").length} palabras`);
   }
   if (porVideo.size < 2) {
@@ -241,11 +309,42 @@ async function principal(): Promise<void> {
     // no basta -- "la mejor de diez" siempre existe, aunque sea mala.
     let aceptadas = 0;
     let aceptadasMal = 0;
+    const rachasBuenas: number[] = [];
+    const rachasMalas: number[] = [];
     for (const f of conocidas) {
       const orden = puntuar(f);
-      if (!seAcepta(orden[0]!.punto, orden[0]!.punto - orden[1]!.punto, trios(textoDe(f)).size)) continue;
+      const bueno = orden.find((o) => f.fuente_url!.includes(o.video))!;
+      const mejorMalo = orden.find((o) => !f.fuente_url!.includes(o.video))!;
+      rachasBuenas.push(rachaMasLarga(textoDe(f), crudoDe.get(bueno.video)!));
+      rachasMalas.push(rachaMasLarga(textoDe(f), crudoDe.get(mejorMalo.video)!));
+      const rachaArriba = rachaMasLarga(textoDe(f), crudoDe.get(orden[0]!.video)!);
+      if (!seAcepta(orden[0]!.punto, orden[0]!.punto - orden[1]!.punto, trios(textoDe(f)).size, rachaArriba)) {
+        continue;
+      }
       aceptadas++;
       if (!f.fuente_url!.includes(orden[0]!.video)) aceptadasMal++;
+    }
+
+    // La tirada más larga, medida igual: contra su propio vídeo y contra el
+    // mejor que no es. Si los dos rangos se separan, sirve de segunda puerta
+    // para las fichas cuyo guion sale literal pero cuyo porcentaje se queda
+    // corto porque la mitad de su texto es análisis y no se dice en ningún sitio.
+    const quePasan = (xs: number[], n: number) => xs.filter((x) => x >= n).length;
+
+    // Y lo mismo pero COMO SE USARÍA de verdad: la racha contra el vídeo que
+    // gana, no contra el bueno. Es la diferencia entre "existe una tirada larga
+    // en algún sitio" y "la hay justo donde vamos a escribir el enlace".
+    const comoSeUsa = new Map<number, { acepta: number; mal: number }>();
+    for (const n of [10, 12, 15]) comoSeUsa.set(n, { acepta: 0, mal: 0 });
+    for (const f of conocidas) {
+      const orden = puntuar(f);
+      const racha = rachaMasLarga(textoDe(f), crudoDe.get(orden[0]!.video)!);
+      const acierta = f.fuente_url!.includes(orden[0]!.video);
+      for (const [n, cuenta] of comoSeUsa) {
+        if (racha < n) continue;
+        cuenta.acepta++;
+        if (!acierta) cuenta.mal++;
+      }
     }
 
     const pct = (n: number) => `${((100 * n) / conocidas.length).toFixed(1)}%`;
@@ -259,10 +358,25 @@ async function principal(): Promise<void> {
     console.log(`  Solape con el mejor que NO es: ${rango(malas)}`);
     console.log(`  Margen entre los dos:          ${rango(margenes)}`);
     console.log(
-      `\n  Con la regla puesta (>= ${MINIMO_TRIOS} tríos, solape >= ${UMBRAL}, margen >= ${MARGEN}):\n` +
+      `\n  Con la regla entera (>= ${MINIMO_TRIOS} tríos y solape >= ${UMBRAL} con margen >= ${MARGEN},` +
+        ` O BIEN racha >= ${RACHA_SEGURA}):\n` +
         `    acepta ${aceptadas} de ${conocidas.length} (${pct(aceptadas)})\n` +
         `    de esas, equivocadas: ${aceptadasMal}`,
     );
+    console.log(`\n  Tirada más larga de palabras seguidas que salen tal cual en el vídeo:`);
+    console.log(`    contra su propio vídeo:   ${rango(rachasBuenas)}`);
+    console.log(`    contra el mejor que NO es: ${rango(rachasMalas)}`);
+    for (const n of [8, 10, 12, 15]) {
+      console.log(
+        `    con racha >= ${String(n).padStart(2)}: la acertarían ${quePasan(rachasBuenas, n)} ` +
+          `y se colarían ${quePasan(rachasMalas, n)}`,
+      );
+    }
+    console.log(`\n  Si la racha decidiera sola, contra el vídeo que gana:`);
+    for (const [n, c] of comoSeUsa) {
+      console.log(`    racha >= ${String(n).padStart(2)}: escribiría ${c.acepta} enlaces, ${c.mal} equivocados`);
+    }
+
     console.log(
       `\n  Las equivocadas son las que importan: una ficha sin enlace se ve y se\n` +
         `  arregla, una ficha con el enlace de otro vídeo parece verificada y no lo\n` +
@@ -275,7 +389,10 @@ async function principal(): Promise<void> {
   console.log(`\n=== ${huerfanas.length} fichas sin enlace contra ${porVideo.size} vídeos ===\n`);
 
   const cuenta = new Map<string, number>();
-  const porFicha: Array<{ id: number; video: string; punto: number; margen: number; trios: number; insight: string }> = [];
+  const porFicha: Array<{
+    id: number; video: string; punto: number; margen: number;
+    trios: number; racha: number; insight: string;
+  }> = [];
   for (const f of huerfanas) {
     const orden = puntuar(f);
     const margen = orden[0]!.punto - orden[1]!.punto;
@@ -285,6 +402,7 @@ async function principal(): Promise<void> {
       punto: orden[0]!.punto,
       margen,
       trios: trios(textoDe(f)).size,
+      racha: rachaMasLarga(textoDe(f), crudoDe.get(orden[0]!.video)!),
       insight: (f.insight ?? "").slice(0, 46),
     });
     cuenta.set(orden[0]!.video, (cuenta.get(orden[0]!.video) ?? 0) + 1);
@@ -293,16 +411,21 @@ async function principal(): Promise<void> {
   // LO QUE PASA LA REGLA VA PRIMERO Y APARTE. El resto de la lista es "el mejor
   // de los que hay", que siempre existe aunque ninguno sea: mezclarlos invita a
   // leer como hallazgo lo que es el menos malo.
-  const aceptadas = porFicha.filter((p) => seAcepta(p.punto, p.margen, p.trios));
+  const aceptadas = porFicha.filter((p) => seAcepta(p.punto, p.margen, p.trios, p.racha));
   console.log(
-    `  PASAN LA REGLA (>= ${MINIMO_TRIOS} tríos, solape >= ${UMBRAL}, margen >= ${MARGEN}): ` +
+    `  PASAN LA REGLA (${MINIMO_TRIOS} tríos + solape ${UMBRAL} con margen ${MARGEN}, o racha >= ${RACHA_SEGURA}): ` +
       `${aceptadas.length} de ${huerfanas.length}\n`,
   );
   const porVideoAceptado = new Map<string, typeof aceptadas>();
   for (const a of aceptadas) porVideoAceptado.set(a.video, [...(porVideoAceptado.get(a.video) ?? []), a]);
   for (const [video, suyas] of [...porVideoAceptado.entries()].sort((a, b) => b[1].length - a[1].length)) {
     console.log(`  ${String(suyas.length).padStart(3)} fichas  ${urlDe(video)}`);
-    for (const a of suyas) console.log(`         ${String(a.id).padStart(4)}  ${a.punto.toFixed(3)} (+${a.margen.toFixed(3)})  ${a.insight}`);
+    for (const a of suyas) {
+      console.log(
+        `         ${String(a.id).padStart(4)}  solape ${a.punto.toFixed(3)} (+${a.margen.toFixed(3)})  ` +
+          `racha ${String(a.racha).padStart(2)}  ${a.insight}`,
+      );
+    }
   }
 
   console.log("\n  A qué vídeo apunta cada una, pasen o no (solo el mejor de cada ficha):\n");

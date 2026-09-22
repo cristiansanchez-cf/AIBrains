@@ -37,9 +37,9 @@ cuando Claude mueva un botón; una página sí, y ya existe.
 **1. Preguntarles a Alfonso y Cristian de dónde salió lo de junio.** 92 de las
 741 fichas servibles (12%) no tienen enlace de origen, y sin enlace no se puede
 cumplir la promesa del producto. Ya se ha barrido lo que se podía barrer solo:
-244 vídeos —su canal entero de vídeos y directos, más los podcasts conocidos—
-y solo casan 6 fichas. Las otras 87 tienen material de sobra, así que sus vídeos
-no están ahí.
+672 vídeos —su canal entero, shorts incluidos, más los podcasts conocidos— y
+casan 35 fichas de 15 vídeos, pendientes de que alguien diga que se escriben.
+Las otras 58 tienen material de sobra, así que sus vídeos no están ahí.
 
 La pregunta exacta, y el "y" importa: *de lo que nos pasasteis en junio, ¿qué
 vídeos de YouTube eran, y había material que no fuera vuestro?* Lo segundo,

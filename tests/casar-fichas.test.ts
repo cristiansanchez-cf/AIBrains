@@ -13,7 +13,9 @@
  * en silencio.
  */
 import { describe, expect, it } from "vitest";
-import { MARGEN, MINIMO_TRIOS, seAcepta, solape, textoDe, trios, UMBRAL } from "../scripts/casar-fichas.js";
+import {
+  MARGEN, MINIMO_TRIOS, RACHA_SEGURA, rachaMasLarga, seAcepta, solape, textoDe, trios, UMBRAL,
+} from "../scripts/casar-fichas.js";
 
 describe("trios", () => {
   it("son tríos de palabras solapados, no trozos partidos", () => {
@@ -84,25 +86,57 @@ describe("textoDe", () => {
   });
 });
 
+describe("rachaMasLarga", () => {
+  const VIDEO = trios("") && "oye te animas a que trabajemos juntos o que necesitarias tener claro";
+
+  it("cuenta las palabras seguidas que salen tal cual", () => {
+    expect(rachaMasLarga("oye te animas a que trabajemos juntos", VIDEO)).toBe(7);
+  });
+
+  it("no suma trozos sueltos que no van seguidos", () => {
+    // "oye" y "juntos" están los dos, pero no uno detrás del otro.
+    expect(rachaMasLarga("oye juntos", VIDEO)).toBe(1);
+  });
+
+  it("cero si no comparten ni una palabra", () => {
+    expect(rachaMasLarga("nada de esto aparece", "texto completamente distinto")).toBe(0);
+  });
+
+  it("compara sin tildes, como los subtítulos", () => {
+    expect(rachaMasLarga("¿Necesitarías tener claro?", VIDEO)).toBe(3);
+  });
+});
+
 describe("seAcepta", () => {
   const GORDA = MINIMO_TRIOS + 10;
 
   it("acepta lo que pasa las tres condiciones", () => {
-    expect(seAcepta(0.35, 0.2, GORDA)).toBe(true);
+    expect(seAcepta(0.35, 0.2, GORDA, 0)).toBe(true);
   });
 
   it("una ficha flaca no se acepta AUNQUE puntúe altísimo", () => {
     // El caso real: siete palabras, cinco tríos, cuatro dentro -> 0.800, la
     // puntuación más alta de las 93, y lo único compartido era el titular.
-    expect(seAcepta(0.8, 0.4, 5)).toBe(false);
+    expect(seAcepta(0.8, 0.4, 5, 0)).toBe(false);
   });
 
   it("sin margen sobre el segundo vídeo no se acepta", () => {
     // Puntúa alto contra dos vídeos del mismo formador: no se sabe cuál es.
-    expect(seAcepta(0.5, MARGEN / 2, GORDA)).toBe(false);
+    expect(seAcepta(0.5, MARGEN / 2, GORDA, 0)).toBe(false);
   });
 
   it("por debajo del umbral no se acepta ni con margen de sobra", () => {
-    expect(seAcepta(UMBRAL - 0.01, 0.4, GORDA)).toBe(false);
+    expect(seAcepta(UMBRAL - 0.01, 0.4, GORDA, 0)).toBe(false);
+  });
+
+  it("una tirada larga literal entra sola, aunque el porcentaje se quede corto", () => {
+    // El caso de la ficha 376: diecisiete palabras seguidas del guion salen
+    // tal cual, y se quedaba fuera por tres centésimas porque dos tercios de
+    // su texto es análisis que no se dice en ningún vídeo.
+    expect(seAcepta(UMBRAL - 0.03, 0.22, GORDA, RACHA_SEGURA + 2)).toBe(true);
+  });
+
+  it("una tirada corta no abre esa puerta", () => {
+    expect(seAcepta(UMBRAL - 0.03, 0.22, GORDA, RACHA_SEGURA - 1)).toBe(false);
   });
 });

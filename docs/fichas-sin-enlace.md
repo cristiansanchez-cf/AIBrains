@@ -28,27 +28,45 @@ conocido y mide contra ellas:
 | Acierta el vídeo bueno a la primera | 432 de 434 (99,5%) |
 | Solape con su propio vídeo | 0,000 – 0,578 (mediana 0,344) |
 | Solape con el mejor que NO es | 0,000 – 0,229 (mediana 0,083) |
-| Con la regla puesta (≥20 tríos, ≥0,30, margen ≥0,10) | acepta 288, **0 equivocadas** |
+| Tirada literal más larga, con su vídeo | 2 – 60 palabras (mediana 17) |
+| Tirada literal más larga, con el que NO es | 2 – 12 palabras (mediana 4) |
+| Con la regla entera | acepta 363 de 434 (83,6%), **0 equivocadas** |
 
-Barridos **244 vídeos** —el canal entero de vídeos y directos, los 5 podcasts
-que ya conocíamos y los de Manuel Trejo—: **pasan la regla 6 fichas**, de dos
-vídeos cortos de su propio canal:
+**La regla tiene dos puertas porque hay dos señales distintas.** El porcentaje
+dice "esta ficha se parece a este vídeo y a ningún otro". La tirada literal dice
+"esta frase está ahí, tal cual". Hace falta la segunda porque el texto de la
+ficha es el guion MÁS el análisis del destilador, y ese análisis no lo dice
+nadie en ningún vídeo: una ficha cuyo guion sale palabra por palabra puede
+quedarse en 0,28 porque dos tercios de su texto es comentario.
 
-- `PBlvFeoU690` (6 min, *10 Pasos Que te Convertirán en una Máquina de Vender*) →
-  fichas 258, 259, 325, 329
-- `20BYB0bSXvM` (5 min, *Así Vendería Mi Producto si Solo Tuviera 1h a la Semana*) →
-  fichas 358, 384
+Barridos **672 vídeos** —el canal entero: 224 vídeos, 6 directos y 431 shorts,
+más los 5 podcasts conocidos y los de Manuel Trejo—: **pasan la regla 35 fichas**,
+de 15 vídeos. Los que más dan:
 
-Comprobadas a mano una por una: comparten frases enteras del guion, no
-parecidos. **No están escritas**: cambiar el origen de una ficha lo decide un
-humano.
+| Vídeo | Fichas |
+|---|---|
+| `PBlvFeoU690` · 6 min · *10 Pasos Que te Convertirán en una Máquina de Vender* | 8 |
+| `20BYB0bSXvM` · 5 min · *Así Vendería Mi Producto si Solo Tuviera 1h a la Semana* | 4 |
+| `CMnqN0H-9gE` · 11 min · *Dame tan Solo 12 Minutos para Mostrarte cómo Prospectar* | 4 |
+| `roreP1HYhSI`, `JS8AuZ_AtLs` | 3 cada uno |
 
-## Y lo que eso deja claro sobre las otras 87
+`JS8AuZ_AtLs` es de Daniel Marote, 65 min: **una aparición como invitados que no
+estaba en la base**. Las demás son clips cortos de su propio canal.
+
+Leídas una por una, y lo que comparten no son parecidos: *"oye francisco qué
+impacto tiene esta falta de clientes en tus ingresos mensuales"*, *"ya que hemos
+estado montando esta instalación para tu vecino, ¿conoces a Paco, verdad?"*,
+*"te cuento en 24 segundos y si no te interesa me cuelgas"*. Nombres propios y
+cifras: eso no se repite por casualidad entre dos vídeos.
+
+**No están escritas.** Cambiar el origen de una ficha lo decide un humano.
+
+## Y lo que eso deja claro sobre las otras 58
 
 **No es que las fichas sean demasiado flacas**: 88 de las 93 tienen material de
 sobra (mediana 56 tríos, unas 70 palabras). Es que **sus vídeos no están entre
-los 244**. Si lo estuvieran, la calibración dice que pasarían unas dos de cada
-tres, no una de quince.
+los 672**. Si lo estuvieran, la calibración dice que pasarían cinco de cada
+seis.
 
 Así que sus orígenes son alguna de estas tres, y solo ellos pueden decir cuál:
 
