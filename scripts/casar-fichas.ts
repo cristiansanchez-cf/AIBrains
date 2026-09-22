@@ -20,19 +20,21 @@
  * cosas: cuántas veces acierta el vídeo bueno, y cuánto puntúa el mejor vídeo
  * EQUIVOCADO. Sin ese segundo número el umbral sería una opinión.
  *
- * NO ESCRIBE NADA, nunca. Enseña lo que ha encontrado y para. Cambiar el origen
- * de una ficha es tocar el dato que sostiene la promesa del producto —"puedes ir
- * a comprobarlo"— y eso lo decide un humano mirando la lista.
+ * NO ESCRIBE NADA sin `--aplicar`, y `--aplicar` lo teclea una persona que ha
+ * mirado la lista. Cambiar el origen de una ficha es tocar el dato que sostiene
+ * la promesa del producto —"puedes ir a comprobarlo"—. Y ni con `--aplicar` se
+ * toca nada más: ni el creador, ni `origen_incierto`, ni el estado.
  *
  *   npm run casar-fichas -- --calibrar <url-o-id>...
  *   npm run casar-fichas -- <url-o-id>...
+ *   npm run casar-fichas -- --aplicar <url-o-id>...
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { supabase } from "../src/db/supabase.js";
-import { normalizar } from "./recuperar-enlaces.js";
+import { normalizar, segundoEn, tendido, type Trozo } from "./recuperar-enlaces.js";
 
 /** Palabras por trío. Tres es lo que ya no sale por casualidad en una frase. */
 const PALABRAS_POR_TRIO = 3;
@@ -150,19 +152,76 @@ function subtitulosDe(video: string): string {
  * Una tirada larga es de otra naturaleza que un parecido: no es que se hable de
  * lo mismo, es que es la misma frase.
  */
-export function rachaMasLarga(texto: string, video: string): number {
+export function mejorRacha(texto: string, video: string): { palabras: number; donde: number } {
   const palabras = normalizar(texto).split(" ").filter(Boolean);
-  let mejor = 0;
+  let mejor = { palabras: 0, donde: -1 };
   for (let i = 0; i < palabras.length; i++) {
     // Se arranca desde la mejor ya encontrada: una tirada más corta no aporta,
     // y sin esto son minutos por ficha en vez de milisegundos.
-    let largo = mejor;
+    let largo = mejor.palabras;
     while (i + largo < palabras.length && video.includes(palabras.slice(i, i + largo + 1).join(" "))) {
       largo++;
     }
-    if (largo > mejor) mejor = largo;
+    if (largo > mejor.palabras) {
+      mejor = { palabras: largo, donde: video.indexOf(palabras.slice(i, i + largo).join(" ")) };
+    }
   }
   return mejor;
+}
+
+export function rachaMasLarga(texto: string, video: string): number {
+  return mejorRacha(texto, video).palabras;
+}
+
+/**
+ * Los subtítulos CON sus marcas de tiempo, que es lo que llena el minuto.
+ *
+ * El caché de texto plano no sirve para esto: se guardó normalizado y sin
+ * tiempos, porque para puntuar el solape los tiempos no hacen falta. Así que al
+ * escribir se vuelven a bajar, solo de los vídeos que han casado —quince, no
+ * seiscientos setenta y dos.
+ *
+ * Y EL MINUTO NO SE ESTIMA NUNCA. Sale de la marca del trozo donde empieza la
+ * frase literal; si no hubiera frase literal, no se pone minuto. Un minuto
+ * inventado es peor que ninguno: el enlace lleva a un sitio donde no está lo
+ * que la ficha dice, y eso es justo lo que el enlace venía a demostrar.
+ */
+function subtitulosConTiempo(id: string): Trozo[] {
+  const carpeta = mkdtempSync(join(tmpdir(), "subs-t-"));
+  try {
+    execFileSync(
+      "yt-dlp",
+      ["--skip-download", "--write-auto-subs", "--sub-langs", "es.*", "--sub-format", "json3",
+       "-o", join(carpeta, "%(id)s"), `https://www.youtube.com/watch?v=${id}`],
+      { stdio: ["ignore", "ignore", "pipe"] },
+    );
+    const fichero = readdirSync(carpeta).find((f) => f.endsWith(".json3"));
+    if (!fichero) return [];
+    const crudo = JSON.parse(readFileSync(join(carpeta, fichero), "utf8")) as {
+      events?: Array<{ tStartMs?: number; segs?: Array<{ utf8?: string }> }>;
+    };
+    return (crudo.events ?? [])
+      .map((ev) => ({
+        segundo: Math.floor((ev.tStartMs ?? 0) / 1000),
+        texto: (ev.segs ?? []).map((sg) => sg.utf8 ?? "").join(""),
+      }))
+      .filter((t) => t.texto.trim().length > 0);
+  } finally {
+    rmSync(carpeta, { recursive: true, force: true });
+  }
+}
+
+/** El segundo en que empieza la frase literal de la ficha, o null si no la hay. */
+export function momentoDe(texto: string, trozos: Trozo[]): number | null {
+  const { texto: plano, indices } = tendido(trozos);
+  const racha = mejorRacha(texto, plano);
+  if (racha.palabras < 4 || racha.donde < 0) return null;
+  return segundoEn(racha.donde, indices);
+}
+
+function comoReloj(segundos: number): string {
+  const m = Math.floor(segundos / 60);
+  return `${m}:${String(segundos % 60).padStart(2, "0")}`;
 }
 
 export function trios(texto: string): Set<string> {
@@ -237,6 +296,7 @@ function urlDe(id: string): string {
 async function principal(): Promise<void> {
   const argumentos = process.argv.slice(2);
   const calibrar = argumentos.includes("--calibrar");
+  const aplicar = argumentos.includes("--aplicar");
   const videos = argumentos.filter((a) => !a.startsWith("--")).map((v) => v.match(/[\w-]{11}/)?.[0] ?? v);
 
   if (videos.length < 2) {
@@ -428,6 +488,69 @@ async function principal(): Promise<void> {
     }
   }
 
+  // EL MINUTO SE BUSCA SIEMPRE, aunque no se vaya a escribir: es la mitad del
+  // valor de esto y es lo que permite comprobar el hallazgo en diez segundos en
+  // vez de ver un pódcast de hora y media.
+  const minutos = new Map<number, number | null>();
+  if (aceptadas.length > 0) {
+    const videosTocados = [...new Set(aceptadas.map((a) => a.video))];
+    console.log(`\n  Buscando el minuto en ${videosTocados.length} vídeo(s)...`);
+    for (const v of videosTocados) {
+      const trozos = subtitulosConTiempo(v);
+      if (trozos.length === 0) {
+        console.log(`    ${v}: no se han podido bajar los subtítulos con tiempos`);
+        continue;
+      }
+      for (const a of aceptadas.filter((x) => x.video === v)) {
+        const f = huerfanas.find((h) => h.id === a.id)!;
+        minutos.set(a.id, momentoDe(textoDe(f), trozos));
+      }
+    }
+    const sinMinuto = aceptadas.filter((a) => minutos.get(a.id) == null).length;
+    console.log(
+      `  Con minuto: ${aceptadas.length - sinMinuto} de ${aceptadas.length}` +
+        (sinMinuto > 0 ? `; ${sinMinuto} se quedan sin él antes que llevar a un minuto inventado.` : ""),
+    );
+    for (const a of aceptadas) {
+      const seg = minutos.get(a.id);
+      console.log(
+        `    ${String(a.id).padStart(4)}  ${seg == null ? "  —  " : comoReloj(seg).padStart(5)}  ` +
+          `${urlDe(a.video)}${seg == null ? "" : `&t=${seg}s`}`,
+      );
+    }
+  }
+
+  if (aplicar) {
+    console.log(`\n=== escribiendo ${aceptadas.length} enlace(s) ===\n`);
+    let escritas = 0;
+    for (const a of aceptadas) {
+      const seg = minutos.get(a.id);
+      const { data: hecho, error: fallo } = await supabase
+        .from("fichas")
+        .update({ fuente_url: urlDe(a.video), fuente_timestamp: seg ?? null })
+        .eq("id", a.id)
+        // Si alguien lo llenó mientras, NO SE PISA. Un enlace puesto a mano por
+        // una persona que ha visto el vídeo vale más que este emparejamiento.
+        .is("fuente_url", null)
+        .select("id");
+      if (fallo) {
+        console.error(`  ficha ${a.id}: ${fallo.message}`);
+        continue;
+      }
+      if ((hecho ?? []).length === 0) {
+        console.log(`  ficha ${a.id}: ya tenía enlace, no se toca`);
+        continue;
+      }
+      escritas++;
+    }
+    console.log(`\n${escritas} ficha(s) escritas con su enlace y su minuto.`);
+    console.log(
+      `NO se ha tocado nada más: ni el creador, ni \`origen_incierto\`, ni el estado.\n` +
+        `Resolver una atribución dudosa es otra decisión y la toma un humano.`,
+    );
+    return;
+  }
+
   console.log("\n  A qué vídeo apunta cada una, pasen o no (solo el mejor de cada ficha):\n");
   for (const [video, n] of [...cuenta.entries()].sort((a, b) => b[1] - a[1])) {
     const suyas = porFicha.filter((p) => p.video === video);
@@ -444,8 +567,8 @@ async function principal(): Promise<void> {
   }
 
   console.log(
-    `\nNo se ha escrito nada. Antes de escribir, correr con --calibrar sobre los\n` +
-      `vídeos de origen conocido y mirar si los rangos se pisan.`,
+    `\nNo se ha escrito nada. Para escribirlo, --aplicar; antes, --calibrar sobre\n` +
+      `los vídeos de origen conocido y mirar si los rangos se pisan.`,
   );
 }
 

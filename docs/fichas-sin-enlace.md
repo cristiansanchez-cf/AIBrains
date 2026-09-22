@@ -59,7 +59,40 @@ estado montando esta instalación para tu vecino, ¿conoces a Paco, verdad?"*,
 *"te cuento en 24 segundos y si no te interesa me cuelgas"*. Nombres propios y
 cifras: eso no se repite por casualidad entre dos vídeos.
 
-**No están escritas.** Cambiar el origen de una ficha lo decide un humano.
+**Escritas el 22/09/2026** con `npm run casar-fichas -- --aplicar`, después de que
+Cristian las mirara. Las 35 llevan enlace **y minuto exacto**: el minuto sale de
+la marca de tiempo del trozo donde empieza la frase literal, nunca de una
+estimación, y si no hubiera frase literal se queda sin minuto (regla dura §14).
+Comprobados cinco a mano abriendo el vídeo en ese segundo: los cinco caen justo
+en la frase.
+
+Antes y después, en `fichas_servibles`:
+
+| | antes | después |
+|---|---|---|
+| Sin enlace al original | 92 | **58** |
+| Con minuto exacto | 435 | **469** |
+
+No se tocó nada más: ni el creador, ni `origen_incierto`, ni el estado.
+
+### Una atribución que ahora se puede resolver, y no es mía
+
+Las fichas **258 y 259** son la misma página de Notion duplicada en dos
+creadores, las dos marcadas `origen_incierto` —por eso no sirven su guion
+literal—. Las dos casan con `PBlvFeoU690`, que es del canal *Alfonso y
+Christian*, así que la duda tiene respuesta: la copia de Alfonso y Cristian (259)
+es la buena y la de Manuel Trejo (258) no.
+
+Mientras no se resuelva, **la 258 dice Manuel Trejo y enlaza a un vídeo de
+Alfonso y Cristian**. Declara la duda, así que no miente, pero es la clase de
+cruce que `scripts/atribucion.ts` existe para evitar. Resolverlo es tocar
+atribución y lo decide un humano: descartar la 258 le devuelve a la 259 su guion
+literal solo.
+
+Y una ceguera que conviene saber: la comprobación de atribución del diagnóstico
+**solo sabe mirar TikTok e Instagram**. Lo dice ella misma en su salida. Con 469
+fichas enlazando a YouTube, eso ya no es un detalle — para cerrarlo haría falta
+guardar el canal de YouTube de cada creador, que hoy no está en ningún sitio.
 
 ## Y lo que eso deja claro sobre las otras 58
 

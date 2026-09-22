@@ -38,8 +38,8 @@ cuando Claude mueva un botón; una página sí, y ya existe.
 741 fichas servibles (12%) no tienen enlace de origen, y sin enlace no se puede
 cumplir la promesa del producto. Ya se ha barrido lo que se podía barrer solo:
 672 vídeos —su canal entero, shorts incluidos, más los podcasts conocidos— y
-casan 35 fichas de 15 vídeos, pendientes de que alguien diga que se escriben.
-Las otras 58 tienen material de sobra, así que sus vídeos no están ahí.
+casaron 35 fichas de 15 vídeos, **ya escritas con su minuto**: quedan 58 sin
+enlace. Esas 58 tienen material de sobra, así que sus vídeos no están ahí.
 
 La pregunta exacta, y el "y" importa: *de lo que nos pasasteis en junio, ¿qué
 vídeos de YouTube eran, y había material que no fuera vuestro?* Lo segundo,

@@ -61,10 +61,10 @@ Cerrado hoy y verificado contra producción — **no hace falta volver a mirarlo
    lo que decía aquí. Lo de "64 horas y seis veces la cuota" era cuando los
    subtítulos venían de Supadata; hoy se bajan con `yt-dlp` y no cuestan nada.
    **El barrido ya se ha hecho**: 672 vídeos, su canal entero con shorts más los
-   podcasts conocidos, y casan 35 fichas de 15 vídeos —`npm run casar-fichas`,
-   calibrado contra las 434 de origen conocido: acepta el 84% con 0
-   equivocadas—. Las otras 58 tienen material de sobra, así que sus vídeos no
-   están en el canal. Lo que falta es que ellos
+   podcasts conocidos. Casaron 35 fichas de 15 vídeos y ya están escritas con su
+   minuto —`npm run casar-fichas`, calibrado contra las 434 de origen conocido:
+   acepta el 84% con 0 equivocadas—. **Quedan 58**, y tienen material de sobra,
+   así que sus vídeos no están en el canal. Lo que falta es que ellos
    digan qué entregaron **y si había material de otro formador**. Todo en
    `docs/fichas-sin-enlace.md`.
 2. **`/pago/listo` debe llevar el wizard entero**, reutilizando el componente de
