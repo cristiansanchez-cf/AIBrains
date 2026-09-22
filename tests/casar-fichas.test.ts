@@ -13,7 +13,7 @@
  * en silencio.
  */
 import { describe, expect, it } from "vitest";
-import { MARGEN, solape, textoDe, trios, UMBRAL } from "../scripts/casar-fichas.js";
+import { MARGEN, MINIMO_TRIOS, seAcepta, solape, textoDe, trios, UMBRAL } from "../scripts/casar-fichas.js";
 
 describe("trios", () => {
   it("son tríos de palabras solapados, no trozos partidos", () => {
@@ -81,5 +81,28 @@ describe("textoDe", () => {
       fuente_url: null,
     });
     expect(t).toBe("Silencio táctico Incomoda al otro Callarse Esperar");
+  });
+});
+
+describe("seAcepta", () => {
+  const GORDA = MINIMO_TRIOS + 10;
+
+  it("acepta lo que pasa las tres condiciones", () => {
+    expect(seAcepta(0.35, 0.2, GORDA)).toBe(true);
+  });
+
+  it("una ficha flaca no se acepta AUNQUE puntúe altísimo", () => {
+    // El caso real: siete palabras, cinco tríos, cuatro dentro -> 0.800, la
+    // puntuación más alta de las 93, y lo único compartido era el titular.
+    expect(seAcepta(0.8, 0.4, 5)).toBe(false);
+  });
+
+  it("sin margen sobre el segundo vídeo no se acepta", () => {
+    // Puntúa alto contra dos vídeos del mismo formador: no se sabe cuál es.
+    expect(seAcepta(0.5, MARGEN / 2, GORDA)).toBe(false);
+  });
+
+  it("por debajo del umbral no se acepta ni con margen de sobra", () => {
+    expect(seAcepta(UMBRAL - 0.01, 0.4, GORDA)).toBe(false);
   });
 });

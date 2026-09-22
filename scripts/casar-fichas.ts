@@ -54,6 +54,21 @@ export const UMBRAL = 0.3;
 export const MARGEN = 0.1;
 
 /**
+ * Cuántos tríos tiene que tener la ficha para que su porcentaje signifique algo.
+ *
+ * SIN ESTO EL METODO SE CUELA, y lo hizo: la ficha 342 ("El dinero nunca es el
+ * problema real") no tiene guion, son siete palabras, cinco tríos. Cuatro
+ * cayeron dentro de un vídeo y salió 0.800 — la puntuación más alta de las 93—
+ * cuando lo único que comparten es la frase del titular, que la dice cualquier
+ * vídeo de ventas. Un porcentaje sobre cinco no es una medida, es una moneda al
+ * aire con cinco caras.
+ *
+ * Veinte tríos son unas veinticinco palabras: ahí ya hace falta que coincida
+ * una frase entera, no un tópico del oficio.
+ */
+export const MINIMO_TRIOS = 20;
+
+/**
  * Los subtítulos se guardan en disco porque el mismo vídeo se mira muchas veces.
  *
  * Calibrar son 275 fichas contra una docena de vídeos, y sin caché cada prueba
@@ -138,6 +153,17 @@ export function textoDe(f: Ficha): string {
     .join(" ");
 }
 
+/**
+ * La regla entera, en un solo sitio.
+ *
+ * Estaba escrita dos veces —una en la calibración y otra en el barrido— y eso
+ * es como no tener regla: se ajusta una, se olvida la otra, y la calibración
+ * acaba midiendo algo distinto de lo que luego se usa.
+ */
+export function seAcepta(punto: number, margen: number, triosDeLaFicha: number): boolean {
+  return triosDeLaFicha >= MINIMO_TRIOS && punto >= UMBRAL && margen >= MARGEN;
+}
+
 function urlDe(id: string): string {
   return `https://www.youtube.com/watch?v=${id}`;
 }
@@ -217,7 +243,7 @@ async function principal(): Promise<void> {
     let aceptadasMal = 0;
     for (const f of conocidas) {
       const orden = puntuar(f);
-      if (orden[0]!.punto < UMBRAL || orden[0]!.punto - orden[1]!.punto < MARGEN) continue;
+      if (!seAcepta(orden[0]!.punto, orden[0]!.punto - orden[1]!.punto, trios(textoDe(f)).size)) continue;
       aceptadas++;
       if (!f.fuente_url!.includes(orden[0]!.video)) aceptadasMal++;
     }
@@ -233,7 +259,7 @@ async function principal(): Promise<void> {
     console.log(`  Solape con el mejor que NO es: ${rango(malas)}`);
     console.log(`  Margen entre los dos:          ${rango(margenes)}`);
     console.log(
-      `\n  Con la regla puesta (solape >= ${UMBRAL} y margen >= ${MARGEN}):\n` +
+      `\n  Con la regla puesta (>= ${MINIMO_TRIOS} tríos, solape >= ${UMBRAL}, margen >= ${MARGEN}):\n` +
         `    acepta ${aceptadas} de ${conocidas.length} (${pct(aceptadas)})\n` +
         `    de esas, equivocadas: ${aceptadasMal}`,
     );
@@ -249,7 +275,7 @@ async function principal(): Promise<void> {
   console.log(`\n=== ${huerfanas.length} fichas sin enlace contra ${porVideo.size} vídeos ===\n`);
 
   const cuenta = new Map<string, number>();
-  const porFicha: Array<{ id: number; video: string; punto: number; margen: number; insight: string }> = [];
+  const porFicha: Array<{ id: number; video: string; punto: number; margen: number; trios: number; insight: string }> = [];
   for (const f of huerfanas) {
     const orden = puntuar(f);
     const margen = orden[0]!.punto - orden[1]!.punto;
@@ -258,12 +284,28 @@ async function principal(): Promise<void> {
       video: orden[0]!.video,
       punto: orden[0]!.punto,
       margen,
+      trios: trios(textoDe(f)).size,
       insight: (f.insight ?? "").slice(0, 46),
     });
     cuenta.set(orden[0]!.video, (cuenta.get(orden[0]!.video) ?? 0) + 1);
   }
 
-  console.log("  A qué vídeo apunta cada una (solo el mejor de cada ficha):\n");
+  // LO QUE PASA LA REGLA VA PRIMERO Y APARTE. El resto de la lista es "el mejor
+  // de los que hay", que siempre existe aunque ninguno sea: mezclarlos invita a
+  // leer como hallazgo lo que es el menos malo.
+  const aceptadas = porFicha.filter((p) => seAcepta(p.punto, p.margen, p.trios));
+  console.log(
+    `  PASAN LA REGLA (>= ${MINIMO_TRIOS} tríos, solape >= ${UMBRAL}, margen >= ${MARGEN}): ` +
+      `${aceptadas.length} de ${huerfanas.length}\n`,
+  );
+  const porVideoAceptado = new Map<string, typeof aceptadas>();
+  for (const a of aceptadas) porVideoAceptado.set(a.video, [...(porVideoAceptado.get(a.video) ?? []), a]);
+  for (const [video, suyas] of [...porVideoAceptado.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`  ${String(suyas.length).padStart(3)} fichas  ${urlDe(video)}`);
+    for (const a of suyas) console.log(`         ${String(a.id).padStart(4)}  ${a.punto.toFixed(3)} (+${a.margen.toFixed(3)})  ${a.insight}`);
+  }
+
+  console.log("\n  A qué vídeo apunta cada una, pasen o no (solo el mejor de cada ficha):\n");
   for (const [video, n] of [...cuenta.entries()].sort((a, b) => b[1] - a[1])) {
     const suyas = porFicha.filter((p) => p.video === video);
     const media = suyas.reduce((a, p) => a + p.punto, 0) / suyas.length;
