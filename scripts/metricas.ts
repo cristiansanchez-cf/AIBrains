@@ -16,9 +16,10 @@
 import { execSync } from "node:child_process";
 import { supabase } from "../src/db/supabase.js";
 import { config } from "../src/config.js";
+import { juzgar, type Suelo } from "./veredicto.js";
 
 /** Los suelos de docs/reglas-duras.md §1. Cambiarlos es cambiar el contrato. */
-const SUELOS: Record<string, { minimo?: number; maximo?: number; que: string }> = {
+const SUELOS: Record<string, Suelo> = {
   recuperacion_1: { minimo: 90, que: "la ficha correcta sale la primera (%)" },
   recuperacion_5: { minimo: 96, que: "la ficha correcta sale entre las 5 (%)" },
   // Los tres suelos de arriba están en docs/reglas-duras.md §1. El de
@@ -39,7 +40,36 @@ const soloLectura = rapido || process.argv.includes("--seco");
  * vista y leerla de ahí.
  */
 const UMBRAL_HUECO = 0.45;
-let problemas = 0;
+/**
+ * DOS ROJOS QUE NO SON EL MISMO ROJO, y mezclarlos costó dos semanas a ciegas.
+ *
+ * `averias` es no haber podido medir: la clave caducada, el script roto, la red.
+ * Es un fallo de verdad y hay que enterarse hoy.
+ *
+ * `bajoSuelo` es haber medido y estar por debajo del objetivo. Eso HOY es una
+ * decisión tomada —Cristian eligió dejar los suelos en rojo hasta recuperar
+ * las 91 fichas huérfanas— y un workflow que falla todas las semanas por una
+ * decisión no informa de nada: se vuelve ruido y se ignora.
+ *
+ * Lo que pasó por mezclarlos: el secreto SUPABASE_SECRET_KEY se quedó con la
+ * clave vieja al rotarla, `calidad` empezó a fallar, y parecía el rojo esperado
+ * de los suelos. Dos semanas sin medir creyendo que sabíamos por qué fallaba.
+ *
+ * De `bajoSuelo` solo se falla si EMPEORA respecto a la medida anterior. Estar
+ * igual de bajo es el estado conocido; bajar más es noticia.
+ */
+let averias = 0;
+let bajoSuelo = 0;
+let empeoramientos: string[] = [];
+
+/**
+ * `avisos` es el tercer cajón: cosas ciertas que seguirán siendo ciertas la
+ * semana que viene (la cuota de correo al 70%, una cuenta repartida). Se
+ * imprimen bien visibles, pero no tumban la ejecución: si lo hicieran,
+ * volveríamos al problema de arriba por otra puerta.
+ */
+let avisos = 0;
+
 
 /**
  * `--rapido` y `--seco` NO escriben.
@@ -87,14 +117,10 @@ async function registrar(medida: string, valor: number, contexto: object): Promi
         ? "igual"
         : `${valor > previo ? "+" : ""}${(valor - previo).toFixed(1)} desde la medida anterior`;
 
-  let veredicto = "OK   ";
-  if (suelo?.minimo !== undefined && valor < suelo.minimo) {
-    veredicto = "BAJO ";
-    problemas++;
-  }
-  if (suelo?.maximo !== undefined && valor > suelo.maximo) {
-    veredicto = "ALTO ";
-    problemas++;
+  const { etiqueta: veredicto, fuera, esNoticia } = juzgar(valor, previo, suelo);
+  if (fuera) {
+    bajoSuelo++;
+    if (esNoticia) empeoramientos.push(`${medida}: ${previo} -> ${valor}`);
   }
 
   console.log(`${veredicto} ${medida.padEnd(18)} ${String(valor).padStart(6)}   ${tendencia}`);
@@ -144,7 +170,7 @@ function noSePudoLeer(medida: string, comando: string, salida: string): void {
   console.log(`FALLA ${medida.padEnd(18)} no se pudo leer la salida de '${comando}'`);
   console.log(`       Sin esto el histórico miente por omisión. Últimas líneas:`);
   for (const l of salida.trim().split("\n").slice(-8)) console.log(`       | ${l}`);
-  problemas++;
+  averias++;
 }
 
 /**
@@ -291,7 +317,7 @@ async function main(): Promise<void> {
     // disponibilidad: es que alguien recibió una respuesta peor.
     if (degradadas > 0) {
       console.log(`\n  ${degradadas} de ${n} consultas se sirvieron DEGRADADAS (respaldo léxico).`);
-      problemas++;
+      averias++;
     }
   }
 
@@ -362,7 +388,7 @@ async function main(): Promise<void> {
       console.log(`\n  ${peorHora} clientes distintos en la misma hora en una cuenta.`);
       console.log(`  Eso no son los dispositivos de una persona: parece una cuenta`);
       console.log(`  individual repartida. Mirarlo antes de decidir nada.`);
-      problemas++;
+      avisos++;
     }
   }
 
@@ -414,11 +440,11 @@ async function main(): Promise<void> {
       console.log(`\n  HAY QUE SUBIR DE PLAN EN RESEND. Vas por el ${Math.round((enviados / limite) * 100)}%`);
       console.log(`  de lo que contamos, y lo real es más. Cuando lo subas, cambia`);
       console.log(`  CORREO_LIMITE_MENSUAL y CORREO_LIMITE_DIARIO en Railway.`);
-      problemas++;
+      avisos++;
     }
     if (peorDia && peorDia[1] > config.correo.limiteDiario * 0.7) {
       console.log(`\n  Algún día se acercó al tope DIARIO (${peorDia[1]} de ${config.correo.limiteDiario}).`);
-      problemas++;
+      avisos++;
     }
   }
 
@@ -454,7 +480,7 @@ async function main(): Promise<void> {
     console.log(`  ${vistas} fichas abiertas, pero NINGUNA declara su origen.`);
     console.log("  El contador no está midiendo: el modelo no pasa `origen`.");
     console.log("  Hay que reforzar la instrucción antes de creerse el cero.");
-    problemas++;
+    averias++;
   } else {
     const pct = Math.round((desdeRelacionada / vistas) * 100);
     console.log(`  ${desdeRelacionada} de ${vistas} aperturas vienen de una relacionada (${pct}%).`);
@@ -490,12 +516,51 @@ async function main(): Promise<void> {
     console.log(`\n  Esto es la lista de fichas que faltan, ordenada por demanda.`);
   }
 
+  if (averias > 0) {
+    console.log(`\nNO SE PUDO MEDIR ${averias} cosa(s). Eso es una AVERÍA, no una nota baja.`);
+    console.log(`Mientras siga así no hay dato nuevo, y el panel enseña la última cifra buena como si fuera de hoy.\n`);
+  }
+  if (empeoramientos.length > 0) {
+    console.log(`\nHA EMPEORADO desde la última medida:`);
+    for (const e of empeoramientos) console.log(`  ${e}`);
+    console.log("");
+  }
+  if (avisos > 0) {
+    console.log(`\n${avisos} aviso(s) para mirar. No tumban la ejecución: seguirán ahí`);
+    console.log(`la semana que viene y fallar por ellos cada semana es ruido.\n`);
+  }
+  if (averias === 0 && empeoramientos.length === 0) {
+    console.log(
+      bajoSuelo === 0
+        ? `\nTodo dentro de los suelos.\n`
+        : `\n${bajoSuelo} medida(s) bajo el suelo, SIN empeorar. Estado conocido, no es una avería.\n` +
+            `Los suelos están en rojo por decisión: ver docs/reglas-duras.md §1.\n`,
+    );
+  }
+
+  // Linea-contrato para el workflow, por el mismo motivo que `METRICA`: que
+  // GitHub no tenga que adivinar leyendo la prosa cuál de los dos rojos es.
   console.log(
-    problemas === 0
-      ? `\nTodo dentro de los suelos.\n`
-      : `\n${problemas} medida(s) fuera de sitio. Ver docs/reglas-duras.md §1.\n`,
+    `RESUMEN averias=${averias} empeoramientos=${empeoramientos.length} ` +
+      `bajo_suelo=${bajoSuelo} avisos=${avisos}`,
   );
-  if (problemas > 0) process.exitCode = 1;
+  console.log(
+    `MOTIVO ${
+      averias > 0
+        ? `no se pudo medir (${averias})`
+        : empeoramientos.length > 0
+          ? `ha empeorado: ${empeoramientos.join("; ")}`
+          : bajoSuelo > 0
+            ? `bajo el suelo sin empeorar (${bajoSuelo})`
+            : "todo en su sitio"
+    }`,
+  );
+
+  // SOLO SE FALLA POR LO QUE ES NOTICIA: no haber podido medir, o haber
+  // empeorado. Fallar cada semana por un rojo que ya se decidió mantener
+  // convierte la alarma en ruido, y una alarma ruidosa se acaba ignorando —
+  // que es exactamente como se nos pasó una semana entera de caída.
+  if (averias > 0 || empeoramientos.length > 0) process.exitCode = 1;
 }
 
 main().catch((error: unknown) => {

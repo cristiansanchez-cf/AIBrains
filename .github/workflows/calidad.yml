@@ -50,6 +50,21 @@ jobs:
           npm run metricas 2>&1 | tee salida.txt
           echo "codigo=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
+          # DOS ROJOS DISTINTOS, y confundirlos costó dos semanas sin medir: la
+          # clave de Supabase se quedó revocada, `calidad` empezó a fallar, y
+          # parecía el rojo de siempre —los suelos, que están bajos por decisión
+          # tomada—. El script ya los separa; aquí solo se leen sus líneas.
+          resumen=$(grep -m1 '^RESUMEN ' salida.txt || echo "RESUMEN averias=1 empeoramientos=0 bajo_suelo=0 avisos=0")
+          # El grep va SOLO, sin tubería: `grep ... | cut` devuelve el código de
+          # `cut`, siempre 0, así que el `|| echo` de respaldo no saltaba nunca
+          # y un informe que ni llegó a imprimir el motivo daba motivo vacío.
+          motivo=$(grep -m1 '^MOTIVO ' salida.txt || true)
+          motivo=${motivo:-"MOTIVO el informe no llegó a terminar"}
+          motivo=${motivo#MOTIVO }
+          averias=$(echo "$resumen" | sed -n 's/.*averias=\([0-9]*\).*/\1/p')
+          echo "averias=${averias:-1}" >> "$GITHUB_OUTPUT"
+          echo "motivo=$motivo" >> "$GITHUB_OUTPUT"
+
           # Lo que va a la issue se recorta: el informe incluye el top de
           # `huecos_de_contenido`, o sea PREGUNTAS LITERALES de comerciales sobre
           # sus operaciones. La migración que crea esa tabla las etiqueta como
@@ -59,6 +74,11 @@ jobs:
             | sed '/=== lo que se pregunta/d' > publicable.txt
           echo "" >> publicable.txt
           echo "(El detalle de consultas no se publica aquí: es dato sensible con retención de 30 días. Míralo con: npm run metricas)" >> publicable.txt
+
+          # El veredicto se imprime al final del informe, o sea DESPUÉS del
+          # bloque de preguntas que no se publica. Sin esto, la issue enseñaba
+          # las medidas y no decía por qué había fallado.
+          grep -E '^(NO SE PUDO MEDIR|HA EMPEORADO)' -A6 salida.txt >> publicable.txt || true
 
       # La retención estaba declarada en la migración y en la
       # política, y no la ejecutaba nadie: "se borra a los 90 días" era una
@@ -71,23 +91,66 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: npm run metricas -- --limpiar
 
-      - name: Avisar si algo bajó del suelo
+      # POR QUÉ ESTO VA POR CORREO Y LA ISSUE NO BASTA. Una avería es no haber
+      # podido medir, y entonces el histórico deja de crecer sin que nada lo
+      # diga: el panel sigue enseñando la última cifra buena como si fuera de
+      # hoy. Eso puede estar así semanas —lo estuvo—, y las issues de un repo
+      # privado no las abre nadie. Solo para averías: un correo semanal por un
+      # suelo que ya se decidió mantener en rojo se aprende a borrar sin leer.
+      - name: Avisar por correo si no se pudo medir
+        if: steps.medir.outputs.averias != '0'
+        env:
+          RESEND: ${{ secrets.RESEND_API_KEY }}
+          PARA: ${{ vars.CEREBRO_AVISO_EMAIL }}
+          MOTIVO: ${{ steps.medir.outputs.motivo }}
+        run: |
+          if [ -z "$RESEND" ] || [ -z "$PARA" ]; then
+            echo "SIN AVISO: falta RESEND_API_KEY o la variable CEREBRO_AVISO_EMAIL."
+            echo "La issue se abrirá igual, pero nadie recibirá un correo."
+            exit 0
+          fi
+
+          cuerpo=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+            "La medición semanal de calidad NO PUDO MEDIR: $MOTIVO" \
+            "Mientras siga así no hay dato nuevo, y el panel enseña la última cifra buena como si fuera de hoy." \
+            "$(cat publicable.txt)" \
+            "Detalle completo: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+
+          # --fail-with-body para que un envío rechazado salga en rojo aquí en
+          # vez de darse por enviado, igual que en `salud`.
+          curl -sS --fail-with-body -m 20 -X POST "https://api.resend.com/emails" \
+            -H "authorization: Bearer $RESEND" \
+            -H "content-type: application/json" \
+            -d "$(jq -n --arg p "$PARA" --arg t "$cuerpo" \
+                  '{from:"Cerebro <hola@correo.cofundo.io>", to:[$p], subject:"[cerebro] la calidad no se pudo medir", text:$t}')"
+
+      - name: Avisar si hay algo que mirar
         if: steps.medir.outputs.codigo != '0'
         env:
           GH_TOKEN: ${{ github.token }}
+          MOTIVO: ${{ steps.medir.outputs.motivo }}
         run: |
           # Una sola issue abierta a la vez. Sin esto, ocho semanas rotas son
           # ocho issues idénticas y nadie abre ninguna.
           abierta=$(gh issue list --label calidad --state open --limit 1 --json number --jq '.[0].number // empty')
 
           if [ -n "$abierta" ]; then
-            gh issue comment "$abierta" --body "$(printf 'Sigue fuera de los suelos el %s.\n\n```\n%s\n```' "$(date -u +%F)" "$(cat publicable.txt)")"
+            gh issue comment "$abierta" --body "$(printf 'Sigue así el %s: %s\n\n```\n%s\n```' "$(date -u +%F)" "$MOTIVO" "$(cat publicable.txt)")"
           else
             gh label create calidad --color B60205 --description "Medidas fuera de los suelos de reglas-duras.md" 2>/dev/null || true
+            # El título dice CUÁL de los dos rojos es, porque es lo único que se
+            # lee desde la bandeja de entrada.
+            if [ "${{ steps.medir.outputs.averias }}" != "0" ]; then
+              titulo="No se pudo medir la calidad — $(date -u +%F)"
+              que="No es una nota baja: es que la medición no llegó a hacerse, así que no hay dato nuevo. Qué mirar: las credenciales del workflow (\`SUPABASE_SECRET_KEY\`, \`OPENAI_API_KEY\`, \`ANTHROPIC_API_KEY\`) y el log de la ejecución."
+            else
+              titulo="La calidad ha empeorado — $(date -u +%F)"
+              que="Una medida ha bajado respecto a la anterior, no solo respecto al suelo. Qué mirar: qué se desplegó desde la última medición, y \`salud_de_la_busqueda\` en la base."
+            fi
             gh issue create \
               --label calidad \
-              --title "Calidad por debajo del suelo — $(date -u +%F)" \
-              --body "$(printf 'Alguna medida ha bajado del suelo de `docs/reglas-duras.md` §1.\n\n```\n%s\n```\n\nQué mirar: qué se desplegó desde la última medición buena, y `salud_de_la_busqueda` en la base.' "$(cat publicable.txt)")"
+              --title "$titulo" \
+              --body "$(printf '**%s**\n\n%s\n\n```\n%s\n```' "$MOTIVO" "$que" "$(cat publicable.txt)")"
           fi
 
       - name: Cerrar la issue si todo volvió a su sitio
@@ -98,7 +161,7 @@ jobs:
           # Que se cierre sola evita el otro fallo típico: una issue vieja
           # abierta de algo ya arreglado, que enseña a ignorar la etiqueta.
           for n in $(gh issue list --label calidad --state open --json number --jq '.[].number'); do
-            gh issue close "$n" --comment "Todas las medidas dentro de los suelos el $(date -u +%F)."
+            gh issue close "$n" --comment "Se ha vuelto a medir y no hay nada nuevo que mirar ($(date -u +%F)). Los suelos pueden seguir en rojo: eso es el estado conocido, no una avería."
           done
 
       - name: Fallar si hubo problema

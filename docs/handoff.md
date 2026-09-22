@@ -154,6 +154,12 @@ punta contra producción).
 ficha correcta salga la primera, 96% entre las cinco, 0 marcadores de voz, todos
 los tests. Si un cambio los baja, no entra.
 
+Hoy estamos por debajo (80/91) **a propósito**, hasta recuperar las 91 fichas
+huérfanas. Por eso `npm run metricas` distingue entre no llegar al suelo y no
+haber podido medir: solo lo segundo (y los empeoramientos) hace fallar el
+comando. Mezclarlo costó dos semanas sin medir nada — está contado en
+`docs/reglas-duras.md` §1.
+
 **Una fase no está terminada hasta que has buscado por dónde falla.** No hasta
 que funciona: hasta que has intentado romperla. Los agujeros reales de este repo
 aparecieron preguntando "¿qué NO debería poder hacerse?".

@@ -34,6 +34,28 @@ cambiar lo que nos hace distintos por medio segundo.
 secas.** Todo lo que erosione eso, aunque sea poco, ataca la razón de existir del
 producto.
 
+### Estar bajo el suelo y no poder medir no son el mismo rojo
+
+Hoy la recuperación está en 80/91 con los suelos en 90/96, y **es una decisión
+tomada**: se quedan en rojo hasta recuperar las 91 fichas huérfanas. Mientras
+tanto, el workflow `calidad` fallaba todas las semanas por ese rojo decidido —y
+así fue como pasaron dos semanas sin medir nada. La clave de Supabase se había
+quedado revocada al rotarla, `calidad` fallaba por eso, y parecía el rojo de
+siempre. Un aviso que suena cada semana deja de ser un aviso.
+
+Desde entonces `npm run metricas` separa tres cosas (`scripts/veredicto.ts`):
+
+- **Avería** — no se pudo medir. El histórico deja de crecer sin que nada lo
+  diga y el panel enseña la última cifra buena como si fuera de hoy. Falla la
+  ejecución **y manda un correo**, como `salud`.
+- **Empeoramiento** — se midió y ha bajado respecto a la medida anterior, o ha
+  cruzado el suelo por primera vez. Falla la ejecución y abre incidencia.
+- **Bajo el suelo, igual que antes** — el estado conocido. Se imprime en rojo en
+  el informe y **no tumba nada**.
+
+Bajar un suelo sigue siendo una decisión, no un efecto secundario. Lo que
+cambia es que dejar uno en rojo a propósito ya no ciega la alarma.
+
 ---
 
 ## 2. Lo que se puede cachear y lo que no
