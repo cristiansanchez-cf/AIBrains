@@ -57,11 +57,15 @@ Cerrado hoy y verificado contra producción — **no hace falta volver a mirarlo
 
 ## Qué está abierto, por orden
 
-1. **Las 91 fichas sin enlace.** Bloqueado **a propósito**: hay que preguntarle
-   a Alfonso y Cristian qué vídeos entregaron. El canal tiene 644 vídeos y
-   barrerlo son 64 horas y seis veces la cuota mensual. El emparejador ya está
-   hecho y medido: `scripts/recuperar-enlaces.ts` y `docs/fichas-sin-enlace.md`.
-   **No lo intentes por fuerza bruta**, ya se probó.
+1. **Las 91 fichas sin enlace.** Sigue bloqueado en preguntarles, pero ya no por
+   lo que decía aquí. Lo de "64 horas y seis veces la cuota" era cuando los
+   subtítulos venían de Supadata; hoy se bajan con `yt-dlp` y no cuestan nada.
+   **El barrido ya se ha hecho**: 244 vídeos, su canal entero más los podcasts
+   conocidos, y solo casan 6 fichas —`npm run casar-fichas`, calibrado contra
+   las 434 de origen conocido: 0 equivocadas—. Las otras 87 tienen material de
+   sobra, así que sus vídeos no están en el canal. Lo que falta es que ellos
+   digan qué entregaron **y si había material de otro formador**. Todo en
+   `docs/fichas-sin-enlace.md`.
 2. **`/pago/listo` debe llevar el wizard entero**, reutilizando el componente de
    `/tutorial` en vez de una copia. Es de la sesión de la web.
 3. **`pasar_a_anual` está vivo pero escondido** en el panel: factura en el acto

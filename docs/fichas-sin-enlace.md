@@ -1,5 +1,78 @@
 # Fichas sin enlace al original
 
+> **22/09/2026 — dos cosas que este documento daba por ciertas ya no lo son.**
+> Lee esta sección antes que el resto; lo de abajo se escribió cuando eran
+> verdad y se conserva porque el método de búsqueda sigue sirviendo.
+
+**1. Las 93 ya no conservan su transcripción.** Cero de 93 tienen
+`transcripcion` en la base. `recuperar-enlaces.ts` busca la frase literal dentro
+de los subtítulos, así que no puede ni empezar — y durante un tiempo no lo dijo:
+seguía adelante e imprimía "0 ficha(s)" por cada vídeo. Doce candidatos, doce
+ceros que parecían doce descartes y eran doce veces "no he buscado". Ahora se
+planta y manda a `npm run casar-fichas`.
+
+**2. No hace falta cuota de Supadata ni 64 horas.** Eso era cuando los
+subtítulos venían de la API. El script usa `yt-dlp`, que no tiene cuota, y el
+canal son **230 vídeos largos + 431 shorts**, no 644 piezas inabarcables.
+Barrerlo entero es cuestión de tardes, no de dinero.
+
+## Lo que se ha barrido, y lo que ha salido
+
+`npm run casar-fichas` compara lo que queda de la ficha —el destilado, que está
+reescrito— con los subtítulos, por solape de tríos de palabras. Como parecerse
+no prueba nada, `--calibrar` le tapa el enlace a las 434 fichas de origen
+conocido y mide contra ellas:
+
+| | |
+|---|---|
+| Acierta el vídeo bueno a la primera | 432 de 434 (99,5%) |
+| Solape con su propio vídeo | 0,000 – 0,578 (mediana 0,344) |
+| Solape con el mejor que NO es | 0,000 – 0,229 (mediana 0,083) |
+| Con la regla puesta (≥20 tríos, ≥0,30, margen ≥0,10) | acepta 288, **0 equivocadas** |
+
+Barridos **244 vídeos** —el canal entero de vídeos y directos, los 5 podcasts
+que ya conocíamos y los de Manuel Trejo—: **pasan la regla 6 fichas**, de dos
+vídeos cortos de su propio canal:
+
+- `PBlvFeoU690` (6 min, *10 Pasos Que te Convertirán en una Máquina de Vender*) →
+  fichas 258, 259, 325, 329
+- `20BYB0bSXvM` (5 min, *Así Vendería Mi Producto si Solo Tuviera 1h a la Semana*) →
+  fichas 358, 384
+
+Comprobadas a mano una por una: comparten frases enteras del guion, no
+parecidos. **No están escritas**: cambiar el origen de una ficha lo decide un
+humano.
+
+## Y lo que eso deja claro sobre las otras 87
+
+**No es que las fichas sean demasiado flacas**: 88 de las 93 tienen material de
+sobra (mediana 56 tríos, unas 70 palabras). Es que **sus vídeos no están entre
+los 244**. Si lo estuvieran, la calibración dice que pasarían unas dos de cada
+tres, no una de quince.
+
+Así que sus orígenes son alguna de estas tres, y solo ellos pueden decir cuál:
+
+1. Apariciones como invitados en canales ajenos que no salen buscando su nombre.
+   **Es donde está el material bueno**: los 5 podcasts conocidos dan 275 fichas
+   (86, 50, 48, 47 y 44 cada uno), mientras que un clip de su canal da 6.
+2. Vídeos que ya no existen, privados, o que no eran de YouTube.
+3. **Vídeos de OTRO formador.** 11 páginas de Notion están duplicadas en dos
+   fichas con creador distinto, y una de ellas tiene dentro una sección
+   "Refuerzo cross-creador (Alfonso y Cristian)": la importación creó una copia
+   por cada formador citado. Parte de las 91 puede no salir de un vídeo suyo.
+
+**Por eso la pregunta que hay que hacerles cambia**: no "qué vídeos entregasteis"
+sino "de lo de junio, qué vídeos de YouTube eran, y ¿había material que no fuera
+vuestro?".
+
+## Una corrección de tamaño
+
+Eran el 29% de lo servible cuando el corpus tenía 307 fichas. Hoy son **92 de
+741, el 12%**. Sigue siendo el trozo donde no se puede cumplir "puedes ir a
+comprobarlo", pero ya no es un tercio del producto.
+
+---
+
 > **Actualizado el 30/08/2026 y el problema es mucho más pequeño de lo que
 > parecía.** Antes decía "93 búsquedas a mano". Son unos **9 vídeos**.
 
