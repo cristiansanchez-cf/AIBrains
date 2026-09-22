@@ -10,6 +10,9 @@ dist/
 .env.*
 !.env.example
 
+# Subtitulos bajados para emparejar fichas: se vuelven a bajar solos
+.cache/
+
 # Logs
 *.log
 npm-debug.log*

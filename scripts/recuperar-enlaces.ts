@@ -205,6 +205,24 @@ async function principal(): Promise<void> {
     `${huerfanas?.length ?? 0} fichas sin enlace; ${pendientes.length} con transcripción bastante para buscar.\n`,
   );
 
+  // SIN TEXTO QUE BUSCAR, ESTO NO PUEDE ENCONTRAR NADA, y el fallo era que no
+  // lo decía: seguía adelante, imprimía "0 ficha(s)" por cada vídeo y terminaba
+  // tan tranquilo. Ese cero se lee como "este vídeo no es", cuando en realidad
+  // es "no se ha buscado". Pasó de verdad el 22/09/2026 con doce vídeos
+  // candidatos: las 93 huérfanas tienen `transcripcion` a NULL en la base, así
+  // que doce descartes eran doce ceros vacíos. Ahora se planta.
+  if (pendientes.length === 0) {
+    console.error(
+      "\nNINGUNA ficha sin enlace conserva transcripción, así que no hay nada\n" +
+        "que buscar y un cero aquí no significaría 'no es este vídeo'.\n\n" +
+        "Para esas fichas el método literal no sirve: usa `npm run casar-fichas`,\n" +
+        "que compara el destilado por solape de tríos de palabras y está calibrado\n" +
+        "contra los vídeos de origen conocido.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   /** id de ficha -> lo que se ha encontrado. Si dos vídeos casan, se avisa. */
   const hallazgos = new Map<number, { url: string; segundo: number; aciertos: number }[]>();
 
