@@ -307,11 +307,38 @@ async function main(): Promise<void> {
     // días. El borrado es automático y se ejecuta cada semana." El código
     // siempre borró a los 30; lo que mentía era este comentario, y el riesgo
     // era que alguien lo creyera y "corrigiera" la constante hacia arriba.
+    /**
+     * Quién ha dado permiso para que lo suyo se conserve.
+     *
+     * FALLA HACIA BORRAR, SIEMPRE. Si la consulta da error —la tabla todavía no
+     * existe, la red se cae— la lista se queda vacía y se borra todo, que es
+     * exactamente lo que se hacía antes de que esto existiera. Al revés sería
+     * el fallo malo: un error de lectura conservando dato de gente que no dijo
+     * que sí, y sin que nadie se entere.
+     */
+    const { data: exentos, error: errorConsent } = await supabase
+      .from("consentimientos_vigentes")
+      .select("user_id")
+      .eq("tipo", "mejora_del_modelo");
+    if (errorConsent) {
+      console.log(`  (sin lista de consentimientos: ${errorConsent.message.slice(0, 60)})`);
+      console.log(`  Se borra todo lo que pase de ${DIAS_DE_RETENCION} días, como siempre.`);
+    }
+    const conservar = [...new Set((exentos ?? []).map((c) => c.user_id as string))];
+    if (conservar.length > 0) {
+      console.log(`  ${conservar.length} persona(s) han consentido que lo suyo se conserve.`);
+    }
+
     for (const tabla of ["consultas", "usos_de_herramienta", "correos_enviados"] as const) {
-      const { count, error } = await supabase
-        .from(tabla)
-        .delete({ count: "exact" })
-        .lt("cuando", limite);
+      // Las filas SIN `user_id` se borran igual: son mías y las de los scripts,
+      // y nadie puede haber consentido por ellas.
+      const consulta = supabase.from(tabla).delete({ count: "exact" }).lt("cuando", limite);
+      const { count, error } =
+        conservar.length > 0
+          ? await consulta.or(
+              `user_id.is.null,user_id.not.in.(${conservar.join(",")})`,
+            )
+          : await consulta;
       console.log(
         error
           ? `  ${tabla}: NO se pudo borrar — ${error.message}`
