@@ -101,20 +101,29 @@ sobra (mediana 56 tríos, unas 70 palabras). Es que **sus vídeos no están entr
 los 672**. Si lo estuvieran, la calibración dice que pasarían cinco de cada
 seis.
 
-Así que sus orígenes son alguna de estas tres, y solo ellos pueden decir cuál:
+**23/09/2026 — Cristian lo ha aclarado: el material SÍ es suyo.** Las fichas se
+procesaron cuando el campo de URL todavía no se guardaba, así que no es que el
+origen se perdiera: es que nunca se apuntó. Eso descarta la tercera hipótesis de
+abajo y estrecha la búsqueda a una sola cosa.
 
-1. Apariciones como invitados en canales ajenos que no salen buscando su nombre.
-   **Es donde está el material bueno**: los 5 podcasts conocidos dan 275 fichas
-   (86, 50, 48, 47 y 44 cada uno), mientras que un clip de su canal da 6.
-2. Vídeos que ya no existen, privados, o que no eran de YouTube.
-3. **Vídeos de OTRO formador.** 11 páginas de Notion están duplicadas en dos
-   fichas con creador distinto, y una de ellas tiene dentro una sección
-   "Refuerzo cross-creador (Alfonso y Cristian)": la importación creó una copia
-   por cada formador citado. Parte de las 91 puede no salir de un vídeo suyo.
+Si son suyas y no están en su canal —barrido entero, 672 vídeos, shorts
+incluidos— entonces salen de **sus apariciones como invitados en canales
+ajenos**. Es coherente con todo lo demás: los 5 podcasts ya conocidos dan 275
+fichas (86, 50, 48, 47 y 44), mientras que un clip de su propio canal da 6. El
+material bueno está fuera de su canal.
 
-**Por eso la pregunta que hay que hacerles cambia**: no "qué vídeos entregasteis"
-sino "de lo de junio, qué vídeos de YouTube eran, y ¿había material que no fuera
-vuestro?".
+**La pregunta, entonces, es una y es fácil de contestar para ellos:**
+
+> ¿En qué pódcast y canales ajenos habéis salido? Todos los que recordéis, aunque
+> sean viejos.
+
+Con esa lista, el emparejador está hecho y medido: casa el 84% con 0 errores.
+
+Quedan dos hipótesis menores para lo que no aparezca ni así: vídeos borrados o
+privados, y las **11 páginas de Notion duplicadas en dos creadores** —una tiene
+dentro una sección "Refuerzo cross-creador (Alfonso y Cristian)", así que la
+importación creó una copia por cada formador citado—. Eso último explica alguna
+ficha suelta, no las 58.
 
 ## Una corrección de tamaño
 

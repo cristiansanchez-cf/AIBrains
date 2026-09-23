@@ -57,8 +57,11 @@ Cerrado hoy y verificado contra producción — **no hace falta volver a mirarlo
 
 ## Qué está abierto, por orden
 
-1. **Las 91 fichas sin enlace.** Sigue bloqueado en preguntarles, pero ya no por
-   lo que decía aquí. Lo de "64 horas y seis veces la cuota" era cuando los
+1. **Las 58 fichas sin enlace.** Sigue bloqueado en preguntarles, pero la
+   pregunta ya es una sola: **en qué pódcast y canales ajenos han salido**. El
+   material es suyo —lo confirmó Cristian: se procesó cuando el campo de URL aún
+   no se guardaba— y su canal está descartado entero, así que solo pueden venir
+   de apariciones como invitados. Lo de abajo ya no es del todo exacto: Lo de "64 horas y seis veces la cuota" era cuando los
    subtítulos venían de Supadata; hoy se bajan con `yt-dlp` y no cuestan nada.
    **El barrido ya se ha hecho**: 672 vídeos, su canal entero con shorts más los
    podcasts conocidos. Casaron 35 fichas de 15 vídeos y ya están escritas con su

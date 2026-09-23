@@ -98,6 +98,12 @@ le había caído la conexión —su autorización era del 25/08, quince días an
 que declarásemos `offline_access`, así que no tenía *refresh token*—. Nos
 enteramos **porque lo dijo ella**: diecinueve días pagando sin producto.
 
+La otra explicación posible quedó descartada ese mismo día: en Supabase,
+`Time-box user sessions` e `Inactivity timeout` están los dos a **0 (never)`**,
+así que no hay nada caducando sesiones por detrás. Lo de `offline_access` explica
+el caso entero, y quien autorizara antes del 09/09/2026 tiene la conexión
+condenada hasta que vuelva a autorizar una vez.
+
 La señal estaba en la base desde el 7 de septiembre: cuenta con suscripción
 activa, uso intenso, silencio. Ninguna comprobación la miraba, porque todas
 vigilaban si el sistema funciona y ninguna si a alguien le funciona.

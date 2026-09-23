@@ -5,7 +5,7 @@
  *   npm run suscripciones -- alta <email> <slug> [días]
  *   npm run suscripciones -- baja <email> <slug>
  *   npm run suscripciones -- estado             # qué se sirve y con qué respaldo
- *   npm run suscripciones -- beta <slug> [on|off]
+ *   npm run suscripciones -- beta <slug> [on|off] [--hasta AAAA-MM-DD]
  *
  * En el MVP las suscripciones son manuales (arquitectura §1): no hay pasarela
  * de pago. Esto es esa "pasarela".
@@ -75,10 +75,10 @@ async function crearUsuario(email: string): Promise<{ id: string; email: string 
   return (await res.json()) as { id: string; email: string };
 }
 
-async function buscarCreador(slug: string): Promise<{ id: string; nombre: string }> {
+async function buscarCreador(slug: string): Promise<{ id: string; nombre: string; slug: string }> {
   const { data, error } = await supabase
     .from("creadores")
-    .select("id, nombre")
+    .select("id, nombre, slug")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -193,23 +193,64 @@ async function baja(entrada: string, slug: string): Promise<void> {
  * NO toca `acuerdo_firmado`: eso es el gate comercial y se levanta solo con un
  * acuerdo real delante. Esto solo abre el cerebro a quien se dé de alta a mano.
  */
+/** Cuánto dura una beta interna si no se dice otra cosa. Tres meses. */
+const DIAS_DE_BETA = 90;
+
 async function beta(slug: string, valor: string): Promise<void> {
   const creador = await buscarCreador(slug);
   const encender = valor !== "off" && valor !== "no";
 
+  /**
+   * LA FECHA ES OBLIGATORIA Y ESTO NO LA PONÍA, así que el comando mentía.
+   *
+   * `creadores_servibles` exige `beta_interna and beta_interna_hasta > now()`.
+   * Con la fecha a NULL la comparación da NULL, que no es cierto, y el creador
+   * seguía sin servirse — mientras este mismo comando imprimía "activada, se
+   * sirve a quien tenga suscripción". Un comando que dice haber hecho algo y no
+   * lo hizo es peor que uno que falla: se da por hecho y se busca el problema
+   * en otra parte.
+   *
+   * Y caduca a propósito. Una beta sin fecha es un acuerdo que nadie firmó
+   * durando para siempre: lo que obliga a volver a mirarlo es que se apague.
+   */
+  const iHasta = process.argv.indexOf("--hasta");
+  const hasta = iHasta !== -1 ? process.argv[iHasta + 1] : undefined;
+  const cuando = encender
+    ? (hasta ? new Date(`${hasta}T23:59:59Z`) : new Date(Date.now() + DIAS_DE_BETA * 86_400_000))
+    : null;
+  if (cuando && Number.isNaN(cuando.getTime())) {
+    throw new Error(`--hasta no es una fecha: "${hasta}". Se espera AAAA-MM-DD.`);
+  }
+  if (cuando && cuando.getTime() <= Date.now()) {
+    throw new Error(`--hasta ya pasó (${hasta}): la beta no se serviría ni un día.`);
+  }
+
   const { error } = await supabase
     .from("creadores")
-    .update({ beta_interna: encender })
+    .update({ beta_interna: encender, beta_interna_hasta: cuando?.toISOString() ?? null })
     .eq("id", creador.id);
 
   if (error) throw new Error(`No se pudo cambiar la beta: ${error.message}`);
 
+  // Se comprueba contra la función que MANDA, en vez de dar por hecho que la
+  // escritura basta. Es lo que faltaba: la única forma de saber que un creador
+  // se sirve es preguntárselo a `creadores_servibles`.
+  const { data: servibles } = await supabase.rpc("creadores_servibles");
+  const sirve = ((servibles ?? []) as Array<{ slug: string; modo: string }>).find(
+    (c) => c.slug === creador.slug,
+  );
+
   console.log(
     encender
-      ? `${creador.nombre}: BETA INTERNA activada.\n` +
-        `  Se sirve a quien tenga suscripción, SIN acuerdo firmado.\n` +
+      ? `${creador.nombre}: BETA INTERNA hasta ${cuando!.toISOString().slice(0, 10)}.\n` +
         `  No comercializable: para cobrar hace falta el acuerdo.`
-      : `${creador.nombre}: beta desactivada. Deja de servirse.`,
+      : `${creador.nombre}: beta desactivada.`,
+  );
+  console.log(
+    sirve
+      ? `  Comprobado contra creadores_servibles: se sirve en modo ${sirve.modo}.`
+      : `  Comprobado contra creadores_servibles: NO se sirve.` +
+        (encender ? ` Mira si el creador está \`activo\`.` : ""),
   );
 }
 
@@ -242,7 +283,7 @@ async function main(): Promise<void> {
       if (resto.length < 2) throw new Error("Uso: baja <email> <slug>");
       return baja(resto[0]!, resto[1]!);
     case "beta":
-      if (resto.length < 1) throw new Error("Uso: beta <slug> [on|off]");
+      if (resto.length < 1) throw new Error("Uso: beta <slug> [on|off] [--hasta AAAA-MM-DD]");
       return beta(resto[0]!, resto[1] ?? "on");
     case "estado":
       return estado();

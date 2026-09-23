@@ -298,9 +298,15 @@ async function main(): Promise<void> {
     // LAS DOS TABLAS, no solo `consultas`. `usos_de_herramienta` guarda el
     // texto de la consulta cuando entra por el `search` de ChatGPT, así que
     // borrar solo una dejaba lo que un comercial pregunta sobre sus propias
-    // operaciones guardado para siempre en la otra. La retención declarada son
-    // 90 días; una retención que solo se cumple en la mitad de los sitios no
-    // es una retención.
+    // operaciones guardado para siempre en la otra. Una retención que solo se
+    // cumple en la mitad de los sitios no es una retención.
+    //
+    // DECÍA 90 DÍAS Y ERAN 30. Comprobado contra la política publicada en
+    // cofundo.io/legal/privacidad el 23/09/2026: "El texto de las consultas, el
+    // registro de uso de herramientas y el registro de correos enviados: 30
+    // días. El borrado es automático y se ejecuta cada semana." El código
+    // siempre borró a los 30; lo que mentía era este comentario, y el riesgo
+    // era que alguien lo creyera y "corrigiera" la constante hacia arriba.
     for (const tabla of ["consultas", "usos_de_herramienta", "correos_enviados"] as const) {
       const { count, error } = await supabase
         .from(tabla)
