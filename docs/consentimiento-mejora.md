@@ -1,7 +1,23 @@
 # "Ayudar a mejorar": conservar lo que se pregunta
 
-> Escrito el 23/09/2026. La parte de base de datos está hecha; **la de pedirlo
-> no**. Hoy nadie puede consentir nada todavía.
+> Escrito el 23/09/2026. La migración **está aplicada** y el borrado la
+> respeta; **falta la parte de pedirlo**, así que hoy nadie puede consentir nada.
+>
+> Probado en las dos direcciones el mismo día, porque "0 filas borradas" se
+> imprime igual con el filtro puesto que sin él y no demuestra nada. Con dos
+> filas de mentira de hace 60 días, una de quien consintió y otra de quien no:
+>
+> ```
+> 1) con el permiso puesto:
+>    1 persona(s) han consentido que lo suyo se conserve.
+>    la de quien consintió sobrevive: true
+>    la de quien NO consintió sobrevive: false
+> 2) tras retirar el permiso:
+>    la de quien consintió sobrevive: false
+> ```
+>
+> O sea que conservar funciona y retirar borra. Las filas de ensayo y el
+> consentimiento de mentira se limpiaron después: la tabla quedó a cero.
 
 ## El hueco
 
