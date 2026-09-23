@@ -27,3 +27,7 @@ supabase/.branches/
 .vscode/*
 !.vscode/settings.json
 transcripciones-exportadas.json
+
+# Consultas reales sacadas antes de que las borre la retencion. Pseudonimas,
+# NO anonimas: el texto es dato de negocio de quien lo escribio.
+consultas-exportadas.json
