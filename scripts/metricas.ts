@@ -16,6 +16,7 @@
 import { execSync } from "node:child_process";
 import { supabase } from "../src/db/supabase.js";
 import { config } from "../src/config.js";
+import { esCuentaDeCasa, diasDeSilencio } from "./cuentas.js";
 import { juzgar, type Suelo } from "./veredicto.js";
 
 /** Los suelos de docs/reglas-duras.md §1. Cambiarlos es cambiar el contrato. */
@@ -193,6 +194,103 @@ function percentil(ordenados: number[], p: number): number {
  */
 const DIAS_DE_RETENCION = 30;
 
+/**
+ * Días de silencio a partir de los cuales una cuenta que pagaba y usaba el
+ * cerebro deja de estar "descansando" y empieza a estar perdiéndose.
+ *
+ * SIETE Y NO TREINTA, y el motivo es que el registro se borra a los 30 días
+ * (DIAS_DE_RETENCION). Pasado ese plazo no se distingue "la usaba y ha parado"
+ * de "nunca la estrenó", porque las consultas que lo demostraban ya no están.
+ * Con siete días y una medición semanal hay tres oportunidades de verlo antes
+ * de quedarse ciego.
+ */
+const DIAS_DE_SILENCIO = 7;
+
+interface CuentaCallada {
+  email: string;
+  dias: number | null;
+  consultas: number;
+  interna: boolean;
+}
+
+/**
+ * Quién paga, lo estaba usando, y lleva días sin aparecer.
+ *
+ * DE DÓNDE SALE ESTO: Teresa, de SciScreen, hizo 20 consultas el 2, 3 y 4 de
+ * septiembre y luego nada. El 23 nos enteramos de que se le había desconectado
+ * —porque lo dijo ella—. La señal estaba en la base desde el día 7: cuenta con
+ * suscripción activa, uso intenso, y silencio. Enterarse por el cliente es
+ * enterarse tarde; para entonces ya ha decidido si le compensa insistir.
+ *
+ * Las cuentas de casa se listan pero no cuentan para el aviso: si contaran, el
+ * correo llegaría todas las semanas por las cuentas de prueba de Cristian y se
+ * aprendería a borrarlo sin abrirlo, que es como no tener aviso.
+ */
+async function silencios(): Promise<{ dormidas: CuentaCallada[]; sinEstrenar: CuentaCallada[] }> {
+  const desde = new Date(Date.now() - DIAS_DE_RETENCION * 86_400_000).toISOString();
+  const [{ data: individuales }, { data: dominios }, { data: asientos }, { data: consultas }, { data: usos }] =
+    await Promise.all([
+      supabase.from("suscripciones").select("user_id, activa"),
+      supabase.from("suscripciones_dominio").select("user_id, activa"),
+      supabase.from("organizacion_asientos").select("user_id, revocado_en").is("revocado_en", null),
+      supabase.from("consultas").select("user_id, cuando").not("user_id", "is", null).gte("cuando", desde),
+      supabase.from("usos_de_herramienta").select("user_id, cuando").not("user_id", "is", null).gte("cuando", desde),
+    ]);
+
+  /** Con suscripción viva. Igual que en el panel: basta que UNA lo esté. */
+  const conAcceso = new Set<string>();
+  for (const x of (individuales ?? []) as Array<{ user_id: string; activa: boolean }>) {
+    if (x.activa) conAcceso.add(x.user_id);
+  }
+  for (const x of (dominios ?? []) as Array<{ user_id: string; activa: boolean }>) {
+    if (x.activa) conAcceso.add(x.user_id);
+  }
+  for (const x of (asientos ?? []) as Array<{ user_id: string | null }>) {
+    if (x.user_id) conAcceso.add(x.user_id);
+  }
+
+  // Cuentan las dos tablas: una búsqueda es uso, y abrir una ficha también. Con
+  // solo `consultas` una persona que entra por el `search` de ChatGPT parecería
+  // dormida estando delante.
+  const ultima = new Map<string, { n: number; cuando: string }>();
+  const anotar = (id: string, cuando: string, cuenta: boolean) => {
+    const ya = ultima.get(id);
+    if (!ya) ultima.set(id, { n: cuenta ? 1 : 0, cuando });
+    else {
+      if (cuenta) ya.n++;
+      if (cuando > ya.cuando) ya.cuando = cuando;
+    }
+  };
+  for (const c of (consultas ?? []) as Array<{ user_id: string; cuando: string }>) {
+    anotar(c.user_id, c.cuando, true);
+  }
+  for (const u of (usos ?? []) as Array<{ user_id: string; cuando: string }>) {
+    anotar(u.user_id, u.cuando, false);
+  }
+
+  const { data: cuentas } = await supabase.auth.admin.listUsers({ perPage: 500 });
+  const correo = new Map((cuentas?.users ?? []).map((u) => [u.id, (u.email ?? "").toLowerCase()]));
+
+
+  const dormidas: CuentaCallada[] = [];
+  const sinEstrenar: CuentaCallada[] = [];
+  for (const id of conAcceso) {
+    const email = correo.get(id) ?? "(sin cuenta)";
+    const suyo = ultima.get(id);
+    if (!suyo) {
+      sinEstrenar.push({ email, dias: null, consultas: 0, interna: esCuentaDeCasa(email, config.cuentasDeCasa) });
+      continue;
+    }
+    const dias = diasDeSilencio(suyo.cuando);
+    if (dias >= DIAS_DE_SILENCIO) {
+      dormidas.push({ email, dias, consultas: suyo.n, interna: esCuentaDeCasa(email, config.cuentasDeCasa) });
+    }
+  }
+  dormidas.sort((a, b) => b.consultas - a.consultas);
+  sinEstrenar.sort((a, b) => a.email.localeCompare(b.email));
+  return { dormidas, sinEstrenar };
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes("--limpiar")) {
     const limite = new Date(Date.now() - DIAS_DE_RETENCION * 86_400_000).toISOString();
@@ -319,6 +417,51 @@ async function main(): Promise<void> {
       console.log(`\n  ${degradadas} de ${n} consultas se sirvieron DEGRADADAS (respaldo léxico).`);
       averias++;
     }
+  }
+
+  // --- Quien paga y ha dejado de aparecer -----------------------------------
+  console.log(`\n=== ¿alguien que paga ha dejado de venir? ===\n`);
+
+  const { dormidas, sinEstrenar } = await silencios();
+  const dormidasDeFuera = dormidas.filter((d) => !d.interna);
+  const sinEstrenarDeFuera = sinEstrenar.filter((d) => !d.interna);
+
+  await registrar("cuentas_dormidas", dormidasDeFuera.length, contexto);
+  await registrar("cuentas_sin_estrenar", sinEstrenarDeFuera.length, contexto);
+
+  if (dormidas.length === 0 && sinEstrenar.length === 0) {
+    console.log(`  Todo el mundo con acceso ha usado el cerebro esta semana.`);
+  }
+  for (const d of dormidas) {
+    console.log(
+      `  ${d.email.padEnd(36)} ${String(d.consultas).padStart(3)} consultas, ` +
+        `${d.dias} días en silencio${d.interna ? "   (de casa)" : ""}`,
+    );
+  }
+  for (const d of sinEstrenar) {
+    console.log(`  ${d.email.padEnd(36)} sin estrenar${d.interna ? "   (de casa)" : ""}`);
+  }
+  if (sinEstrenar.length > 0) {
+    console.log(
+      `\n  "Sin estrenar" es sin actividad EN LOS ÚLTIMOS ${DIAS_DE_RETENCION} DÍAS.\n` +
+        `  Si la tuvo antes, ya se borró por retención y no se puede distinguir de\n` +
+        `  quien nunca entró. Por eso el aviso mira ${DIAS_DE_SILENCIO} días y no un mes.`,
+    );
+  }
+  if (config.cuentasDeCasa.length === 0 && dormidas.some((d) => !d.interna)) {
+    console.log(
+      `\n  OJO: CEREBRO_CUENTAS_INTERNAS está vacía, así que las cuentas de casa\n` +
+        `  cuentan como clientes y el aviso llegará por ellas todas las semanas.\n` +
+        `  Ponla con los correos o dominios propios, separados por comas.`,
+    );
+  }
+  if (dormidasDeFuera.length > 0) {
+    console.log(
+      `\n  ${dormidasDeFuera.length} cuenta(s) de pago pagando y sin usarlo. Antes de dar por\n` +
+        `  hecho que han perdido el interés: mirar si se les ha caído la conexión.\n` +
+        `  Le pasó a SciScreen y nos enteramos 19 días tarde, porque lo dijo ella.`,
+    );
+    avisos++;
   }
 
   // --- Cuentas compartidas --------------------------------------------------
@@ -543,6 +686,14 @@ async function main(): Promise<void> {
   console.log(
     `RESUMEN averias=${averias} empeoramientos=${empeoramientos.length} ` +
       `bajo_suelo=${bajoSuelo} avisos=${avisos}`,
+  );
+  // Aparte del RESUMEN porque dispara SU PROPIO correo: no es una avería del
+  // sistema —no hay nada roto— pero es lo único de este informe que caduca. Un
+  // cliente que se ha quedado sin conexión decide en días si le compensa
+  // insistir, y el informe no lo lee nadie hasta el lunes.
+  console.log(
+    `SILENCIOS dormidas=${dormidasDeFuera.length} sin_estrenar=${sinEstrenarDeFuera.length} ` +
+      `detalle=${dormidasDeFuera.map((d) => `${d.email}:${d.dias}d:${d.consultas}c`).join(",") || "-"}`,
   );
   console.log(
     `MOTIVO ${

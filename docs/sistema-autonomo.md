@@ -81,6 +81,7 @@ Lo que ya existe y solo hay que programar:
 | `npm run evaluar` (recuperación) | Semanal | céntimos | hecho (`calidad.yml`) |
 | `npm run voz` (marcadores de IA) | Semanal | céntimos | hecho (`calidad.yml`) |
 | Latencia y degradación en uso real | Continuo | 0 | hecho (tabla `consultas`) |
+| Quien paga y ha dejado de venir | Semanal | 0 | hecho (`calidad.yml`, correo aparte) |
 | `npm run diagnostico` completo | — | ~0 | a mano; el caro es que prueba las verjas |
 
 Los resultados van a la tabla `metricas`, porque **un número aislado no dice
@@ -88,6 +89,33 @@ nada y la tendencia sí**: un 88% no alarma, un 90 → 89 → 88 sí.
 
 Los suelos están en `docs/reglas-duras.md` §1. Bajar de ahí es lo que dispara
 todo lo demás.
+
+### La comprobación que no vigila el sistema, sino a la gente
+
+**Se añadió el 23/09/2026 y la pagó un cliente.** Teresa, de SciScreen, hizo 20
+consultas el 2, 3 y 4 de septiembre y luego nada. El 23 nos enteramos de que se
+le había caído la conexión —su autorización era del 25/08, quince días antes de
+que declarásemos `offline_access`, así que no tenía *refresh token*—. Nos
+enteramos **porque lo dijo ella**: diecinueve días pagando sin producto.
+
+La señal estaba en la base desde el 7 de septiembre: cuenta con suscripción
+activa, uso intenso, silencio. Ninguna comprobación la miraba, porque todas
+vigilaban si el sistema funciona y ninguna si a alguien le funciona.
+
+Ahora `npm run metricas` lo mira, con tres decisiones que no son detalles:
+
+- **Siete días, no treinta.** El registro se borra a los 30 (`DIAS_DE_RETENCION`),
+  y pasado ese plazo no se distingue "la usaba y ha parado" de "nunca la
+  estrenó". Con siete y una medición semanal hay tres oportunidades de verlo.
+- **Correo aparte, no la incidencia semanal.** Es lo único del informe que
+  caduca: quien se queda sin conexión decide en días si le compensa insistir.
+- **Las cuentas de casa no cuentan** (`CEREBRO_CUENTAS_INTERNAS`). Si contaran,
+  el correo llegaría cada semana por las cuentas de prueba y se aprendería a
+  borrarlo sin abrirlo — y ya sabemos a dónde lleva eso: una semana de caída que
+  nadie miró porque `calidad` fallaba todas las semanas.
+
+El correo lleva **quién y cuántos días, nunca lo que preguntaron**: las consultas
+son dato sensible con retención de 30 días y un correo no caduca.
 
 ### La trampa del healthcheck, que casi convierte esto en un arma
 

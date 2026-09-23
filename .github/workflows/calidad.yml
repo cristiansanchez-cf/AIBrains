@@ -44,6 +44,9 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Sin esto, el aviso de "quien paga y ha dejado de venir" cuenta las
+          # cuentas de prueba y llega todas las semanas por ellas.
+          CEREBRO_CUENTAS_INTERNAS: ${{ vars.CEREBRO_CUENTAS_INTERNAS }}
         run: |
           # La salida se guarda para poder meterla en la issue: un aviso que
           # solo dice "algo falla" obliga a ir a buscarlo, y entonces no se va.
@@ -64,6 +67,15 @@ jobs:
           averias=$(echo "$resumen" | sed -n 's/.*averias=\([0-9]*\).*/\1/p')
           echo "averias=${averias:-1}" >> "$GITHUB_OUTPUT"
           echo "motivo=$motivo" >> "$GITHUB_OUTPUT"
+
+          # Los silencios van APARTE del veredicto y con su propio correo: no hay
+          # nada roto, pero es lo unico de este informe que caduca. Un cliente al
+          # que se le ha caido la conexion decide en dias si le compensa
+          # insistir, y la incidencia de GitHub no la abre nadie hasta el lunes.
+          silencios=$(grep -m1 '^SILENCIOS ' salida.txt || true)
+          dormidas=$(echo "$silencios" | sed -n 's/.*dormidas=\([0-9]*\).*/\1/p')
+          echo "dormidas=${dormidas:-0}" >> "$GITHUB_OUTPUT"
+          echo "silencios=${silencios#SILENCIOS }" >> "$GITHUB_OUTPUT"
 
           # Lo que va a la issue se recorta: el informe incluye el top de
           # `huecos_de_contenido`, o sea PREGUNTAS LITERALES de comerciales sobre
@@ -123,6 +135,40 @@ jobs:
             -H "content-type: application/json" \
             -d "$(jq -n --arg p "$PARA" --arg t "$cuerpo" \
                   '{from:"Cerebro <hola@correo.cofundo.io>", to:[$p], subject:"[cerebro] la calidad no se pudo medir", text:$t}')"
+
+      # POR QUE ESTE AVISO NO ESPERA AL LUNES. Teresa, de SciScreen, hizo 20
+      # consultas el 2, 3 y 4 de septiembre y luego nada. El 23 nos enteramos de
+      # que se le habia caido la conexion, y nos enteramos porque lo dijo ella:
+      # 19 dias en los que pagaba y no tenia producto. La señal estaba en la base
+      # desde el dia 7. Este correo es para que la proxima vez lo diga la base.
+      #
+      # No manda las consultas, solo quien y cuantos dias: lo que la gente
+      # pregunta es dato sensible con retencion de 30 dias, y un correo no caduca.
+      - name: Avisar por correo si alguien que paga ha dejado de venir
+        if: steps.medir.outputs.dormidas != '0' && steps.medir.outputs.dormidas != ''
+        env:
+          RESEND: ${{ secrets.RESEND_API_KEY }}
+          PARA: ${{ vars.CEREBRO_AVISO_EMAIL }}
+          SILENCIOS: ${{ steps.medir.outputs.silencios }}
+          CUANTAS: ${{ steps.medir.outputs.dormidas }}
+        run: |
+          if [ -z "$RESEND" ] || [ -z "$PARA" ]; then
+            echo "SIN AVISO: falta RESEND_API_KEY o la variable CEREBRO_AVISO_EMAIL."
+            exit 0
+          fi
+
+          cuerpo=$(printf '%s\n\n%s\n\n%s\n\n%s\n\n%s' \
+            "$CUANTAS cuenta(s) con suscripcion activa han dejado de usar el cerebro." \
+            "$SILENCIOS" \
+            "Antes de darlo por perdido: mirar si se les ha caido la conexion. Una autorizacion anterior al 09/09/2026 no tiene refresh token y se muere sola; se arregla reconectando una vez." \
+            "Comprobar quien: https://cerebro.cofundo.io/admin" \
+            "Detalle: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+
+          curl -sS --fail-with-body -m 20 -X POST "https://api.resend.com/emails" \
+            -H "authorization: Bearer $RESEND" \
+            -H "content-type: application/json" \
+            -d "$(jq -n --arg p "$PARA" --arg s "[cerebro] $CUANTAS cuenta(s) de pago sin usarlo" --arg t "$cuerpo" \
+                  '{from:"Cerebro <hola@correo.cofundo.io>", to:[$p], subject:$s, text:$t}')"
 
       - name: Avisar si hay algo que mirar
         if: steps.medir.outputs.codigo != '0'

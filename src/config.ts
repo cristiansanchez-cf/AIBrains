@@ -173,6 +173,28 @@ export const config = {
     email: (process.env.CEREBRO_SUPERADMIN ?? "").trim().toLowerCase(),
   },
 
+  /**
+   * Las cuentas de casa: las nuestras y las de prueba.
+   *
+   * Solo sirven para NO avisar por ellas. El informe semanal avisa de quien paga
+   * y ha dejado de usar el cerebro, y si ese aviso incluye las cuentas con las
+   * que probamos, llega todas las semanas diciendo lo mismo y se aprende a
+   * borrarlo sin abrirlo. Una alarma ruidosa es peor que ninguna: enseña a
+   * ignorar la categoría entera, y ya nos costó una semana de caída.
+   *
+   * Se aceptan correos enteros (`yo@gmail.com`) o dominios (`@cofundo.io`).
+   * Los alias con `+` se consideran de casa siempre, sin configurar nada: es un
+   * truco de buzón, no una persona distinta.
+   *
+   * No se deduce del dominio del superadmin y esto es a propósito: el informe
+   * corre en GitHub Actions, donde esa variable no está puesta, así que deducirlo
+   * habría funcionado en local y no donde de verdad manda el aviso.
+   */
+  cuentasDeCasa: (process.env.CEREBRO_CUENTAS_INTERNAS ?? "")
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean),
+
   stripe: {
     /**
      * dashboard.stripe.com > Desarrolladores > Claves API. Empieza por sk_.
