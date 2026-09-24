@@ -27,6 +27,7 @@ import Stripe from "stripe";
 import { supabase } from "../db/supabase.js";
 import { creadoresDisponibles } from "../db/consultas.js";
 import { config } from "../config.js";
+import { leerMejora, type EstadoDeMejora } from "./consentimiento.js";
 import { normalizarEmail } from "../email.js";
 import { estaCancelada, finDelAcceso } from "../pagos/cancelacion.js";
 
@@ -133,6 +134,15 @@ export interface Panel {
    * y volviendo a conectar lo que quieras.
    */
   conexiones: Conexion[];
+
+  /**
+   * El permiso de "ayudar a mejorar", con el texto que hay que pintar dentro.
+   *
+   * Va en el panel de TODO EL MUNDO, incluida la gente con asiento de equipo:
+   * es un permiso sobre sus propias consultas, no sobre la cuenta. Quien no
+   * administra nada sigue pudiendo darlo y quitarlo.
+   */
+  mejora: EstadoDeMejora;
 }
 
 const SIN_FACTURACION: Facturacion = {
@@ -395,6 +405,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
       conector,
       facturacion,
       conexiones: await conexionesDe(userId),
+    mejora: await leerMejora(userId),
       organizacion: {
         id: orgId,
         nombre: (org?.nombre as string) ?? "",
@@ -444,6 +455,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
       conector,
       facturacion: null,
       conexiones: await conexionesDe(userId),
+    mejora: await leerMejora(userId),
       organizacion: null,
     };
   }
@@ -466,6 +478,7 @@ export async function panelDelUsuario(userId: string, email: string): Promise<Pa
     conector,
     facturacion,
     conexiones: await conexionesDe(userId),
+    mejora: await leerMejora(userId),
     organizacion: null,
   };
 }

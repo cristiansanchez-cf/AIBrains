@@ -125,6 +125,21 @@ describe("la verja", () => {
     expect(llamadas).toHaveLength(0);
   });
 
+  it("pero SÍ toca lo suyo: el permiso sobre sus propias consultas", async () => {
+    // La verja es "no administras la cuenta", no "no decides sobre tus datos".
+    // Si consentir necesitara ser administrador, el permiso sobre lo que
+    // pregunta una persona lo estaría dando su jefa, y retirarlo dependería de
+    // que ella quisiera. Eso no es un consentimiento.
+    panel["puede"] = { pasar_a_anual: false, gestionar_asientos: false };
+
+    for (const accion of ["consentir_mejora", "retirar_mejora"]) {
+      llamadas = [];
+      const r = await ejecutarAccion("u1", "quien@empresa.com", { accion } as never);
+      expect(r.hecho, accion).toBeTruthy();
+      expect(llamadas.some((l) => l.tabla === "consentimientos"), accion).toBe(true);
+    }
+  });
+
   it("una acción inventada se rechaza en vez de caer por el switch", async () => {
     await expect(
       ejecutarAccion("u1", "jefa@empresa.com", { accion: "borrar_todo" } as never),
@@ -279,5 +294,30 @@ describe("avisar a quien recibe un asiento", () => {
       } as never),
     ).rejects.toThrow();
     expect(correosEnviados).toHaveLength(0);
+  });
+});
+
+describe("el permiso de ayudar a mejorar", () => {
+  it("guarda EL MISMO texto que se sirve, no una copia", async () => {
+    // Es lo único que hace que el registro demuestre algo. Si lo que se guarda
+    // no es lo que se enseñó, la fila dice que alguien consintió a un texto que
+    // nunca vio.
+    const { TEXTO_MEJORA } = await import("../src/api/consentimiento.js");
+    await ejecutarAccion("u1", "jefa@empresa.com", { accion: "consentir_mejora" } as never);
+
+    const escrito = llamadas.find((l) => l.tabla === "consentimientos" && l.metodo === "upsert");
+    expect(escrito).toBeDefined();
+    const fila = escrito!.args[0] as { texto_mostrado: string; retirado_en: string | null };
+    expect(fila.texto_mostrado).toBe(TEXTO_MEJORA);
+    // Volver a consentir después de haberlo quitado tiene que limpiar la retirada.
+    expect(fila.retirado_en).toBeNull();
+  });
+
+  it("retirarlo NO borra la fila: deja constancia de que se dio y se quitó", async () => {
+    await ejecutarAccion("u1", "jefa@empresa.com", { accion: "retirar_mejora" } as never);
+
+    const tocadas = llamadas.filter((l) => l.tabla === "consentimientos");
+    expect(tocadas.some((l) => l.metodo === "update")).toBe(true);
+    expect(tocadas.some((l) => l.metodo === "delete")).toBe(false);
   });
 });

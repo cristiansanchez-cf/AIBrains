@@ -25,6 +25,7 @@
  * `docs/pendiente.md`.
  */
 import Stripe from "stripe";
+import { concederMejora, retirarMejora } from "./consentimiento.js";
 import { supabase } from "../db/supabase.js";
 import { config } from "../config.js";
 import { normalizarEmail, pareceEmail } from "../email.js";
@@ -63,7 +64,9 @@ export type Peticion =
   | { accion: "cambiar_asientos"; asientos: number }
   | { accion: "ceder_asiento"; de: string; a: string }
   | { accion: "alta_asiento"; email: string }
-  | { accion: "baja_asiento"; email: string };
+  | { accion: "baja_asiento"; email: string }
+  | { accion: "consentir_mejora" }
+  | { accion: "retirar_mejora" };
 
 export const ACCIONES = [
   "pasar_a_anual",
@@ -71,7 +74,19 @@ export const ACCIONES = [
   "ceder_asiento",
   "alta_asiento",
   "baja_asiento",
+  "consentir_mejora",
+  "retirar_mejora",
 ] as const;
+
+/**
+ * Las que una persona hace SOBRE SÍ MISMA, no sobre la cuenta.
+ *
+ * Se saltan la verja de administración a propósito. Quien tiene un asiento en
+ * el equipo de otro no gestiona nada —ni asientos ni facturación— pero el
+ * permiso sobre lo que él pregunta es suyo: dárselo a su jefe sería que otro
+ * consiente por él, y retirarlo no puede depender de que alguien más quiera.
+ */
+const SOBRE_UNO_MISMO = ["consentir_mejora", "retirar_mejora"] as const;
 
 /**
  * Se devuelve el panel entero ya recalculado, no un `{ok: true}`.
@@ -545,7 +560,9 @@ export async function ejecutarAccion(
   // LA VERJA. Quien está en el equipo de otro no gestiona nada: copia la URL
   // del conector y a trabajar. Y no se le contesta "no puedes" con los datos
   // dentro — se corta aquí, antes de leer nada de la organización.
-  if (accion === "pasar_a_anual") {
+  if ((SOBRE_UNO_MISMO as readonly string[]).includes(accion)) {
+    // Nada que comprobar: es su dato.
+  } else if (accion === "pasar_a_anual") {
     if (!panel.puede.pasar_a_anual) {
       throw new NoAutorizado("Esta cuenta no puede cambiar de periodo de facturación.");
     }
@@ -569,6 +586,14 @@ export async function ejecutarAccion(
       break;
     case "baja_asiento":
       hecho = await bajaDeAsiento(panel, peticion.email);
+      break;
+    case "consentir_mejora":
+      await concederMejora(userId);
+      hecho = "Gracias. Tus consultas se conservarán para mejorar el cerebro.";
+      break;
+    case "retirar_mejora":
+      await retirarMejora(userId);
+      hecho = "Retirado. Tus consultas vuelven a borrarse a los 30 días, y las guardadas se van en el próximo borrado.";
       break;
   }
 
