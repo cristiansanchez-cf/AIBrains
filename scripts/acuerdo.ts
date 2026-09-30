@@ -3,7 +3,7 @@
  *
  *   npm run acuerdo -- estado
  *   npm run acuerdo -- firmar <slug> --porcentaje 70 [--email x@y.com] [--hasta 2027-12-31]
- *   npm run acuerdo -- enlace <slug>          # otro enlace de alta (caducan)
+ *   npm run acuerdo -- enlace <slug> [--pais MX]  # otro enlace de alta (caducan)
  *   npm run acuerdo -- comprobar <slug>       # ¿ya completó su verificación?
  *
  * Existe porque "firmar" son seis cosas a la vez y hacerlas a mano en seis
@@ -114,7 +114,7 @@ async function firmar(slug: string): Promise<void> {
     return;
   }
 
-  const url = await enlaceDeAlta(slug, email ? normalizarEmail(email) : undefined);
+  const url = await enlaceDeAlta(slug, email ? normalizarEmail(email) : undefined, argumento("pais"));
   console.log(`\n=== MÁNDALE ESTO ===\n`);
   console.log(`  ${url}\n`);
   console.log(`  Y dile: "Es el alta de Stripe para poder pagarte. Te pedirá tu`);
@@ -128,7 +128,7 @@ async function firmar(slug: string): Promise<void> {
 }
 
 async function enlace(slug: string): Promise<void> {
-  const url = await enlaceDeAlta(slug, argumento("email"));
+  const url = await enlaceDeAlta(slug, argumento("email"), argumento("pais"));
   console.log(`\n  ${url}\n\n  Caduca en unos minutos y es de un solo uso.\n`);
 }
 

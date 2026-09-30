@@ -25,6 +25,42 @@ import Stripe from "stripe";
 import { config } from "../config.js";
 import { supabase } from "../db/supabase.js";
 
+/**
+ * A quién se le puede transferir dinero desde una plataforma española.
+ *
+ * NO ES UNA LISTA NUESTRA, ES EL LÍMITE DE STRIPE. Una plataforma del EEE solo
+ * puede hacer transferencias transfronterizas a cuentas conectadas en EE. UU.,
+ * Reino Unido, el EEE, Canadá y Suiza. Fuera de ahí Stripe dice literalmente que
+ * no lo admite en autoservicio, y la alternativa que ofrece —Global Payouts—
+ * exige que la plataforma esté en EE. UU. o Reino Unido.
+ *
+ * Esto importa hoy: el primer creador que podría firmar es de LATAM, y a ese
+ * NO se le puede pagar por Connect. Se le paga por factura, fuera de Stripe.
+ * El diseño ya lo aguanta —cobramos nosotros y transferimos después, y la parte
+ * de quien no ha completado su alta se acumula— pero conviene que el comando lo
+ * diga en vez de crear una cuenta que nunca va a poder cobrar.
+ *
+ * Comprobado en docs.stripe.com/connect/cross-border-payouts el 30/09/2026.
+ */
+const PAISES_PAGABLES = new Set([
+  "AT", "BE", "BG", "CA", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR",
+  "GB", "GR", "HR", "HU", "IE", "IS", "IT", "LI", "LT", "LU", "LV", "MT", "NL",
+  "NO", "PL", "PT", "RO", "SE", "SI", "SK", "US",
+]);
+
+export class PaisNoPagable extends Error {
+  constructor(pais: string) {
+    super(
+      `Stripe no deja transferir de una plataforma española a una cuenta en ${pais}.\n` +
+        `Solo EE. UU., Reino Unido, el EEE, Canadá y Suiza.\n\n` +
+        `No es un problema de márgenes: sencillamente no se puede.\n` +
+        `A ese creador se le paga por factura, fuera de Stripe. Cobrar a SUS\n` +
+        `clientes sí funciona con normalidad; lo que no funciona es pagarle a él.\n` +
+        `Ver docs/cobrar-y-pagar-fuera-de-la-ue.md.`,
+    );
+  }
+}
+
 export class SinClaveDeStripe extends Error {
   constructor() {
     super(
@@ -63,7 +99,12 @@ export interface EstadoDeConexion {
 async function cuentaDelCreador(
   slug: string,
   email?: string,
+  pais?: string,
 ): Promise<string> {
+  // ANTES DE CREAR NADA. Una cuenta conectada NO PUEDE CAMBIAR DE PAÍS después
+  // de creada, así que equivocarse aquí obliga a empezar de cero con otra
+  // cuenta —y si ya hubiera saldo dentro, a recuperarlo con soporte.
+  if (pais && !PAISES_PAGABLES.has(pais.toUpperCase())) throw new PaisNoPagable(pais);
   const { data: creador, error } = await supabase
     .from("creadores")
     .select("id, nombre, stripe_cuenta_id")
@@ -76,7 +117,12 @@ async function cuentaDelCreador(
 
   const cuenta = await stripe().accounts.create({
     type: "express",
-    // El país se le pregunta a él en el alta; no lo suponemos.
+    // EL PAÍS NO SE LE PREGUNTA A ÉL: si no se manda, Stripe usa el de la
+    // plataforma —España—. Lo dice su referencia de API: "default is your own
+    // country". El comentario que había aquí decía lo contrario y era falso, así
+    // que a un creador de fuera se le habría creado una cuenta española que él
+    // no puede completar.
+    ...(pais && { country: pais.toUpperCase() }),
     ...(email && { email }),
     business_type: "individual",
     capabilities: { transfers: { requested: true } },
@@ -105,8 +151,12 @@ async function cuentaDelCreador(
  * creador lo deja para mañana, hay que generar otro — por eso el comando lo
  * dice al imprimirlo, y no es un descuido de diseño sino cómo funciona.
  */
-export async function enlaceDeAlta(slug: string, email?: string): Promise<string> {
-  const cuentaId = await cuentaDelCreador(slug, email);
+export async function enlaceDeAlta(
+  slug: string,
+  email?: string,
+  pais?: string,
+): Promise<string> {
+  const cuentaId = await cuentaDelCreador(slug, email, pais);
   const base = config.http.urlBase || "https://cerebro.cofundo.io";
 
   const enlace = await stripe().accountLinks.create({
