@@ -107,6 +107,68 @@ llamar a Stripe y explica qué hacer en su lugar.
 (`stripe.com/es/connect/pricing`). Sobre una liquidación de 500 €: **3,35 €, un
 0,67 %.** No es ahí donde está el dinero.
 
+## 3 bis · Venezuela en concreto, que es donde está Manuel
+
+### Stripe no opera allí, y esto no es opinable
+
+Preguntado a la propia cuenta de Stripe (`countrySpecs.list`), que es la lista
+autorizada: **Stripe admite abrir cuenta en 45 países. Venezuela no es uno.**
+De toda Latinoamérica solo están **México y Brasil**.
+
+O sea que con Venezuela fallan **los dos filtros a la vez**, y cada uno por
+separado ya sería definitivo:
+
+1. No se puede abrir ninguna cuenta de Stripe en Venezuela.
+2. Aunque se pudiera, una plataforma española no puede transferirle.
+
+`npm run acuerdo -- enlace <slug> --pais VE` ahora lo dice antes de tocar nada, y
+distingue los dos motivos preguntándole a Stripe en vez de guardar otra lista
+que envejezca.
+
+### El IVA venezolano: 0 % en su factura
+
+De PwC Tax Summaries, revisado el 12/01/2026:
+
+| | |
+|---|---|
+| Tipo general del IVA | **16 %** (la ley permite moverlo entre 8 % y 16,5 %) |
+| **Servicios personales independientes prestados desde Venezuela y usados exclusivamente por alguien de fuera sin establecimiento permanente allí** | **0 %** |
+
+Ese segundo renglón es exactamente su caso: él, desde Venezuela, prestando un
+servicio a una empresa española sin presencia en Venezuela. **Su factura a
+Cofundo va con IVA venezolano al 0 %**, y además mantiene su derecho a recuperar
+el IVA soportado de sus propias compras.
+
+### Lo que sí le va a costar dinero a él: el IGTF
+
+Venezuela cobra un **3 %** (la ley permite del 2 % al 8 %) sobre los pagos
+hechos **en divisa** a través del sistema financiero venezolano. No lo pagamos
+nosotros, pero conviene saberlo antes de negociar el porcentaje: **de cada 100 $
+que le lleguen, el sistema se queda 3 antes de que él los vea**. Si esperaba
+recibir el bruto, la conversación se tuerce a mitad.
+
+### Y el problema que no es fiscal: cómo le llega el dinero
+
+Que su factura sea correcta no significa que la transferencia salga. Los
+proveedores de pago habituales no operan con Venezuela, y una transferencia
+bancaria a un banco venezolano desde España es, en el mejor caso, lenta y
+escrutada. ⚠️ **Esto hay que preguntárselo a él directamente: "¿cómo cobras tú
+normalmente de clientes de fuera?"** — mucha gente que trabaja desde allí para
+el exterior cobra en una cuenta de otro país, y eso cambia la respuesta entera:
+si tiene cuenta en España, EE. UU. o México, vuelve a haber camino.
+
+### Dos cosas para el asesor, antes de firmar
+
+1. **¿Servicio o cesión de derechos?** No es lo mismo que nos facture "servicios
+   de consultoría" que "licencia de uso de su contenido". Lo segundo puede ser
+   un canon, y un canon pagado a un no residente sí puede llevar retención
+   española. ⚠️ **Lo decide cómo se redacte el acuerdo, que es lo único de esta
+   lista que está en nuestra mano.** Preguntarlo antes de escribirlo sale
+   gratis; descubrirlo después, no.
+2. **Inversión del sujeto pasivo.** Un servicio comprado a un proveedor de fuera
+   de la UE se autorepercute en el IVA español. ⚠️ Confirmar con el asesor cómo
+   se declara y si es neutro en nuestro caso.
+
 ## 4 · Mover los clientes a la SL más adelante
 
 **Sí se puede, y no es un botón.** Stripe tiene un proceso de migración de datos
@@ -123,10 +185,14 @@ más barato de la historia de la empresa para hacer el cambio es ahora, y el má
 caro es dentro de un año. No es motivo para adelantar la constitución de la SL,
 pero sí para no dejarla pasar "porque luego ya se verá": luego cuesta más.
 
-## 5 · Resumen en cuatro líneas
+## 5 · Resumen
 
 1. Cobrar a LATAM cuesta 17 céntimos más por cobro y deja un 20 % más, porque no
    se paga IVA español. ⚠️ Salvo que el país exija registrarse allí.
 2. Pagarle a un creador de LATAM por Stripe **no se puede**. Que facture.
-3. Si se baja el precio para LATAM, el plan anual deja de ser opcional.
-4. Migrar a la SL se puede y se hace por soporte. Cuanto antes, más barato.
+3. **Venezuela ni siquiera es país de Stripe**, y su factura lleva **0 % de IVA
+   venezolano** por ser exportación de servicios. Él pierde un 3 % de IGTF al
+   cobrar en divisa, y lo primero que hay que preguntarle es **cómo cobra de
+   clientes de fuera**.
+4. Si se baja el precio para LATAM, el plan anual deja de ser opcional.
+5. Migrar a la SL se puede y se hace por soporte. Cuanto antes, más barato.

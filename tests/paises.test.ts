@@ -17,8 +17,9 @@ const { PaisNoPagable } = await import("../src/pagos/connect.js");
 
 describe("PaisNoPagable", () => {
   it("dice qué pasa y qué hacer, no solo que no se puede", () => {
-    const e = new PaisNoPagable("MX");
+    const e = new PaisNoPagable("mx", "Stripe sí opera en MX, pero ...");
     // El mensaje es lo único que va a leer quien se lo encuentre.
+    // En mayúsculas aunque llegue en minúsculas: se copia y se pega.
     expect(e.message).toContain("MX");
     expect(e.message).toContain("factura");
     // Y sobre todo: que cobrar a sus clientes SÍ funciona. Sin esa frase, esto

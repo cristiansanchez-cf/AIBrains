@@ -49,15 +49,42 @@ const PAISES_PAGABLES = new Set([
 ]);
 
 export class PaisNoPagable extends Error {
-  constructor(pais: string) {
+  constructor(pais: string, motivo: string) {
     super(
-      `Stripe no deja transferir de una plataforma española a una cuenta en ${pais}.\n` +
-        `Solo EE. UU., Reino Unido, el EEE, Canadá y Suiza.\n\n` +
-        `No es un problema de márgenes: sencillamente no se puede.\n` +
+      `No se puede crear la cuenta del creador en ${pais.toUpperCase()}.\n\n` +
+        `${motivo}\n\n` +
+        `No es un problema de márgenes: sencillamente no hay camino.\n` +
         `A ese creador se le paga por factura, fuera de Stripe. Cobrar a SUS\n` +
         `clientes sí funciona con normalidad; lo que no funciona es pagarle a él.\n` +
         `Ver docs/cobrar-y-pagar-fuera-de-la-ue.md.`,
     );
+  }
+}
+
+/**
+ * Por qué no se puede pagar a ese país, distinguiendo los DOS motivos.
+ *
+ * Son distintos y conviene saber cuál es, porque uno puede cambiar y el otro
+ * no depende de nosotros:
+ *
+ *   - Stripe no opera ahí. Venezuela es el caso: no está entre los 45 países
+ *     donde Stripe admite abrir una cuenta, así que no hay nada que hacer.
+ *   - Stripe opera ahí, pero una plataforma del EEE no puede transferirle.
+ *     México y Brasil son eso: existen en Stripe, y aun así no les podemos
+ *     pagar desde España.
+ *
+ * Se le pregunta a Stripe en vez de guardar una segunda lista, porque una lista
+ * de países en el código envejece sin que nadie se entere.
+ */
+async function porQueNoSePuedePagar(pais: string): Promise<string> {
+  try {
+    await stripe().countrySpecs.retrieve(pais.toUpperCase());
+    return (
+      `Stripe sí opera en ${pais.toUpperCase()}, pero una plataforma española solo puede\n` +
+      `transferir a cuentas en EE. UU., Reino Unido, el EEE, Canadá y Suiza.`
+    );
+  } catch {
+    return `Stripe no opera en ${pais.toUpperCase()}: allí no se puede abrir ninguna cuenta.`;
   }
 }
 
@@ -104,7 +131,9 @@ async function cuentaDelCreador(
   // ANTES DE CREAR NADA. Una cuenta conectada NO PUEDE CAMBIAR DE PAÍS después
   // de creada, así que equivocarse aquí obliga a empezar de cero con otra
   // cuenta —y si ya hubiera saldo dentro, a recuperarlo con soporte.
-  if (pais && !PAISES_PAGABLES.has(pais.toUpperCase())) throw new PaisNoPagable(pais);
+  if (pais && !PAISES_PAGABLES.has(pais.toUpperCase())) {
+    throw new PaisNoPagable(pais, await porQueNoSePuedePagar(pais));
+  }
   const { data: creador, error } = await supabase
     .from("creadores")
     .select("id, nombre, stripe_cuenta_id")
