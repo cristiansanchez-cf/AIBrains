@@ -483,13 +483,15 @@ esa disciplina al añadir.
 
 ## 10 · Lo que necesito que decidas tú
 
-1. **¿Esto es producto o es tuyo?** ¿Una función que se vende a todo el que se
-   suscriba, o una herramienta interna de Cofundo? Cambia la carga legal, el
-   gobierno de la taxonomía y si hay que pintar panel.
-2. **El nombre del cliente: ¿alias o nada?** Yo propongo nada.
-3. **¿La métrica es "% cazado antes de enviar"?** Si no, dime cuál, porque sin
+1. ~~¿Esto es producto o es tuyo?~~ **Resuelto: es producto, con vista de
+   equipo.** De ahí sale el resto.
+2. ~~El nombre del cliente~~ **Resuelto: no se guarda.**
+3. ~~¿El consentimiento en equipos lo da la persona o la empresa?~~ **Resuelto:
+   la empresa, pero por interés legítimo y no por consentimiento** (§8). Queda
+   para el asesor el contrato de encargo de tratamiento, que hoy no existe.
+4. **¿La métrica es "% cazado antes de enviar"?** Si no, dime cuál, porque sin
    una la fase 2 no tiene puerta de entrada.
-4. **¿Cuántas ocurrencias para que un patrón salga en el aviso?** Propongo 2.
-5. **¿Entras tú solo en la fase 1, o también Teresa y Enrique?** Con una sola
+5. **¿Cuántas ocurrencias para que un patrón salga en el aviso?** Propongo 2.
+6. **¿Entras tú solo en la fase 1, o también Teresa y Enrique?** Con una sola
    persona el agregado no existe, pero con tres el dato de terceros se
    multiplica antes de que la política lo cubra.
