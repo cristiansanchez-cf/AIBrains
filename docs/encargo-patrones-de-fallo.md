@@ -406,11 +406,46 @@ existe es otra cosa, y además es la que acaba en reclamación.
 
 ### Lo demás de privacidad
 
-**Consentimiento propio**, distinto del de "ayudar a mejorar". La tabla
-`consentimientos` ya existe y está probada: un tipo nuevo, `patrones_de_fallo`.
-⚠️ En el plan de Equipo hay que decidir si el consentimiento lo da la persona o
-basta el interés legítimo de la empresa que paga la herramienta. **Es la
-pregunta legal más importante de todo esto.**
+### El consentimiento en el plan de Equipo
+
+Cristian decide que basta con la empresa, porque es ella quien responde de su
+gente. **En la responsabilidad tiene razón**: en una herramienta de trabajo, la
+empresa decide qué se trata y para qué —es la responsable— y nosotros lo
+tratamos por encargo suyo.
+
+**Donde hay que corregir es en la palabra.** Pedirle *consentimiento* a un
+empleado no sirve, y no por un tecnicismo: un consentimiento tiene que ser libre,
+y nadie le dice que no a su jefe. Un consentimiento que no es libre **no vale**,
+así que pedirlo es peor que no pedirlo: deja la apariencia de una base legal que
+no sostiene nada el día que alguien reclame.
+
+Lo que sí vale es lo que la empresa ya hace con cualquier herramienta de
+trabajo: la trata por su interés legítimo, y **se lo cuenta a su gente**. Y eso
+ya está escrito en los términos publicados, para los asientos:
+
+> «Es la empresa quien decide a quién da acceso, y quien debe haber informado a
+> esa persona de que sus datos van a tratarse aquí.»
+
+O sea que el mecanismo existe: solo hay que extender esa frase para decir **qué**
+se registra. Traducido a producto, y es más simple que lo que tenía:
+
+| | Individual | Equipo |
+|---|---|---|
+| Casilla de consentimiento | **sí** | **no** |
+| Base legal | consentimiento de la persona | interés legítimo de la empresa |
+| El empleado ve lo suyo | — | **sí, y lo sabe desde el alta** |
+
+En el individual la casilla es correcta porque no hay jefe. En el equipo, la
+casilla sobra: lo que hace falta es que se vea.
+
+⚠️ **Lo que falta y hoy no existe: un contrato de encargo de tratamiento con las
+empresas del plan de Equipo.** Si tratamos datos de sus empleados por encargo
+suyo, ese contrato es obligatorio y no se ha firmado con nadie. Es la pieza que
+le pediría al asesor, y conviene tenerla antes del primer equipo, no después.
+
+**No soy abogado y esto no es un dictamen**, pero la forma de arriba es la
+estándar y no cuesta nada construirla bien desde el principio. Rehacerla luego,
+sí.
 
 **Retención: no son 30 días.** Un patrón es longitudinal por definición. Mientras
 la cuenta exista y no se borre, y borrado al retirar el consentimiento.
