@@ -1,35 +1,124 @@
 # Patrones de fallo por usuario · propuesta
 
-> 02/10/2026. Respuesta al encargo. **Propuesta, no código.** Leída antes la
-> beta de Notion ("🪞 Fallos de venta — beta") y sus 8 filas reales.
+> 02/10/2026, revisada el mismo día con tus decisiones. **Propuesta, no código.**
+> Leída la beta de Notion ("🪞 Fallos de venta — beta") y sus 8 filas reales.
 >
-> Lo que sale de leerla cambia dos cosas del planteamiento, y están en §0.
+> Lo primero es §0, porque ya no es una preocupación: es un número.
 
 ---
 
-## 0 · Tres cosas que salen de leer tu beta y conviene decidir antes
+## 0 · Ya estamos guardando datos de terceros. Medido hoy
 
-**1. Tu propio dato dice cuál es la métrica.** De los 8 fallos, **7 están
-marcados "Después de enviar" y 1 "Antes de enviar"**. Ese 1 de 8 —12,5 %— es la
-línea base, y es el único número que dice si esto funciona. Hay que escribirlo
-hoy, porque dentro de tres meses nadie se acordará de que empezamos en 12,5.
+Dijiste que la gente va a meter datos privados «porque nadie mira eso». Lo he
+mirado, contra las consultas reales que hay ahora mismo en producción:
 
-**2. Tres de tus ocho correcciones NO apuntan a una ficha.** Apuntan a
-"Principio del Cerebro — Una sola llamada a la acción por mensaje", "Lo que no
-se dice no existe", "Las ventas se cierran en el seguimiento". Eso no es un
-descuido tuyo: **son principios que el corpus no tiene como ficha**. Así que el
-patrón no puede depender de que exista una ficha correctora — tiene que llevar
-su propia corrección escrita, y la ficha, si la hay, va de refuerzo.
+| | |
+|---|---|
+| Consultas de clientes revisadas | 80 |
+| Con algo que parece un nombre propio | **18 (23 %)** |
+| **Personas distintas que lo hacen** | **3 de 4** |
 
-De paso: eso es una lista de contenido que falta, sacada de tu propio uso.
+Y lo que hay dentro no es ambiguo:
 
-**3. El nombre del cliente está en tus filas.** "Cliente: Agus". Eso es dato
-personal de un tercero que no ha aceptado nada. Hay que decidirlo en §6, y la
-respuesta corta es que **no se guarda**.
+```
+Fran · Sánchez · Becerril · Ángel · Méndez · Irene · Hernández
+El Confidencial · Alimente · Teknautas · SciScreen
+```
+
+Eso son **apellidos de periodistas y los medios donde trabajan**, escritos por
+una clienta haciendo su trabajo. Guardado en texto plano, treinta días, y
+enviado a OpenAI bajo un acuerdo que la propia política dice que está *en
+trámite, no firmado*.
+
+Lo que **no** aparece —y es la buena noticia— es nada estructurado: cero
+correos, cero teléfonos, cero IBAN, cero NIF. **El problema son los nombres**, y
+eso decide el diseño: lo estructurado se puede limpiar con una regla; un nombre
+propio, no.
+
+**Consecuencia para el encargo:** el cortafuegos no es una parte de la función
+nueva. Es anterior, y aplica a lo que ya guardamos. Va primero.
 
 ---
 
-## 1 · Arquitectura recomendada
+## 1 · El cortafuegos de datos ajenos
+
+Cuatro capas, de más barata y eficaz a más cara:
+
+### a) Pedírselo al modelo, no al humano
+
+**La más importante y la que menos cuesta.** La política ya recomienda a las
+personas no escribir nombres, y 3 de cada 4 lo hacen igual: nadie lee una
+política. Pero **el `situacion` que llega al servidor no lo suele escribir la
+persona, lo compone su asistente** —se ve en el propio texto: *"Seguimiento a un
+medio nacional, El Confidencial, que no ha contestado…"* es redacción de modelo,
+no de humano.
+
+Y el modelo sí lee las instrucciones, en cada sesión. Añadir a
+`INSTRUCCIONES_DEL_SERVIDOR`: **cuenta la situación sin nombres propios,
+sustituye empresas y personas por su papel** («un medio nacional», «el
+responsable de compras»). Es un párrafo, llega al sitio donde se compone el
+texto, y se puede medir: el mismo recuento de arriba, dentro de un mes.
+
+No es infalible. Es lo que mueve el 23 % sin romper nada.
+
+### b) Limpiar al escribir lo que sí es determinista
+
+Correos, teléfonos, URLs, IBAN, NIF/CIF y tarjetas se reconocen con reglas y se
+sustituyen por `[correo]`, `[teléfono]`… **visiblemente, no en silencio**: la
+fila guarda qué se sustituyó. Una limpieza que no se ve da una confianza falsa,
+que es peor que no limpiar.
+
+Hoy no hay ninguno, así que esto no arregla nada todavía — **es el cinturón para
+el día que alguien pegue una factura entera**, que llegará.
+
+### c) Para las evidencias de fallo: no guardar la frase del otro
+
+En la función nueva, la regla es más dura que en las consultas porque podemos
+permitírnoslo: **la evidencia es lo que escribió el usuario, nunca lo que dijo
+el cliente**, y sin el nombre de nadie. Tu beta ya lo cumple en 7 de 8 filas.
+
+### d) La comprobación periódica, que es lo que pediste
+
+Un comando —`npm run fuga`— que pasa esas mismas reglas por **todo lo que
+guardamos** y devuelve un número. Semanal, dentro de `calidad.yml`, con dos
+salidas distintas:
+
+- **Lo estructurado: suelo cero.** Un correo guardado es una avería, y avisa.
+- **Los nombres propios: un porcentaje con tendencia.** No puede ser cero —no se
+  detectan de forma fiable— pero **23 % bajando es una cosa y 23 % subiendo es
+  otra**, y hoy no lo sabríamos.
+
+Y que pueda **borrar**, no solo contar: un comando que encuentra y no limpia
+acaba siendo un informe que nadie abre.
+
+> ⚠️ Esto no sustituye la revisión legal. La política dice hoy que el texto de
+> la consulta se guarda tal cual: si lo depuramos, hay que decirlo ahí, y es una
+> mejora que conviene contar, no esconder.
+
+---
+
+---
+
+## 2 · Qué es el producto: el registro, no el aviso
+
+Lo corriges y tienes razón: *«no es tanto que las respuestas te vayan diciendo
+ojo, sino que quede un record»*. Y el argumento de por qué es el bueno:
+**nadie va a mantener su propio documento de fallos.** Tú lo has hecho una vez,
+a mano, porque estás construyendo esto. Un comercial no lo hará dos semanas
+seguidas.
+
+Eso invierte el orden de lo que propuse. **Primero el registro y la ficha
+consultable; el aviso dentro de la respuesta viene después y es opcional.**
+
+Y tiene un efecto de negocio que no es menor: es **una razón para entrar en la
+plataforma**. Hoy el producto se usa entero desde fuera —el cliente vive en su
+Claude y no vuelve nunca— y ya hemos visto lo que eso cuesta: a una clienta se
+le cayó la conexión y estuvo diecinueve días pagando sin producto porque no
+había ningún motivo para entrar a mirar.
+
+El aviso en la respuesta sigue mereciendo la pena, pero como segundo plato:
+
+## 3 · Arquitectura recomendada
 
 ### El problema que lo decide todo
 
@@ -108,7 +197,7 @@ viable; guardarla entera, no.
 
 ---
 
-## 2 · Modelo de datos
+## 4 · Modelo de datos
 
 ```sql
 -- La taxonomía. En codigo en la fase 1, como ETAPAS y OBJECIONES, por el mismo
@@ -156,7 +245,7 @@ Tres decisiones dentro:
 
 ---
 
-## 3 · Cambios en el MCP
+## 5 · Cambios en el MCP
 
 ### `buscar_tecnica` — un bloque más al final, solo si hay historial
 
@@ -227,7 +316,12 @@ está en el panel web, desde Claude no se puede.
 
 ---
 
-## 4 · Plan por fases
+## 6 · Plan por fases
+
+**Fase 0 — el cortafuegos, y va antes que la función.**
+El párrafo en las instrucciones (§1a), la limpieza de lo estructurado (§1b) y
+`npm run fuga` con su medida semanal (§1d). No depende de nada de lo demás y
+arregla algo que ya está pasando. *Qué se mide:* el 23 % de hoy.
 
 **Fase 1 — tú solo, de una tarde.**
 Taxonomía v0 en código con tus once patrones · tabla `fallos` · las tres
@@ -252,7 +346,7 @@ el enfoque antes de construir más encima.
 
 ---
 
-## 5 · Gobierno de la taxonomía
+## 7 · Gobierno de la taxonomía
 
 **Una sola lista, servida desde un sitio, y un cajón para lo que no encaja.**
 
@@ -275,41 +369,60 @@ guardamos uno que no se anuncia, pasa lo mismo.
 
 ---
 
-## 6 · Privacidad: lo que propongo y lo que necesita abogado
+## 8 · Quién ve qué
 
-**Lo que se guarda:** tus palabras. **Lo que no:** las del cliente.
+Aquí me corriges y lo acepto: dije que el administrador no debía ver los fallos
+de su equipo, y tú dices que **ver por qué no vende tu equipo es justamente para
+lo que se compra el plan**. Es verdad, y además es lo que lo hace vendible.
 
-Es la línea que hace que esto sea dato *sobre ti* —que nos has confiado— y no
-una base de datos de conversaciones ajenas. Tu beta ya lo cumple en 7 de 8
-filas; la del "muro de información" describe tu propio envío, que también vale.
+Lo que propongo no es negarlo, es **dónde se corta**, y la clave es que tú mismo
+lo apuntas: *«a lo mejor los fallos habituales no tenemos que hacerlos
+concretos»*.
 
-**El nombre del cliente no se guarda.** "Agus" no ha aceptado nada y no aporta
-nada al patrón. Si necesitas distinguir conversaciones, un alias que eliges tú
-("cliente A") y que no sale de tu cuenta.
+| | La persona, de lo suyo | **El administrador, de su equipo** |
+|---|---|---|
+| Qué patrones repite y cuántas veces | sí | **sí, por persona** |
+| Tendencia: ¿mejora o empeora? | sí | **sí** |
+| Etapa y canal donde ocurre | sí | **sí** |
+| **La frase literal (evidencia)** | sí | **no** |
+| Cliente, medio, empresa mencionada | no se guarda | no existe |
+
+**Por qué la evidencia se corta ahí y no es un capricho:** la frase literal es
+justo donde vive lo que no debe estar —el nombre del periodista, el importe, la
+cuenta—. Dársela al jefe multiplica por cinco los ojos sobre un dato de un
+tercero que no aceptó nada. Y para lo que él necesita no hace falta: *"Laura
+cae en seguimiento pasivo 7 veces este mes, y en agosto eran 3"* responde a «¿por
+qué no vende mi equipo?» entero, sin una sola frase textual.
+
+Lo concreto que sí puedes darle, y es mucho: el patrón, el recuento, la etapa,
+el canal, la tendencia y la técnica que lo corrige. Con eso se hace un informe,
+un plan de formación y una conversación. La frase literal no añade decisión,
+añade riesgo.
+
+**Y la condición que lo hace defendible: el empleado ve exactamente lo mismo que
+ve su jefe, y lo sabe desde el alta.** Eso cuesta una pantalla y convierte esto
+de vigilancia en herramienta. Un registro de errores que el empleado no sabe que
+existe es otra cosa, y además es la que acaba en reclamación.
+
+### Lo demás de privacidad
 
 **Consentimiento propio**, distinto del de "ayudar a mejorar". La tabla
-`consentimientos` ya existe y está probada: un tipo nuevo, `patrones_de_fallo`,
-con su propio texto. Sin él, nada se guarda.
+`consentimientos` ya existe y está probada: un tipo nuevo, `patrones_de_fallo`.
+⚠️ En el plan de Equipo hay que decidir si el consentimiento lo da la persona o
+basta el interés legítimo de la empresa que paga la herramienta. **Es la
+pregunta legal más importante de todo esto.**
 
-**Retención: no son 30 días.** Un patrón es longitudinal por definición; con 30
-días no hay patrón. Propuesta: **mientras la cuenta exista y la persona no lo
-borre**, y borrado inmediato al retirar el consentimiento, igual que ya funciona
-para las consultas.
+**Retención: no son 30 días.** Un patrón es longitudinal por definición. Mientras
+la cuenta exista y no se borre, y borrado al retirar el consentimiento.
 
-⚠️ **Esto necesita revisión legal, y es la parte que no puedo cerrar yo:**
-- Un plazo distinto para este dato, con su base legal (consentimiento) en la
-  política de privacidad, que hoy dice 30 días sin matices.
-- Si las evidencias se mandan a OpenAI para buscar, entran en el mismo apartado
-  del acuerdo que sigue **en trámite, no firmado**. Mi propuesta es que **no se
-  vectoricen**: se guardan y se enseñan, no se buscan. Así no salen de Supabase.
-- En el plan de Equipo: **el administrador NO ve los fallos de sus empleados.**
-  Un registro de errores de venta visible por el jefe deja de ser una
-  herramienta de aprendizaje y pasa a ser otra cosa. Si esto se pide alguna vez,
-  que sea una decisión consciente y no un efecto del modelo de datos.
+**Las evidencias no se vectorizan.** Se guardan y se enseñan, no se buscan. Así
+no salen de Supabase ni pasan por OpenAI, que es el proveedor con el acuerdo sin
+firmar.
 
----
+⚠️ Para abogado: el plazo distinto con su base legal, la visibilidad del
+administrador en el plan de Equipo, y el texto que ve el empleado al entrar.
 
-## 7 · Riesgos, por orden de probabilidad
+## 9 · Riesgos, por orden de probabilidad
 
 **1. Que el aviso canse y se aprenda a saltárselo.** Es el riesgo real, y ya
 tenemos la cicatriz: `calidad` fallaba todas las semanas y por eso nadie vio dos
@@ -333,7 +446,7 @@ aplicado a machamartillo produce mensajes secos y raros. El patrón tiene que
 decir qué hacer, no solo qué no hacer — tus once ya lo hacen, y hay que mantener
 esa disciplina al añadir.
 
-## 8 · Lo que necesito que decidas tú
+## 10 · Lo que necesito que decidas tú
 
 1. **¿Esto es producto o es tuyo?** ¿Una función que se vende a todo el que se
    suscriba, o una herramienta interna de Cofundo? Cambia la carga legal, el
