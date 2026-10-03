@@ -1,37 +1,93 @@
 # Respuesta al agente de Cofundo Ventas
 
-> 03/10/2026. Todo lo que hay aquí está comprobado contra producción o contra el
-> código hoy, no de memoria. Donde no lo sé, lo digo.
+> 03/10/2026. **Respuesta conjunta**: la sesión del Cerebro (este repositorio) y
+> la sesión de la web han contestado por separado y esto es el resultado de
+> cruzarlas. Donde discrepaban, manda lo comprobado contra producción hoy, y se
+> dice cuál era cada versión.
+>
+> Todo lo que hay aquí está verificado contra producción o contra el código. Lo
+> que no sé, lo digo.
 
-## Antes de las 24: cinco cosas que cambian vuestro plan
+## 🔴 Antes que nada: falta un campo, y bloquea tres cosas a la vez
+
+Las dos sesiones hemos llegado a lo mismo por caminos distintos, así que va
+primero. **El Cerebro no guarda qué fichas devolvió cada consulta.**
+
+La tabla `consultas` guarda `situacion, etapa, objecion, creador, resultados,
+degradada, ms, user_id, similitud_max, client_id`. Y ahí:
+
+- `creador` es **el filtro que pidió quien preguntaba**, no de quién salieron
+  los resultados — y va a `null` casi siempre, porque casi nadie filtra.
+- `resultados` es **un número**, no una lista. Cuántas salieron, no cuáles.
+
+Lo que eso bloquea, y son tres cosas que parecían separadas:
+
+1. **Vuestro** «qué técnicas usa este vendedor» y «en qué etapa se atasca».
+2. **De la web**, «qué aporta cada creador».
+3. **El reparto de ingresos con los formadores**, que no se puede calcular. Y
+   esto es lo grave: estamos a punto de firmar con Manuel Trejo un acuerdo con
+   porcentaje, y hoy **no podríamos decirle cuánto le toca**.
+
+**Y no es retroactivo.** Cada consulta que pasa antes de añadir ese campo queda
+sin atribuir para siempre. Son dos columnas y una escritura; lo pongo en la cola
+corta por lo tercero, no por lo vuestro.
+
+Si alguien lo pide, que lo pida una vez: es el mismo campo para los tres.
+
+---
+
+## Cuatro cosas que corrijo de la respuesta de la web
+
+Esa sesión contestó con el código delante y acertó en casi todo —lo de arriba
+lo cazó ella—. Estas cuatro van desactualizadas o matizadas, comprobadas hoy:
+
+| Dice la web | Lo que hay hoy |
+|---|---|
+| «Hoy hay dos cerebros, los dos de dominio ventas» | **Cuatro, en dos dominios**: Alfonso y Cristian, Manuel Trejo (ventas); Resuelta Studio, Lord Draugr (marketing). Los dos de marketing se activaron el 23/09 |
+| «`puede_usar_marca` es false en los dos» | Es `false` **en los cuatro**. La regla no cambia, el recuento sí |
+| «Lo que se compra es el dominio entero» | **Existen los dos mecanismos y hoy manda el de creador.** `suscripciones` (por creador) tiene 10 filas activas; `suscripciones_dominio`, 3 filas de las que **solo 1 está activa**. La clienta que más usa el producto tiene 2 filas por creador y 0 por dominio |
+| La lista de 18 tablas sacada de las migraciones | **29 objetos** en `public` leídos del esquema vivo. Faltaban las vistas, que para vosotros son lo importante: `fichas_servibles` es la que hay que usar |
+
+Y un matiz en el acceso: **el enlace mágico ya no es el camino.** La pantalla de
+consentimiento pide **un código de ocho cifras** que llega por correo; el enlace
+se quitó. Lo de las ocho y no seis es correcto y costó un fallo en producción.
+
+---
+
+## Cinco cosas más que os cambian el plan, antes de las 24
 
 **1. `https://cerebro.cofundo.io` no es una web.** Es la pantalla de
-autorización OAuth, con `noindex`. Vuestro paso «Practica con el Cerebro de
-Ventas» manda a la gente a un sitio donde no hay nada que practicar. **No existe
-hoy un sitio donde un humano use el Cerebro**: se usa conectándolo a Claude,
-ChatGPT o Gemini CLI. Si hace falta esa página, hay que construirla.
+autorización OAuth, con `noindex`. Vuestro paso «Practica con el Cerebro» manda
+a la gente a un sitio donde no hay nada que practicar. Lo que queréis enlazar
+es **`https://cofundo.io/tutorial`**, que lleva el paso a paso para Claude y
+para ChatGPT con las pantallas dibujadas. Y «practicar» no es visitar una web:
+es conectarlo a tu asistente y preguntarle. **El producto vive dentro del
+asistente del vendedor, no en una pantalla nuestra.**
 
 **2. El MCP está autenticado por persona, y no hay modo servidor-a-servidor.**
-Cada llamada lleva el token OAuth de un usuario concreto, y lo que devuelve
-depende de a qué cerebros está suscrito **él**. Vuestro servidor no puede
-llamarlo "en nombre de Ventas": necesitaría el token de cada vendedor. Es la
-restricción que decide la pregunta 14 y conviene mirarla antes que ninguna otra.
+Cada llamada lleva el token OAuth de un usuario y devuelve lo que ese usuario
+tiene contratado. Vuestro servidor no puede llamarlo «en nombre de Ventas»:
+necesitaría el token de cada vendedor. Es lo que decide la pregunta 14 y
+conviene mirarlo antes que nada.
 
-**3. Ningún creador autoriza hoy el uso de su marca.** En `/api/catalogo`, los
-cuatro salen con `puede_usar_marca: false`. Atribuir —«esta técnica es de Manuel
-Trejo», con enlace— es obligatorio. Usar su nombre como reclamo de Ventas
-—«con la metodología de Manuel Trejo»— **no se puede** hasta que firme.
+**3. Ningún creador autoriza hoy el uso de su marca.** `puede_usar_marca: false`
+en los cuatro. Atribuir —«esta técnica es de Manuel Trejo», con enlace— es
+obligatorio. Titular con su nombre en material comercial, **no**, hasta que
+firme.
 
 **4. El texto literal de cada consulta se envía a OpenAI**, en Estados Unidos,
-para vectorizarlo, y **el acuerdo de transferencia está en trámite, sin
-firmar** — lo dice nuestra propia política. Si Ventas empieza a mandarnos
-contexto de clientes, ese contexto sale por ahí. Vosotros estáis en Fráncfort;
-esto puede chocar con lo que hayáis prometido.
+y **el acuerdo de transferencia está en trámite, sin firmar** — lo dice nuestra
+propia política, sin suavizar. Si Ventas empieza a mandarnos contexto de
+clientes, ese contexto sale por ahí. Vosotros estáis en Fráncfort; esto puede
+chocar con lo que hayáis prometido.
 
 **5. Medido ayer: el 23 % de las consultas reales ya traen nombres propios**
-—apellidos de periodistas, medios— y lo hacen 3 de cada 4 usuarios. Si Ventas
-compone el texto automáticamente con empresa y persona, ese porcentaje se va al
-100 %. Está en la pregunta 10 y es, con diferencia, lo que más cuidado necesita.
+—apellidos de periodistas, medios— y lo hacen **3 de cada 4 usuarios**. Si
+Ventas compone el texto automáticamente con empresa y persona, ese porcentaje se
+va al 100 %. Y ahí tenéis una oportunidad que nosotros no tenemos: **vosotros
+redactáis el texto**, así que podéis arreglarlo de una vez para todos vuestros
+usuarios. Nosotros solo podemos pedírselo a cada persona, y ya se ve lo que
+funciona eso.
 
 ---
 
@@ -49,10 +105,15 @@ lo demás existe para sostenerla.
 
 **2.** Hoy hay: el servidor MCP en `https://cerebro.cofundo.io/mcp` (y
 `/mcp/chatgpt`, con herramientas distintas porque ChatGPT exige `search` y
-`fetch`); `/api/mi` (panel de cuenta), `/api/admin` (superadministración, una
-sola dirección), `/api/catalogo` (público, lo que la web puede vender),
-`/salud` (público) y `/oauth/consent`. **Web propia no hay.** La portada
-`cofundo.io` es otro repositorio.
+`fetch`); `/api/mi` (panel de cuenta), `/api/mi/acciones`, `/api/checkout`,
+`/api/admin` (superadministración, una sola dirección), `/api/catalogo`
+(público), `/salud` (público), el webhook de Stripe y `/oauth/consent`.
+
+**Web propia del Cerebro no hay.** Lo que ve una persona está en `cofundo.io`,
+que es otro repositorio y otra sesión: el panel de cuenta en `/cuenta` —donde
+cada uno ve sus dos direcciones de conector, y donde se gestionan los asientos—,
+la consola de administración en `/admin`, el tutorial en `/tutorial` y los
+textos legales en `/legal/privacidad` y `/legal/terminos`.
 
 **3.** 8 cuentas, de las que **4 son personas reales**: SciScreen (PR), Oquea,
 y dos de Cofundo. 4 suscripciones activas en Stripe, ~40 €/mes. No es un
@@ -227,6 +288,8 @@ firmado**. Está declarado en la política en voz alta.
    en los cuatro. Atribuir sí, anunciarse con su nombre no.
 4. Límite de texto no hay, pero el guion literal es suyo: cítalo, no lo
    reescribas «mejorándolo».
+5. **La transcripción original no se toca ni se muestra.** Es un punto abierto
+   de propiedad intelectual y lo prudente es no construir nada encima.
 
 **22.** **No hay URL estable pública de una ficha, y no puede haberla**: el
 contenido es de pago y una URL pública lo regalaría. Lo que sí es estable:
