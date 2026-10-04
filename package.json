@@ -39,6 +39,7 @@
     "prueba:equipos": "tsx scripts/prueba-equipos.ts",
     "acuerdo": "tsx scripts/acuerdo.ts",
     "stripe": "tsx scripts/stripe-comprobar.ts",
+    "enlazar-stripe": "tsx scripts/enlazar-stripe.ts",
     "metricas": "tsx scripts/metricas.ts",
     "casar-fichas": "tsx scripts/casar-fichas.ts",
     "exportar-consultas": "tsx scripts/exportar-consultas.ts",
